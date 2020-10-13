@@ -61,9 +61,13 @@ fn main() {
 
     let sk = q.clone().random_below(&mut state);
     let pk = g.clone().pow_mod(&sk, &p).unwrap();
-    let m = q.clone().random_below(&mut state);
+    // let m = p.clone().random_below(&mut state);
+    let m = Integer::from(123456);
+
+    println!("{:?}", m.clone().jacobi(&p));
     
     let m_encoded = encode(m.clone(), p.clone());
+    // let m_encoded = m.clone();
     
     let r = q.clone().random_below(&mut state);
     
@@ -71,8 +75,17 @@ fn main() {
     let b = modulus(m_encoded * pk.pow_mod(&r, &p).unwrap(), p.clone());
 
     let dec_factor = a.pow_mod(&sk, &p).unwrap();
+    
+    
+    let m_temp = b.clone() * dec_factor.clone().invert(&p).unwrap();
+    
+    
+    
     let mut m_ = modulus(b * dec_factor.invert(&p).unwrap(), p.clone());
-    m_ = decode(m_, q, p);
+    
+    println!("{:?}", m_temp);
+    println!("{:?}", m_);
+    // m_ = decode(m_, q, p);
 
     assert_eq!(m_, m);
 
@@ -122,7 +135,11 @@ impl Element for Integer {
         self.clone().pow_mod(&other, modulus).unwrap()   
     }
     fn modulo(&self, modulus: &Self) -> Self {
-        let (_, rem) = self.clone().div_rem(modulus.clone());
+        let (_, mut rem) = self.clone().div_rem(modulus.clone());
+        if rem < 0 {
+            rem = rem + modulus;
+        }
+        
         rem
     }
 }
@@ -185,10 +202,23 @@ impl Group<Integer, OsRng> for RugGroup {
     }
     fn encode(&self, plaintext: Integer) -> Integer {
         assert!(plaintext < self.modulus);
+
+        /* let jacobi = plaintext.clone().jacobi(&self.modulus());
+        let product = jacobi * plaintext;
+        
+        product.modulo(&self.modulus())*/
+
         
         plaintext
     }
     fn decode(&self, plaintext: Integer) -> Integer {
+        /* if plaintext > self.exp_modulus() {
+            self.modulus() - plaintext
+        }
+        else {
+            plaintext
+        } */
+        
         plaintext
     }
 
@@ -368,17 +398,24 @@ mod tests {
         let q = Integer::from_str_radix(Q_STR, 16).unwrap();
         let g = Integer::from(3);
         
+        assert!(g.clone().jacobi(&p) == 1);
+
         let rg2 = RugGroup {
             generator: g,
-            modulus: p,
+            modulus: p.clone(),
             modulus_exp: q
         };
         
         let sk = PrivateKey::random(&rg2, csprng);
         let pk = PublicKey::from(&sk);
+
+        // let plaintext = rg2.rnd(csprng);
         
-        let plaintext = rg2.encode(Integer::from(12345));
-        let c = pk.encrypt(plaintext.clone(), csprng);
+        let plaintext = Integer::from(2);
+        println!("{:?}", plaintext.clone().jacobi(&p));
+        
+        let encoded = rg2.encode(plaintext.clone());
+        let c = pk.encrypt(encoded.clone(), csprng);
         let d = rg2.decode(sk.decrypt(c));
         assert_eq!(d, plaintext);
     }
@@ -431,8 +468,8 @@ mod tests {
         
     }
 
-    // extern crate textplots;
-    // use textplots::{utils, Chart, Plot, Shape};
+    extern crate textplots;
+    use textplots::{utils, Chart, Plot, Shape};
     
 
     #[test]
@@ -459,11 +496,11 @@ mod tests {
         println!("test_r_encoding: average {}", sum_f / size);
         println!("test_r_encoding: max is {}", values.iter().max().unwrap());
 
-        /* 
-        let hist = utils::histogram(&v, 0.0, 30.0, 16);
+        
+        let hist = utils::histogram(&v, 0.0, 30.0, 30);
         Chart::new(380, 100, 0.0, 30.0)
         .lineplot(&Shape::Bars(&hist))
-        .nice();*/
+        .nice();
     }
 
 }
