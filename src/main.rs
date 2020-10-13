@@ -3,7 +3,7 @@ extern crate lazy_static;
 
 use rand_core::{CryptoRng, OsRng, RngCore};
 use rug::{
-    rand::{RandGen, RandState, MutRandState},
+    rand::{RandGen, RandState},
     Integer,
 };
 struct OsGenerator;
@@ -95,7 +95,6 @@ trait Element {
 }
 
 trait Exponent {
-    
     /* fn add(&self, other: &Self) -> Self;
     fn sub(&self, other: &Self) -> Self;
     fn mult(&self, other: &Self) -> Self;
@@ -133,79 +132,82 @@ impl Element for RistrettoPoint {
     fn div(&self, other: &Self) -> Self {
         self - other
     }
-    fn mod_pow(&self, other: &Self::Exp, modulus: &Self) -> Self {
+    fn mod_pow(&self, other: &Self::Exp, _modulus: &Self) -> Self {
         self * other
     }
-    fn modulo(&self, modulus: &Self) -> Self {
+    fn modulo(&self, _modulus: &Self) -> Self {
         *self
     }
 }
 
-trait Group<E: Element> {
+trait Group<E: Element, T: RngCore + CryptoRng> {
     fn generator(&self) -> E;
-    fn rnd(&mut self) -> E;
+    fn rnd(&self, rng: T) -> E;
     fn modulus(&self) -> E;
-    fn rnd_exp(&mut self) -> E::Exp;
+    fn rnd_exp(&self, rng: T) -> E::Exp;
     fn exp_modulus(&self) -> E::Exp;
 }
 
-struct RugGroup<'a> {
+struct RugGroup {
     generator: Integer,
     modulus: Integer,
-    modulus_exp: Integer,   
-    rnd: &'a mut dyn MutRandState,
+    modulus_exp: Integer
 }
 
-impl Group<Integer> for RugGroup<'_>  {
+impl Group<Integer, OsRng> for RugGroup {
     fn generator(&self) -> Integer {
         self.generator.clone()
     }
-    fn rnd(&mut self) -> Integer {
-        return self.modulus.clone().random_below(self.rnd);
+    fn rnd(&self, _rng: OsRng) -> Integer {
+        let mut gen: OsGenerator  = OsGenerator;
+        let mut state = RandState::new_custom(&mut gen);
+        
+        self.modulus.clone().random_below(&mut state)
     }
     fn modulus(&self) -> Integer {
         self.modulus.clone()
     }
-    fn rnd_exp(&mut self) -> Integer {
-        return self.modulus_exp.clone().random_below(self.rnd);
+    fn rnd_exp(&self, _rng: OsRng) -> Integer {
+        let mut gen: OsGenerator  = OsGenerator;
+        let mut state = RandState::new_custom(&mut gen);
+        
+        self.modulus_exp.clone().random_below(&mut state)
     }
     fn exp_modulus(&self) -> Integer {
         self.modulus_exp.clone()
     }
 }
 
-struct RistrettoGroup<T: RngCore + CryptoRng> {
-    rnd: T
-}
+struct RistrettoGroup;
 
-impl Group<RistrettoPoint> for RistrettoGroup<OsRng>  {
+impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
     fn generator(&self) -> RistrettoPoint {
         RISTRETTO_BASEPOINT_POINT
     }
-    fn rnd(&mut self) -> RistrettoPoint {
-        RistrettoPoint::random(&mut self.rnd)
+    fn rnd(&self, mut rng: OsRng) -> RistrettoPoint {
+        RistrettoPoint::random(&mut rng)
     }
     fn modulus(&self) -> RistrettoPoint {
         RistrettoPoint::default()
     }
-    fn rnd_exp(&mut self) -> Scalar {
-        Scalar::default()
+    fn rnd_exp(&self, mut rng: OsRng) -> Scalar {
+        Scalar::random(&mut rng)
     }
     fn exp_modulus(&self) -> Scalar {
         Scalar::default()
     }
 }
 
-struct PrivateKey<'a, E: Element> {
+struct PrivateKey<'a, E: Element, T: RngCore + CryptoRng> {
     value: E::Exp,
-    group: &'a mut dyn Group<E>
+    group: &'a dyn Group<E, T>
 }
 
 
-impl<'a, E: Element> PrivateKey<'a, E> {
-    pub fn random(group: &'a mut dyn Group<E>) -> Self {
+impl<'a, E: Element, T: RngCore + CryptoRng> PrivateKey<'a, E, T> {
+    pub fn random(group: &'a dyn Group<E, T>, rng: T) -> Self {
         PrivateKey {
-            value: group.rnd_exp(), 
+            value: group.rnd_exp(rng), 
             group: group
         }
     }
@@ -220,21 +222,22 @@ struct Ciphertext<E: Element> {
     b: E
 }
 
-struct PublicKey<'a, E: Element> {
+struct PublicKey<'a, E: Element, T: RngCore + CryptoRng> {
     value: E,
-    group: &'a mut dyn Group<E>
+    group: &'a dyn Group<E, T>
 }
 
-impl<'a, E: Element> PublicKey<'a, E> {
+impl<'a, E: Element, T: RngCore + CryptoRng> PublicKey<'a, E, T> {
 
-    pub fn encrypt(self, plaintext: E) -> Ciphertext<E> {
-        let randomness = self.group.rnd_exp();
+    pub fn encrypt(self, plaintext: E, rng: T) -> Ciphertext<E> {
+        let randomness = self.group.rnd_exp(rng);
         Ciphertext {
             a: plaintext.mult(&self.value.mod_pow(&randomness, &self.group.modulus())),
-            b: self.value.mod_pow(&randomness, &self.group.modulus())
+            b: self.group.generator().mod_pow(&randomness, &self.group.modulus())
         }
     }
-    pub fn from(sk: &'a PrivateKey<E>) -> PublicKey<'a, E> {
+    
+    pub fn from(sk: &'a PrivateKey<E, T>) -> PublicKey<'a, E, T> {
         PublicKey {
             value: sk.group.generator().mod_pow(&sk.value, &sk.group.modulus()),
             group: sk.group
@@ -242,43 +245,6 @@ impl<'a, E: Element> PublicKey<'a, E> {
     }
 }
 
-
-
-
-/*
-struct Ciphertext<E: Element> {
-    a: E,
-    b: E
-}
-
-struct PublicKey<E: Element>(E);
-
-impl<E: Element> PublicKey<E> {
-
-    pub fn encrypt(self, plaintext: E) -> Ciphertext<E> {
-        let randomness = self.0.rand_exp();
-        Ciphertext {
-            a: plaintext.mult(&self.0.mod_pow(&randomness)),
-            b: self.0.mod_pow(&randomness)
-        }
-    }
-    pub fn from(sk: &PrivateKey<E>, generator: E) -> PublicKey<E> {
-        PublicKey(generator.mod_pow(&sk.0))
-    }
-}
-
-struct PrivateKey<E: Element>(E::Exp);
-
-impl<E: Element> PrivateKey<E> {
-    pub fn random() -> Self {
-        return PrivateKey(E::Exp::rnd(csprng));
-    }
-    
-    pub fn decrypt(&self, c: Ciphertext<E>) -> E {
-        c.a.div(&c.b.mod_pow(&self.0))
-    }
-}
-*/
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -286,55 +252,39 @@ mod tests {
     #[test]
     fn test_ec() {
         let csprng = OsRng;
-        let mut gen: OsGenerator  = OsGenerator;
-        let mut state = RandState::new_custom(&mut gen);
-        // let mut state2 = RandState::new_custom(&mut gen);
-
-        let mut rg = RistrettoGroup {
-            rnd: OsRng
-        };
-        let sk = PrivateKey::<RistrettoPoint>::random(&mut rg);
         
-        let P = Integer::from_str_radix(P_STR, 16).unwrap();
-        let Q = Integer::from_str_radix(Q_STR, 16).unwrap();
-        let G = Integer::from(3);
+        let p = Integer::from_str_radix(P_STR, 16).unwrap();
+        let q = Integer::from_str_radix(Q_STR, 16).unwrap();
+        let g = Integer::from(3);
         
         let rg2 = RugGroup {
-            rnd: &mut state,
-            modulus: P,
-            modulus_exp: Q,
-            generator: G
+            generator: g,
+            modulus: p,
+            modulus_exp: q
         };
-
         
+        let rg = RistrettoGroup;
+        
+        let sk = PrivateKey::random(&rg2, csprng);
         let pk = PublicKey::from(&sk);
+        
         let text = "this has to be exactly 32 bytes!";
         // let text = "phis has to be exactly 32 bytes!";
         println!("{:?}", text.as_bytes().len());
 
-        let plaintext = CompressedRistretto::from_slice(text.as_bytes());    
-        
-        let c = pk.encrypt(plaintext.decompress().unwrap());
-        let d = sk.decrypt(c);
-        
-        let recovered = String::from_utf8(d.compress().as_bytes().to_vec());
-        assert_eq!(text, recovered.unwrap());
-/*
-        let sk = PrivateKey::<Integer>::random(&mut state);
-        
-        let pk = PublicKey::from(&sk, G.clone());
-        
-
+        // let plaintext = CompressedRistretto::from_slice(text.as_bytes());    
         let plaintext = Integer::from(12345);
         
-        let c = pk.encrypt(plaintext, &mut state);
+        // let c = pk.encrypt(plaintext.decompress().unwrap(), csprng);
+        let c = pk.encrypt(plaintext.clone(), csprng);
         let d = sk.decrypt(c);
- */       
         
-        // assert_eq!(plaintext, recovered.unwrap());
+        // let recovered = String::from_utf8(d.compress().as_bytes().to_vec());
+        // assert_eq!(text, recovered.unwrap());
+        assert_eq!(d, plaintext);
 
         // data generated by ristretto255.js
-        /*
+        
         let skb: [u8;32] = [
             157, 127, 250, 139, 158,  32, 121,
             69, 255, 102, 151, 206, 199, 225,
@@ -357,7 +307,10 @@ mod tests {
             183, 193,  36, 180, 82, 206,  98,  41
         ];
 
-        let sk_ = PrivateKey(Scalar::from_bytes_mod_order(skb));
+        let sk_ = PrivateKey {
+            value: Scalar::from_bytes_mod_order(skb), 
+            group: &rg
+        };
         let c_ = Ciphertext {
             a: CompressedRistretto(a).decompress().unwrap(),
             b: CompressedRistretto(b).decompress().unwrap()
@@ -365,6 +318,6 @@ mod tests {
         let d_: RistrettoPoint = sk_.decrypt(c_);
         let recovered_ = String::from_utf8(d_.compress().as_bytes().to_vec());
         assert_eq!(text, recovered_.unwrap());
-        */
+        
     }
 }
