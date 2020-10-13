@@ -61,14 +61,9 @@ fn main() {
 
     let sk = q.clone().random_below(&mut state);
     let pk = g.clone().pow_mod(&sk, &p).unwrap();
-    // let m = p.clone().random_below(&mut state);
-    let m = Integer::from(123456);
-
-    println!("{:?}", m.clone().jacobi(&p));
+    let m = q.clone().random_below(&mut state);
     
     let m_encoded = encode(m.clone(), p.clone());
-    // let m_encoded = m.clone();
-    
     let r = q.clone().random_below(&mut state);
     
     let a = g.clone().pow_mod(&r, &p).unwrap();
@@ -76,16 +71,8 @@ fn main() {
 
     let dec_factor = a.pow_mod(&sk, &p).unwrap();
     
-    
-    let m_temp = b.clone() * dec_factor.clone().invert(&p).unwrap();
-    
-    
-    
     let mut m_ = modulus(b * dec_factor.invert(&p).unwrap(), p.clone());
-    
-    println!("{:?}", m_temp);
-    println!("{:?}", m_);
-    // m_ = decode(m_, q, p);
+    m_ = decode(m_, q, p);
 
     assert_eq!(m_, m);
 
@@ -201,25 +188,21 @@ impl Group<Integer, OsRng> for RugGroup {
         self.modulus_exp.clone()
     }
     fn encode(&self, plaintext: Integer) -> Integer {
-        assert!(plaintext < self.modulus);
+        assert!(plaintext < self.modulus_exp.clone() - 1);
 
-        /* let jacobi = plaintext.clone().jacobi(&self.modulus());
-        let product = jacobi * plaintext;
+        let notzero: Integer = plaintext + 1;
+        let jacobi = notzero.clone().jacobi(&self.modulus());
+        let product = jacobi * notzero;
         
-        product.modulo(&self.modulus())*/
-
-        
-        plaintext
+        product.modulo(&self.modulus())
     }
     fn decode(&self, plaintext: Integer) -> Integer {
-        /* if plaintext > self.exp_modulus() {
-            self.modulus() - plaintext
+        if plaintext > self.exp_modulus() {
+            (self.modulus() - plaintext) - 1
         }
         else {
-            plaintext
-        } */
-        
-        plaintext
+            plaintext - 1
+        }
     }
 
 }
@@ -341,7 +324,7 @@ struct PublicKey<'a, E: Element, T: RngCore + CryptoRng> {
 
 impl<'a, E: Element, T: RngCore + CryptoRng> PublicKey<'a, E, T> {
 
-    pub fn encrypt(self, plaintext: E, rng: T) -> Ciphertext<E> {
+    pub fn encrypt(&self, plaintext: E, rng: T) -> Ciphertext<E> {
         let randomness = self.group.rnd_exp(rng);
         Ciphertext {
             a: plaintext.mult(&self.value.mod_pow(&randomness, &self.group.modulus())),
@@ -400,24 +383,43 @@ mod tests {
         
         assert!(g.clone().jacobi(&p) == 1);
 
-        let rg2 = RugGroup {
+        let rg = RugGroup {
             generator: g,
             modulus: p.clone(),
             modulus_exp: q
         };
         
-        let sk = PrivateKey::random(&rg2, csprng);
+        let sk = PrivateKey::random(&rg, csprng);
         let pk = PublicKey::from(&sk);
 
-        // let plaintext = rg2.rnd(csprng);
+        let plaintext = rg.rnd_exp(csprng);
         
-        let plaintext = Integer::from(2);
-        println!("{:?}", plaintext.clone().jacobi(&p));
-        
-        let encoded = rg2.encode(plaintext.clone());
+        let encoded = rg.encode(plaintext.clone());
         let c = pk.encrypt(encoded.clone(), csprng);
-        let d = rg2.decode(sk.decrypt(c));
+        let d = rg.decode(sk.decrypt(c));
         assert_eq!(d, plaintext);
+
+        let zero = Integer::from(0);
+        let encoded_zero = rg.encode(zero.clone());
+        let c_zero = pk.encrypt(encoded_zero.clone(), csprng);
+        let d_zero = rg.decode(sk.decrypt(c_zero));
+        assert_eq!(d_zero, zero);
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_encode_panic() {
+        let p = Integer::from_str_radix(P_STR, 16).unwrap();
+        let q = Integer::from_str_radix(Q_STR, 16).unwrap();
+        let g = Integer::from(3);
+
+        let rg = RugGroup {
+            generator: g,
+            modulus: p.clone(),
+            modulus_exp: q.clone()
+        };
+
+        rg.encode(q - 1);
     }
 
     #[test]
