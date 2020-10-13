@@ -87,6 +87,7 @@ use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
 
 trait Element {
     type Exp: Exponent;
+    type Plaintext;
     
     fn mult(&self, other: &Self) -> Self;
     fn div(&self, other: &Self) -> Self;
@@ -109,6 +110,8 @@ impl Exponent for Scalar {
 
 impl Element for Integer {
     type Exp = Integer;
+    type Plaintext = Integer;
+
     fn mult(&self, other: &Self) -> Self {
         self.clone() * other.clone()
     }
@@ -126,6 +129,8 @@ impl Element for Integer {
 
 impl Element for RistrettoPoint {
     type Exp = Scalar;
+    type Plaintext = [u8; 16];
+
     fn mult(&self, other: &Self) -> Self {
         self + other
     }
@@ -140,12 +145,14 @@ impl Element for RistrettoPoint {
     }
 }
 
-trait Group<E: Element, T: RngCore + CryptoRng> {
+trait Group<E: Element, T: RngCore + CryptoRng> {    
     fn generator(&self) -> E;
     fn rnd(&self, rng: T) -> E;
     fn modulus(&self) -> E;
     fn rnd_exp(&self, rng: T) -> E::Exp;
     fn exp_modulus(&self) -> E::Exp;
+    fn encode(&self, plaintext: E::Plaintext) -> E;
+    fn decode(&self, ciphertext: E) -> E::Plaintext;
 }
 
 struct RugGroup {
@@ -176,6 +183,15 @@ impl Group<Integer, OsRng> for RugGroup {
     fn exp_modulus(&self) -> Integer {
         self.modulus_exp.clone()
     }
+    fn encode(&self, plaintext: Integer) -> Integer {
+        assert!(plaintext < self.modulus);
+        
+        plaintext
+    }
+    fn decode(&self, plaintext: Integer) -> Integer {
+        plaintext
+    }
+
 }
 
 struct RistrettoGroup;
@@ -195,6 +211,50 @@ impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
     }
     fn exp_modulus(&self) -> Scalar {
         Scalar::default()
+    }
+    fn encode(&self, plaintext: [u8; 16]) -> RistrettoPoint {
+        let mut csprng = OsRng;
+        let upper = [0u8; 12];
+        let mut id: u32 = 0;
+
+
+        for i in 0..100 {
+            let id_bytes = id.to_be_bytes();
+            // let mut id_bytes = [00u8;16];
+            // csprng.fill_bytes(&mut id_bytes);
+            
+            
+            let mut bytes = upper.to_vec();
+            bytes.extend_from_slice(&id_bytes);
+            bytes.extend_from_slice(&plaintext);
+            
+            
+            // bytes.extend_from_slice(&id_bytes);
+            // bytes.extend_from_slice(&upper);
+            let text = "this has to be exactly 32 bytes!";
+            
+            let cr = CompressedRistretto::from_slice(bytes.as_slice());
+            // let cr = CompressedRistretto::from_slice(&id_bytes);
+            // let cr = CompressedRistretto::from_slice(text.as_bytes());
+            println!("{:?}", cr);
+            let result = cr.decompress();
+            if result.is_some() {
+                println!("=======================");
+                return result.unwrap();
+            }
+            else {
+                println!("{:?}", result);
+            }
+            id = id + 1;
+            
+        }
+
+        panic!();
+    }
+    fn decode(&self, ciphertext: RistrettoPoint) -> [u8; 16] {
+        let compressed = ciphertext.compress();
+        let slice = &compressed.as_bytes()[16..];
+        to_u8_16(slice.to_vec())
     }
 }
 
@@ -245,6 +305,17 @@ impl<'a, E: Element, T: RngCore + CryptoRng> PublicKey<'a, E, T> {
     }
 }
 
+use std::convert::TryInto;
+
+fn to_u8_16<T>(v: Vec<T>) -> [T; 16] {
+    let boxed_slice = v.into_boxed_slice();
+    let boxed_array: Box<[T; 16]> = match boxed_slice.try_into() {
+        Ok(ba) => ba,
+        Err(o) => panic!("Expected a Vec of length {} but it was {}", 4, o.len()),
+    };
+    *boxed_array
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -265,26 +336,28 @@ mod tests {
         
         let rg = RistrettoGroup;
         
-        let sk = PrivateKey::random(&rg2, csprng);
+        let sk = PrivateKey::random(&rg, csprng);
         let pk = PublicKey::from(&sk);
         
-        let text = "this has to be exactly 32 bytes!";
+        let text = "16 byte message!";
+        
         // let text = "phis has to be exactly 32 bytes!";
         println!("{:?}", text.as_bytes().len());
 
+        let plaintext = rg.encode(to_u8_16(text.as_bytes().to_vec()));
         // let plaintext = CompressedRistretto::from_slice(text.as_bytes());    
-        let plaintext = Integer::from(12345);
+        // let plaintext = Integer::from(12345);
         
-        // let c = pk.encrypt(plaintext.decompress().unwrap(), csprng);
-        let c = pk.encrypt(plaintext.clone(), csprng);
+        let c = pk.encrypt(plaintext, csprng);
+        // let c = pk.encrypt(plaintext.clone(), csprng);
         let d = sk.decrypt(c);
         
-        // let recovered = String::from_utf8(d.compress().as_bytes().to_vec());
-        // assert_eq!(text, recovered.unwrap());
-        assert_eq!(d, plaintext);
+        let recovered = String::from_utf8(rg.decode(d).to_vec());
+        assert_eq!(text, recovered.unwrap());
+        // assert_eq!(d, plaintext);
 
         // data generated by ristretto255.js
-        
+        /* 
         let skb: [u8;32] = [
             157, 127, 250, 139, 158,  32, 121,
             69, 255, 102, 151, 206, 199, 225,
@@ -318,6 +391,6 @@ mod tests {
         let d_: RistrettoPoint = sk_.decrypt(c_);
         let recovered_ = String::from_utf8(d_.compress().as_bytes().to_vec());
         assert_eq!(text, recovered_.unwrap());
-        
+        */
     }
 }
