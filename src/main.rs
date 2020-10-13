@@ -1,11 +1,13 @@
-#[macro_use]
-extern crate lazy_static;
-
 use rand_core::{CryptoRng, OsRng, RngCore};
 use rug::{
     rand::{RandGen, RandState},
     Integer,
 };
+
+// https://github.com/bfh-evg/unicrypt/blob/2c9b223c1abc6266aa56ace5562200a5050a0c2a/src/main/java/ch/bfh/unicrypt/helper/prime/SafePrime.java
+const P_STR: &str = "B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFEF324E7738926CFBE5F4BF8D8D8C31D763DA06C80ABB1185EB4F7C7B5757F5958490CFD47D7C19BB42158D9554F7B46BCED55C4D79FD5F24D6613C31C3839A2DDF8A9A276BCFBFA1C877C56284DAB79CD4C2B3293D20E9E5EAF02AC60ACC93ED874422A52ECB238FEEE5AB6ADD835FD1A0753D0A8F78E537D2B95BB79D8DCAEC642C1E9F23B829B5C2780BF38737DF8BB300D01334A0D0BD8645CBFA73A6160FFE393C48CBBBCA060F0FF8EC6D31BEB5CCEED7F2F0BB088017163BC60DF45A0ECB1BCD289B06CBBFEA21AD08E1847F3F7378D56CED94640D6EF0D3D37BE69D0063";
+const Q_STR: &str = "5bf0a8b1457695355fb8ac404e7a79e3b1738b079c5a6d2b53c26c8228c867f799273b9c49367df2fa5fc6c6c618ebb1ed0364055d88c2f5a7be3dababfacac24867ea3ebe0cdda10ac6caaa7bda35e76aae26bcfeaf926b309e18e1c1cd16efc54d13b5e7dfd0e43be2b1426d5bce6a6159949e9074f2f5781563056649f6c3a21152976591c7f772d5b56ec1afe8d03a9e8547bc729be95caddbcec6e57632160f4f91dc14dae13c05f9c39befc5d98068099a50685ec322e5fd39d30b07ff1c9e2465dde5030787fc763698df5ae6776bf9785d84400b8b1de306fa2d07658de6944d8365dff510d68470c23f9fb9bc6ab676ca3206b77869e9bdf34e8031";
+
 struct OsGenerator;
 
 impl RandGen for OsGenerator {
@@ -39,17 +41,6 @@ fn decode(m: Integer, q: Integer, p: Integer) -> Integer {
     }
 }
 
-// https://github.com/bfh-evg/unicrypt/blob/2c9b223c1abc6266aa56ace5562200a5050a0c2a/src/main/java/ch/bfh/unicrypt/helper/prime/SafePrime.java
-const P_STR: &str = "B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFEF324E7738926CFBE5F4BF8D8D8C31D763DA06C80ABB1185EB4F7C7B5757F5958490CFD47D7C19BB42158D9554F7B46BCED55C4D79FD5F24D6613C31C3839A2DDF8A9A276BCFBFA1C877C56284DAB79CD4C2B3293D20E9E5EAF02AC60ACC93ED874422A52ECB238FEEE5AB6ADD835FD1A0753D0A8F78E537D2B95BB79D8DCAEC642C1E9F23B829B5C2780BF38737DF8BB300D01334A0D0BD8645CBFA73A6160FFE393C48CBBBCA060F0FF8EC6D31BEB5CCEED7F2F0BB088017163BC60DF45A0ECB1BCD289B06CBBFEA21AD08E1847F3F7378D56CED94640D6EF0D3D37BE69D0063";
-const Q_STR: &str = "5bf0a8b1457695355fb8ac404e7a79e3b1738b079c5a6d2b53c26c8228c867f799273b9c49367df2fa5fc6c6c618ebb1ed0364055d88c2f5a7be3dababfacac24867ea3ebe0cdda10ac6caaa7bda35e76aae26bcfeaf926b309e18e1c1cd16efc54d13b5e7dfd0e43be2b1426d5bce6a6159949e9074f2f5781563056649f6c3a21152976591c7f772d5b56ec1afe8d03a9e8547bc729be95caddbcec6e57632160f4f91dc14dae13c05f9c39befc5d98068099a50685ec322e5fd39d30b07ff1c9e2465dde5030787fc763698df5ae6776bf9785d84400b8b1de306fa2d07658de6944d8365dff510d68470c23f9fb9bc6ab676ca3206b77869e9bdf34e8031";
-
-lazy_static! {
-    // static ref P: Integer = Integer::from_str_radix(P_STR, 16).unwrap();
-    // static ref Q: Integer = Integer::from_str_radix(Q_STR, 16).unwrap();
-    // static ref G: Integer = Integer::from(3);
-}
-
-
 fn main() {
     let mut gen = OsGenerator;
     let mut state = RandState::new_custom(&mut gen);
@@ -75,15 +66,11 @@ fn main() {
     m_ = decode(m_, q, p);
 
     assert_eq!(m_, m);
-
 }
 
 use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
-
-// use serde::{Deserialize, Serialize};
-
 
 trait Element {
     type Exp: Exponent;
@@ -240,7 +227,7 @@ impl RistrettoGroup {
             id = id + 1;
         }
 
-        panic!("Failed to encode {:?}, first byte is {:b}", plaintext, plaintext[15]);
+        panic!("Failed to encode {:?}", plaintext);
     }
 }
 
@@ -284,7 +271,7 @@ impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
             id = id + 1;
         }
 
-        panic!("Failed to encode {:?}, first byte is {:b}", plaintext, plaintext[15]);
+        panic!("Failed to encode {:?}", plaintext);
     }
     fn decode(&self, ciphertext: RistrettoPoint) -> [u8; 16] {
         let compressed = ciphertext.compress();
@@ -293,11 +280,15 @@ impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
     }
 }
 
+struct Ciphertext<E: Element> {
+    a: E,
+    b: E
+}
+
 struct PrivateKey<'a, E: Element, T: RngCore + CryptoRng> {
     value: E::Exp,
     group: &'a dyn Group<E, T>
 }
-
 
 impl<'a, E: Element, T: RngCore + CryptoRng> PrivateKey<'a, E, T> {
     pub fn random(group: &'a dyn Group<E, T>, rng: T) -> Self {
@@ -310,11 +301,6 @@ impl<'a, E: Element, T: RngCore + CryptoRng> PrivateKey<'a, E, T> {
     pub fn decrypt(&self, c: Ciphertext<E>) -> E {
         c.a.div(&c.b.mod_pow(&self.value, &self.group.modulus()))
     }
-}
-
-struct Ciphertext<E: Element> {
-    a: E,
-    b: E
 }
 
 struct PublicKey<'a, E: Element, T: RngCore + CryptoRng> {
@@ -467,12 +453,10 @@ mod tests {
         let recovered_ = String::from_utf8(d_.compress().as_bytes().to_vec());
         
         assert_eq!(text, recovered_.unwrap());
-        
     }
 
     extern crate textplots;
     use textplots::{utils, Chart, Plot, Shape};
-    
 
     #[test]
     fn test_r_encoding() {
@@ -480,7 +464,7 @@ mod tests {
         let mut bytes = [00u8; 16];
         let group = RistrettoGroup;
 
-        let iterations = 100000;
+        let iterations = 10000;
         println!("test_r_encoding: running {} encode iterations..", iterations);
 
         let v: Vec<(f32, f32)> = (0..iterations).map(|i| {
@@ -489,7 +473,6 @@ mod tests {
         
             (i as f32, group.encode_test(fixed) as f32)
         }).collect();
-        
 
         let size: f32 = v.len() as f32;
         let values: Vec<u32> = v.iter().map(|x| x.1 as u32).collect();
@@ -498,7 +481,6 @@ mod tests {
         println!("test_r_encoding: average {}", sum_f / size);
         println!("test_r_encoding: max is {}", values.iter().max().unwrap());
 
-        
         let hist = utils::histogram(&v, 0.0, 30.0, 30);
         Chart::new(380, 100, 0.0, 30.0)
         .lineplot(&Shape::Bars(&hist))
