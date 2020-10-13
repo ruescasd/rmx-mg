@@ -196,6 +196,41 @@ impl Group<Integer, OsRng> for RugGroup {
 
 struct RistrettoGroup;
 
+impl RistrettoGroup {
+    fn encode_test(&self, plaintext: [u8; 16]) -> u32 {
+        let upper = [0u8; 12];
+        let mut id: u32 = 0;
+
+        for i in 0..100 {
+            let id_bytes = id.to_be_bytes();
+            
+            // let mut bytes = plaintext.to_vec();
+            // bytes.extend_from_slice(&id_bytes);
+            // bytes.extend_from_slice(&upper);
+
+            // let mut bytes = id_bytes.to_vec();
+            // bytes.extend_from_slice(&plaintext);
+            // bytes.extend_from_slice(&upper);
+            
+            let mut bytes = upper.to_vec();
+            bytes.extend_from_slice(&plaintext);
+            bytes.extend_from_slice(&id_bytes);
+            
+            let cr = CompressedRistretto::from_slice(bytes.as_slice());
+            
+            let result = cr.decompress();
+            if result.is_some() {
+                // println!("* RistrettoGrup::encode: success after {} attempts", i);
+                return i + 1;
+            }
+            
+            id = id + 1;
+        }
+
+        panic!("Failed to encode {:?}, first byte is {:b}", plaintext, plaintext[15]);
+    }
+}
+
 impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
     fn generator(&self) -> RistrettoPoint {
         RISTRETTO_BASEPOINT_POINT
@@ -213,47 +248,34 @@ impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
         Scalar::default()
     }
     fn encode(&self, plaintext: [u8; 16]) -> RistrettoPoint {
-        let mut csprng = OsRng;
         let upper = [0u8; 12];
         let mut id: u32 = 0;
 
-
-        for i in 0..100 {
+        // cdf geometric distribution: 1-(1-p)^k
+        // FIXME why is p = 1/4 and not 1/8 since ristretto uses cofactor 8 curve?
+        // 1-(1-1/4)^1000 =  0.9999999999996792797815
+        for _i in 0..1000 {
             let id_bytes = id.to_be_bytes();
-            // let mut id_bytes = [00u8;16];
-            // csprng.fill_bytes(&mut id_bytes);
-            
-            
+                        
             let mut bytes = upper.to_vec();
-            bytes.extend_from_slice(&id_bytes);
             bytes.extend_from_slice(&plaintext);
-            
-            
-            // bytes.extend_from_slice(&id_bytes);
-            // bytes.extend_from_slice(&upper);
-            let text = "this has to be exactly 32 bytes!";
+            bytes.extend_from_slice(&id_bytes);
             
             let cr = CompressedRistretto::from_slice(bytes.as_slice());
-            // let cr = CompressedRistretto::from_slice(&id_bytes);
-            // let cr = CompressedRistretto::from_slice(text.as_bytes());
-            println!("{:?}", cr);
+            
             let result = cr.decompress();
             if result.is_some() {
-                println!("=======================");
                 return result.unwrap();
             }
-            else {
-                println!("{:?}", result);
-            }
-            id = id + 1;
             
+            id = id + 1;
         }
 
-        panic!();
+        panic!("Failed to encode {:?}, first byte is {:b}", plaintext, plaintext[15]);
     }
     fn decode(&self, ciphertext: RistrettoPoint) -> [u8; 16] {
         let compressed = ciphertext.compress();
-        let slice = &compressed.as_bytes()[16..];
+        let slice = &compressed.as_bytes()[12..28];
         to_u8_16(slice.to_vec())
     }
 }
@@ -311,7 +333,7 @@ fn to_u8_16<T>(v: Vec<T>) -> [T; 16] {
     let boxed_slice = v.into_boxed_slice();
     let boxed_array: Box<[T; 16]> = match boxed_slice.try_into() {
         Ok(ba) => ba,
-        Err(o) => panic!("Expected a Vec of length {} but it was {}", 4, o.len()),
+        Err(o) => panic!("Expected a Vec of length {} but it was {}", 16, o.len()),
     };
     *boxed_array
 }
@@ -321,7 +343,25 @@ mod tests {
     use super::*;
     
     #[test]
-    fn test_ec() {
+    fn test_ristretto() {
+        let csprng = OsRng;
+        let rg = RistrettoGroup;
+        
+        let sk = PrivateKey::random(&rg, csprng);
+        let pk = PublicKey::from(&sk);
+        
+        let text = "16 byte message!";
+        let plaintext = rg.encode(to_u8_16(text.as_bytes().to_vec()));
+      
+        let c = pk.encrypt(plaintext, csprng);    
+        let d = sk.decrypt(c);
+        
+        let recovered = String::from_utf8(rg.decode(d).to_vec());
+        assert_eq!(text, recovered.unwrap());
+    }
+
+    #[test]
+    fn test_mg() {
         let csprng = OsRng;
         
         let p = Integer::from_str_radix(P_STR, 16).unwrap();
@@ -334,30 +374,25 @@ mod tests {
             modulus_exp: q
         };
         
-        let rg = RistrettoGroup;
-        
-        let sk = PrivateKey::random(&rg, csprng);
+        let sk = PrivateKey::random(&rg2, csprng);
         let pk = PublicKey::from(&sk);
         
-        let text = "16 byte message!";
-        
-        // let text = "phis has to be exactly 32 bytes!";
-        println!("{:?}", text.as_bytes().len());
+        let plaintext = rg2.encode(Integer::from(12345));
+        let c = pk.encrypt(plaintext.clone(), csprng);
+        let d = rg2.decode(sk.decrypt(c));
+        assert_eq!(d, plaintext);
+    }
 
-        let plaintext = rg.encode(to_u8_16(text.as_bytes().to_vec()));
-        // let plaintext = CompressedRistretto::from_slice(text.as_bytes());    
-        // let plaintext = Integer::from(12345);
+    #[test]
+    fn test_js_encoding() {
         
-        let c = pk.encrypt(plaintext, csprng);
-        // let c = pk.encrypt(plaintext.clone(), csprng);
-        let d = sk.decrypt(c);
+        let rg = RistrettoGroup;
         
-        let recovered = String::from_utf8(rg.decode(d).to_vec());
-        assert_eq!(text, recovered.unwrap());
-        // assert_eq!(d, plaintext);
-
+        // since we are not encoding ristretto, this string cannot be changed
+        let text = "this has to be exactly 32 bytes!";
+        
         // data generated by ristretto255.js
-        /* 
+        
         let skb: [u8;32] = [
             157, 127, 250, 139, 158,  32, 121,
             69, 255, 102, 151, 206, 199, 225,
@@ -388,9 +423,47 @@ mod tests {
             a: CompressedRistretto(a).decompress().unwrap(),
             b: CompressedRistretto(b).decompress().unwrap()
         };
+        
         let d_: RistrettoPoint = sk_.decrypt(c_);
         let recovered_ = String::from_utf8(d_.compress().as_bytes().to_vec());
+        
         assert_eq!(text, recovered_.unwrap());
-        */
+        
     }
+
+    // extern crate textplots;
+    // use textplots::{utils, Chart, Plot, Shape};
+    
+
+    #[test]
+    fn test_r_encoding() {
+        let mut csprng = OsRng;
+        let mut bytes = [00u8; 16];
+        let group = RistrettoGroup;
+
+        let iterations = 100000;
+        println!("test_r_encoding: running {} encode iterations..", iterations);
+
+        let v: Vec<(f32, f32)> = (0..iterations).map(|i| {
+            csprng.fill_bytes(&mut bytes);
+            let fixed = to_u8_16(bytes.to_vec());
+        
+            (i as f32, group.encode_test(fixed) as f32)
+        }).collect();
+        
+
+        let size: f32 = v.len() as f32;
+        let values: Vec<u32> = v.iter().map(|x| x.1 as u32).collect();
+        let sum: f32 = v.iter().map(|x| x.1).fold(0f32, |a, b| a + b);
+        let sum_f = sum as f32;
+        println!("test_r_encoding: average {}", sum_f / size);
+        println!("test_r_encoding: max is {}", values.iter().max().unwrap());
+
+        /* 
+        let hist = utils::histogram(&v, 0.0, 30.0, 16);
+        Chart::new(380, 100, 0.0, 30.0)
+        .lineplot(&Shape::Bars(&hist))
+        .nice();*/
+    }
+
 }
