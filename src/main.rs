@@ -46,27 +46,91 @@ fn gen_permutation(size: usize) -> Vec<usize> {
     return ret;
 }
 
-/*
+use std::mem;
+
 fn gen_shuffle<E: Element>(ciphertexts: &Vec<Ciphertext<E>>, pk: &PublicKey<E, OsRng>) -> (Vec<Ciphertext<E>>, Vec<E::Exp>, Vec<usize>) {
-    let mut csprng = OsRng;
+    let csprng = OsRng;
     let perm: Vec<usize> = gen_permutation(ciphertexts.len());
 
-    let (es, rs): (Vec<Ciphertext<E>>, Vec<E::Exp>) = ciphertexts.iter().map(|c| {
-            // let r = Scalar::random(&mut csprng);
+    let mut e_primes = Vec::with_capacity(ciphertexts.len());
+    let mut rs = Vec::with_capacity(ciphertexts.len());
+
+    unsafe {
+        rs.set_len(ciphertexts.len());
+        for i in 0..perm.len() {
+            let c = &ciphertexts[perm[i]];
+    
             let r = pk.group.rnd_exp(csprng);
-            // let a = c.a + (r * pk.0);
-            // let b = c.b + (r * RISTRETTO_BASEPOINT_POINT);
             let a = c.a.mult(&pk.value.mod_pow(&r, &pk.group.modulus()));
             let b = c.b.mult(&pk.group.generator().mod_pow(&r, &pk.group.modulus()));
             let c_ = Ciphertext {
-                a, b
+                a: a, 
+                b: b
             };
-            (c_, r)
+            e_primes.push(c_);
+            rs[perm[i]] = r;
         }
-    ).unzip();
-
-    let e_primes: Vec<Ciphertext<E>> = perm.iter().map( |&i| es[i]).collect();
+    }
     
     (e_primes, rs, perm)
 }
-*/
+
+fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &Vec<E>, group: &Group<E, OsRng>)  -> (Vec<E>, Vec<E::Exp>) {
+    let mut csprng = OsRng;
+
+    assert!(generators.len() == perm.len());
+    
+    let mut rs = Vec::with_capacity(perm.len());
+    let mut cs = Vec::with_capacity(perm.len());
+    
+    unsafe {
+        rs.set_len(perm.len());
+        cs.set_len(perm.len());
+    
+        for i in 0..perm.len() {
+            let r = group.rnd_exp(csprng);
+            let c = generators[i].mult(&group.generator().mod_pow(&r, &group.modulus()));
+            rs[perm[i]] = r;
+            cs[perm[i]] = c;
+        }
+    }
+    (cs, rs)
+}
+
+fn gen_commitment_chain<E: Element>(initial: &E, us: &Vec<E::Exp>, group: &Group<E, OsRng>)  -> (Vec<E>, Vec<E::Exp>) {
+    let mut csprng = OsRng;
+    let mut cs: Vec<E> = Vec::with_capacity(us.len());
+    let mut rs: Vec<E::Exp> = Vec::with_capacity(us.len());
+    
+    for i in 0..us.len() {
+        let r = group.rnd_exp(csprng);
+        let c_temp = if i == 0 {
+            initial
+        } else {
+            &cs[i-1]
+        };
+        
+        let first = group.generator().mod_pow(&r, &group.modulus());
+        let second = c_temp.mod_pow(&us[i], &group.modulus());
+        let c = first.mult(&second);
+
+        cs.push(c);
+        rs.push(r);
+    }
+
+    (cs, rs)
+}
+
+// FIXME not kosher
+fn generators<E: Element>(size: usize, group: &Group<E, OsRng>) -> Vec<E> {
+    let mut csprng = OsRng;
+    let mut ret: Vec<E> = Vec::with_capacity(size);
+    
+    for _ in 0..size {
+        let g = group.rnd(csprng);
+        ret.push(g);
+    }
+
+    ret
+}
+
