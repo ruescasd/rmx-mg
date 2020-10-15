@@ -30,6 +30,39 @@ fn main() {
     assert_eq!(text, recovered.unwrap());
 }
 
+pub struct yChallengeInput<'a, E: Element> {
+    pub es: &'a Vec<Ciphertext<E>>,
+    pub e_primes: &'a Vec<Ciphertext<E>>,
+    pub cs: &'a Vec<E>,
+    pub c_hats: &'a Vec<E>,
+    pub pk: &'a PublicKey<'a, E, OsRng>
+}
+
+pub struct tChallengeInput<E: Element> {
+    pub t1: E,
+    pub t2: E,
+    pub t3: E,
+    pub t4_1: E,
+    pub t4_2: E,
+    pub t_hats: Vec<E>
+}
+
+pub struct Responses<E: Element> {
+    s1: E::Exp,
+    s2: E::Exp,
+    s3: E::Exp,
+    s4: E::Exp,
+    s_hats: Vec<E::Exp>,
+    s_primes: Vec<E::Exp>
+}
+
+pub struct Proof<E: Element> {
+    t: tChallengeInput<E>,
+    s: Responses<E>,
+    cs: Vec<E>,
+    c_hats: Vec<E>
+}
+
 fn gen_permutation(size: usize) -> Vec<usize> {
     let mut ret = Vec::with_capacity(size);
     let mut rng = rand::thread_rng();

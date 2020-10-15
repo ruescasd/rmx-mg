@@ -33,16 +33,51 @@ pub trait Element {
 }
 
 pub trait Exponent {
-    /* fn add(&self, other: &Self) -> Self;
+    fn add(&self, other: &Self) -> Self;
     fn sub(&self, other: &Self) -> Self;
     fn mult(&self, other: &Self) -> Self;
-    fn div(&self, other: &Self) -> Self;
-    fn modulo(&self, modulus: &Self) -> Self;*/
+    // fn div(&self, other: &Self) -> Self;
+    fn modulo(&self, modulus: &Self) -> Self;
 }
 
 impl Exponent for Integer {
+    fn add(&self, other: &Integer) -> Integer {
+        self.clone() + other.clone()
+    }
+    fn sub(&self, other: &Integer) -> Integer {
+        self.clone() - other.clone()
+    }
+    fn mult(&self, other: &Integer) -> Integer {
+        self.clone() * other.clone()
+    }
+    /* fn div(&self, other: &Integer) -> Integer {
+        self.clone() / other.clone()
+    }*/
+    fn modulo(&self, modulus: &Integer) -> Integer {
+        let (_, mut rem) = self.clone().div_rem(modulus.clone());
+        if rem < 0 {
+            rem = rem + modulus;
+        }
+        
+        rem
+    }
 }
 impl Exponent for Scalar {
+    fn add(&self, other: &Scalar) -> Scalar {
+        self + other
+    }
+    fn sub(&self, other: &Scalar) -> Scalar {
+        self - other
+    }
+    fn mult(&self, other: &Scalar) -> Scalar {
+        self * other
+    }
+    /* fn div(&self, other: &Scalar) -> Scalar {
+        self / other
+    }*/
+    fn modulo(&self, modulus: &Scalar) -> Scalar {
+        *self   
+    }
 }
 
 impl Element for Integer {
@@ -131,7 +166,8 @@ impl Group<Integer, OsRng> for RugGroup {
         let jacobi = notzero.clone().jacobi(&self.modulus());
         let product = jacobi * notzero;
         
-        product.modulo(&self.modulus())
+        // this syntax to disambiguate between traits
+        Element::modulo(&product, &self.modulus())
     }
     fn decode(&self, plaintext: Integer) -> Integer {
         if plaintext > self.exp_modulus() {
