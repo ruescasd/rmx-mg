@@ -10,6 +10,7 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
 
 mod elgamal;
+mod hashing;
 
 use elgamal::*;
 

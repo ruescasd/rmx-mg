@@ -14,3 +14,5 @@ curve25519-dalek = {version = "3.0.0", features = ["serde"]}
 lazy_static = "1.4.0"
 serde = { version = "1.0", features = ["derive"] }
 textplots = "0.5.3"
+sha2 = "0.9.1"
+sha3 = "0.9.1"
