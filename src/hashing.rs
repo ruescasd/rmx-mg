@@ -1,30 +1,25 @@
 use curve25519_dalek::ristretto::{RistrettoPoint};
-use curve25519_dalek::traits::IsIdentity;
-use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT, BASEPOINT_ORDER};
-use sha2::{Sha256, Sha512, Digest};
+use rand_core::{OsRng};
+use sha2::{Sha512, Digest};
 use curve25519_dalek::scalar::Scalar;
 use rug::{
-    rand::{RandGen, RandState},
     Integer,
     integer::Order
 };
 
 use crate::elgamal::*;
-use crate::{yChallengeInput, tChallengeInput};
-
-
-use sha3::Shake256;
+use crate::{YChallengeInput, TChallengeInput};
 
 pub trait ByteSource {
     fn get_bytes(&self) -> Vec<u8>;
 }
 
-trait ExpFromHash<T> {
-    fn hash_to_exp(&self, bytes: Vec<u8>) -> T;
+pub trait ExpFromHash<T> {
+    fn hash_to_exp(&self, bytes: &[u8]) -> T;
 }
 
 impl ExpFromHash<Scalar> for RistrettoGroup {
-    fn hash_to_exp(&self, bytes: Vec<u8>) -> Scalar {
+    fn hash_to_exp(&self, bytes: &[u8]) -> Scalar {
         let mut hasher = Sha512::new();
         hasher.update(bytes);
 
@@ -34,7 +29,7 @@ impl ExpFromHash<Scalar> for RistrettoGroup {
 
 impl ExpFromHash<Integer> for RugGroup {
     
-    fn hash_to_exp(&self, bytes: Vec<u8>) -> Integer {
+    fn hash_to_exp(&self, bytes: &[u8]) -> Integer {
         let mut hasher = Sha512::new();
         hasher.update(bytes);
         let hashed = hasher.finalize();
@@ -85,9 +80,11 @@ fn concat_bytes<T: ByteSource>(cs: &Vec<T>) -> Vec<u8> {
             a
         });
 }
-/*
-pub fn shuffle_proof_us(es: &Vec<Ciphertext>, e_primes: &Vec<Ciphertext>, cs: &Vec<RistrettoPoint>, n: usize) -> Vec<Scalar> {
-    let mut prefix_vector = concat_bytes(es);
+
+pub fn shuffle_proof_us<E: Element + ByteSource, H: ExpFromHash<E::Exp>>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
+    cs: &Vec<E>, group: H, n: usize) -> Vec<E::Exp> {
+    
+        let mut prefix_vector = concat_bytes(es);
     prefix_vector.extend(concat_bytes(e_primes));
     prefix_vector.extend(concat_bytes(cs));
     let prefix = prefix_vector.as_slice();
@@ -100,19 +97,22 @@ pub fn shuffle_proof_us(es: &Vec<Ciphertext>, e_primes: &Vec<Ciphertext>, cs: &V
         ].concat();    
         let mut hasher = Sha512::new();
         hasher.update(next_bytes);
-        let u = Scalar::from_hash(hasher);
+        
+        let u: E::Exp = group.hash_to_exp(&hasher.finalize());
         ret.push(u);
     }
+    
     ret
 }
 
-pub fn shuffle_proof_challenge(y: &yChallengeInput, t: &tChallengeInput) -> Scalar {
+pub fn shuffle_proof_challenge<E: Element + ByteSource, H: ExpFromHash<E::Exp>>(y: &YChallengeInput<E>, 
+    t: &TChallengeInput<E>, group: H) -> E::Exp {
 
     let mut bytes = concat_bytes(&y.es);
     bytes.extend(concat_bytes(&y.e_primes));
     bytes.extend(concat_bytes(&y.cs));
     bytes.extend(concat_bytes(&y.c_hats));
-    bytes.extend(y.pk.0.get_bytes());
+    bytes.extend(y.pk.value.get_bytes());
     
     bytes.extend(t.t1.get_bytes());
     bytes.extend(t.t2.get_bytes());
@@ -124,12 +124,9 @@ pub fn shuffle_proof_challenge(y: &yChallengeInput, t: &tChallengeInput) -> Scal
     let mut hasher = Sha512::new();
     hasher.update(bytes);
 
-    return Scalar::from_hash(hasher);
+    let u: E::Exp = group.hash_to_exp(&hasher.finalize());
+    u
 }
-
-pub fn hex(bytes: &[u8]) -> String {
-    return hex::encode(bytes);
-}*/
 
 /* 
 

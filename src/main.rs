@@ -6,13 +6,12 @@ use rug::{
 };
 
 use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
-use curve25519_dalek::scalar::Scalar;
-use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
 
 mod elgamal;
 mod hashing;
 
 use elgamal::*;
+use hashing::ByteSource;
 
 fn main() {
     let csprng = OsRng;
@@ -31,7 +30,7 @@ fn main() {
     assert_eq!(text, recovered.unwrap());
 }
 
-pub struct yChallengeInput<'a, E: Element> {
+pub struct YChallengeInput<'a, E: Element + ByteSource> {
     pub es: &'a Vec<Ciphertext<E>>,
     pub e_primes: &'a Vec<Ciphertext<E>>,
     pub cs: &'a Vec<E>,
@@ -39,7 +38,7 @@ pub struct yChallengeInput<'a, E: Element> {
     pub pk: &'a PublicKey<'a, E, OsRng>
 }
 
-pub struct tChallengeInput<E: Element> {
+pub struct TChallengeInput<E: Element + ByteSource> {
     pub t1: E,
     pub t2: E,
     pub t3: E,
@@ -57,8 +56,8 @@ pub struct Responses<E: Element> {
     s_primes: Vec<E::Exp>
 }
 
-pub struct Proof<E: Element> {
-    t: tChallengeInput<E>,
+pub struct Proof<E: Element + ByteSource> {
+    t: TChallengeInput<E>,
     s: Responses<E>,
     cs: Vec<E>,
     c_hats: Vec<E>
@@ -79,8 +78,6 @@ fn gen_permutation(size: usize) -> Vec<usize> {
 
     return ret;
 }
-
-use std::mem;
 
 fn gen_shuffle<E: Element>(ciphertexts: &Vec<Ciphertext<E>>, pk: &PublicKey<E, OsRng>) -> (Vec<Ciphertext<E>>, Vec<E::Exp>, Vec<usize>) {
     let csprng = OsRng;
@@ -109,7 +106,7 @@ fn gen_shuffle<E: Element>(ciphertexts: &Vec<Ciphertext<E>>, pk: &PublicKey<E, O
     (e_primes, rs, perm)
 }
 
-fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &Vec<E>, group: &Group<E, OsRng>)  -> (Vec<E>, Vec<E::Exp>) {
+fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &Vec<E>, group: &dyn Group<E, OsRng>)  -> (Vec<E>, Vec<E::Exp>) {
     let mut csprng = OsRng;
 
     assert!(generators.len() == perm.len());
@@ -131,7 +128,7 @@ fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &Vec<E>, group: &G
     (cs, rs)
 }
 
-fn gen_commitment_chain<E: Element>(initial: &E, us: &Vec<E::Exp>, group: &Group<E, OsRng>)  -> (Vec<E>, Vec<E::Exp>) {
+fn gen_commitment_chain<E: Element>(initial: &E, us: &Vec<E::Exp>, group: &dyn Group<E, OsRng>)  -> (Vec<E>, Vec<E::Exp>) {
     let mut csprng = OsRng;
     let mut cs: Vec<E> = Vec::with_capacity(us.len());
     let mut rs: Vec<E::Exp> = Vec::with_capacity(us.len());
@@ -156,7 +153,7 @@ fn gen_commitment_chain<E: Element>(initial: &E, us: &Vec<E::Exp>, group: &Group
 }
 
 // FIXME not kosher
-fn generators<E: Element>(size: usize, group: &Group<E, OsRng>) -> Vec<E> {
+fn generators<E: Element>(size: usize, group: &dyn Group<E, OsRng>) -> Vec<E> {
     let mut csprng = OsRng;
     let mut ret: Vec<E> = Vec::with_capacity(size);
     
