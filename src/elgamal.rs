@@ -25,7 +25,7 @@ impl RandGen for OsRandgen {
     }
 }
 
-pub trait Element: ByteSource {
+pub trait Element: ByteSource + Clone {
     type Exp: Exponent;
     type Plaintext;
     
@@ -33,6 +33,7 @@ pub trait Element: ByteSource {
     fn div(&self, other: &Self) -> Self;
     fn mod_pow(&self, exp: &Self::Exp, modulus: &Self) -> Self;
     fn modulo(&self, modulus: &Self) -> Self;
+    fn eq(&self, other: &Self) -> bool;
 }
 
 pub trait Exponent: Clone {
@@ -77,6 +78,7 @@ impl Exponent for Integer {
     fn mul_identity() -> Integer {
         Integer::from(1)
     }
+
 }
 impl Exponent for Scalar {
     fn add(&self, other: &Scalar) -> Scalar {
@@ -126,6 +128,9 @@ impl Element for Integer {
         
         rem
     }
+    fn eq(&self, other: &Integer) -> bool {
+        self == other
+    }
 }
 
 impl Element for RistrettoPoint {
@@ -144,9 +149,12 @@ impl Element for RistrettoPoint {
     fn modulo(&self, _modulus: &Self) -> Self {
         *self
     }
+    fn eq(&self, other: &RistrettoPoint) -> bool {
+        self == other
+    }
 }
 
-pub trait Group<E: Element, T: RngCore + CryptoRng>: ExpFromHash<E::Exp> {    
+pub trait Group<E: Element, T: RngCore + CryptoRng> {    
     fn generator(&self) -> E;
     fn rnd(&self, rng: T) -> E;
     fn modulus(&self) -> E;
@@ -157,9 +165,9 @@ pub trait Group<E: Element, T: RngCore + CryptoRng>: ExpFromHash<E::Exp> {
 }
 
 pub struct RugGroup {
-    generator: Integer,
-    modulus: Integer,
-    modulus_exp: Integer
+    pub generator: Integer,
+    pub modulus: Integer,
+    pub modulus_exp: Integer
 }
 
 impl Group<Integer, OsRng> for RugGroup {

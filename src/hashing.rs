@@ -18,7 +18,10 @@ pub trait ExpFromHash<T> {
     fn hash_to_exp(&self, bytes: &[u8]) -> T;
 }
 
-impl ExpFromHash<Scalar> for RistrettoGroup {
+pub struct RugHasher;
+pub struct RistrettoHasher;
+
+impl ExpFromHash<Scalar> for RistrettoHasher {
     fn hash_to_exp(&self, bytes: &[u8]) -> Scalar {
         let mut hasher = Sha512::new();
         hasher.update(bytes);
@@ -27,7 +30,7 @@ impl ExpFromHash<Scalar> for RistrettoGroup {
     }
 }
 
-impl ExpFromHash<Integer> for RugGroup {
+impl ExpFromHash<Integer> for RugHasher {
     
     fn hash_to_exp(&self, bytes: &[u8]) -> Integer {
         let mut hasher = Sha512::new();
@@ -82,7 +85,7 @@ fn concat_bytes<T: ByteSource>(cs: &Vec<T>) -> Vec<u8> {
 }
 
 pub fn shuffle_proof_us<E: Element + ByteSource>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
-    cs: &Vec<E>, group: &dyn Group<E, OsRng>, n: usize) -> Vec<E::Exp> {
+    cs: &Vec<E>, exp_hasher: &dyn ExpFromHash<E::Exp>, n: usize) -> Vec<E::Exp> {
     
     let mut prefix_vector = concat_bytes(es);
     prefix_vector.extend(concat_bytes(e_primes));
@@ -98,7 +101,7 @@ pub fn shuffle_proof_us<E: Element + ByteSource>(es: &Vec<Ciphertext<E>>, e_prim
         let mut hasher = Sha512::new();
         hasher.update(next_bytes);
         
-        let u: E::Exp = group.hash_to_exp(&hasher.finalize());
+        let u: E::Exp = exp_hasher.hash_to_exp(&hasher.finalize());
         ret.push(u);
     }
     
@@ -106,7 +109,7 @@ pub fn shuffle_proof_us<E: Element + ByteSource>(es: &Vec<Ciphertext<E>>, e_prim
 }
 
 pub fn shuffle_proof_challenge<E: Element + ByteSource>(y: &YChallengeInput<E>, 
-    t: &TChallengeInput<E>, group: &dyn Group<E, OsRng>) -> E::Exp {
+    t: &TChallengeInput<E>, exp_hasher: &dyn ExpFromHash<E::Exp>) -> E::Exp {
 
     let mut bytes = concat_bytes(&y.es);
     bytes.extend(concat_bytes(&y.e_primes));
@@ -124,6 +127,6 @@ pub fn shuffle_proof_challenge<E: Element + ByteSource>(y: &YChallengeInput<E>,
     let mut hasher = Sha512::new();
     hasher.update(bytes);
 
-    let u: E::Exp = group.hash_to_exp(&hasher.finalize());
+    let u: E::Exp = exp_hasher.hash_to_exp(&hasher.finalize());
     u
 }

@@ -11,10 +11,10 @@ mod elgamal;
 mod hashing;
 
 use elgamal::*;
-use hashing::ByteSource;
+use hashing::{ByteSource, ExpFromHash, RugHasher, RistrettoHasher};
 
 fn main() {
-    let csprng = OsRng;
+    /* let csprng = OsRng;
     let rg = RistrettoGroup;
     
     let sk = PrivateKey::random(&rg, csprng);
@@ -27,7 +27,27 @@ fn main() {
     let d = sk.decrypt(c);
     
     let recovered = String::from_utf8(rg.decode(d).to_vec());
-    assert_eq!(text, recovered.unwrap());
+    assert_eq!(text, recovered.unwrap());*/
+
+    let mut csprng = OsRng;
+    let group = RistrettoGroup;
+        
+    let sk = PrivateKey::random(&group, csprng);
+    let pk = PublicKey::from(&sk);
+
+    let mut es: Vec<Ciphertext<RistrettoPoint>> = Vec::with_capacity(10);
+
+    let N = 100;
+
+    for _ in 0..N {
+        let plaintext: RistrettoPoint = RistrettoPoint::random(&mut csprng);
+        let c = pk.encrypt(plaintext, csprng);
+        es.push(c);
+    }
+
+    let hs = generators(es.len() + 1, &group);
+    let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
+    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, &RistrettoHasher);
 }
 
 pub struct YChallengeInput<'a, E: Element + ByteSource> {
@@ -64,7 +84,7 @@ pub struct Proof<E: Element + ByteSource> {
 }
 
 fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, r_primes: &Vec<E::Exp>, 
-    perm: &Vec<usize>, pk: &PublicKey<E, OsRng>, generators: &Vec<E>) -> Proof<E> {
+    perm: &Vec<usize>, pk: &PublicKey<E, OsRng>, generators: &Vec<E>, hasher: &dyn ExpFromHash<E::Exp>) -> Proof<E> {
 
     let csprng = OsRng;
     
@@ -80,7 +100,7 @@ fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>,
 
     
     let (cs, rs) = gen_commitments(&perm, h_generators, group);
-    let us = hashing::shuffle_proof_us(&es, &e_primes, &cs, group, N);
+    let us = hashing::shuffle_proof_us(&es, &e_primes, &cs, hasher, N);
     
     let mut u_primes: Vec<&E::Exp> = Vec::with_capacity(N);
     for &i in perm.iter() {
@@ -174,7 +194,7 @@ fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>,
         t_hats
     };
 
-    let c: E::Exp = hashing::shuffle_proof_challenge(&y, &t, group);
+    let c: E::Exp = hashing::shuffle_proof_challenge(&y, &t, hasher);
  
     let s1 = omegas[0].add(&c.mul(&r_bar)).modulo(&group.exp_modulus());
     let s2 = omegas[1].add(&c.mul(&r_hat)).modulo(&group.exp_modulus());
@@ -207,7 +227,7 @@ fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>,
 }
 
 fn check_proof<E: Element>(proof: &Proof<E>, es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
-    pk: &PublicKey<E, OsRng>, generators: &Vec<E>) -> bool {
+    pk: &PublicKey<E, OsRng>, generators: &Vec<E>, hasher: &dyn ExpFromHash<E::Exp>) -> bool {
     
     let group = pk.group;
     let N = es.len();
@@ -217,11 +237,11 @@ fn check_proof<E: Element>(proof: &Proof<E>, es: &Vec<Ciphertext<E>>, e_primes: 
     assert!(N == e_primes.len());
     assert!(N == h_generators.len());
 
-    let us = hashing::shuffle_proof_us(es, e_primes, &proof.cs, group, N);
+    let us = hashing::shuffle_proof_us(es, e_primes, &proof.cs, hasher, N);
     
-    let mut c_bar_num: &E = &proof.cs[0];
-    let mut c_bar_den: &E = &h_generators[0];
-    let mut u: &E::Exp = &us[0];
+    let mut c_bar_num: E = proof.cs[0].clone();
+    let mut c_bar_den: E = h_generators[0].clone();
+    let mut u: E::Exp = us[0].clone();
     let mut c_tilde: E = proof.cs[0].mod_pow(&us[0], &group.modulus());
     let mut a_prime: E = es[0].a.mod_pow(&us[0], &group.modulus());
     let mut b_prime: E = es[0].b.mod_pow(&us[0], &group.modulus());
@@ -230,24 +250,35 @@ fn check_proof<E: Element>(proof: &Proof<E>, es: &Vec<Ciphertext<E>>, e_primes: 
     let mut t_tilde41_temp: E = e_primes[0].a.mod_pow(&proof.s.s_primes[0], &group.modulus());
     let mut t_tilde42_temp: E = e_primes[0].b.mod_pow(&proof.s.s_primes[0], &group.modulus());
      
-    /*
+    
     for i in 1..N {
-        c_bar_num = c_bar_num + proof.cs[i];
-        c_bar_den = c_bar_den + h_generators[i];
-        u = u * us[i];
-        c_tilde = c_tilde + (proof.cs[i] * us[i]);
-        a_prime = a_prime + (es[i].a * us[i]);
-        b_prime = b_prime + (es[i].b * us[i]);
-        t_tilde3_temp = t_tilde3_temp + (h_generators[i] * proof.s.s_primes[i]);
-        t_tilde41_temp = t_tilde41_temp + (e_primes[i].a * proof.s.s_primes[i]);
-        t_tilde42_temp = t_tilde42_temp + (e_primes[i].b * proof.s.s_primes[i]);
+        c_bar_num = c_bar_num.mul(&proof.cs[i]);
+        c_bar_den = c_bar_den.mul(&h_generators[i]);
+        u = u.mul(&us[i]);
+        c_tilde = c_tilde.mul(&proof.cs[i].mod_pow(&us[i], &group.modulus()));
+        a_prime = a_prime.mul(&es[i].a.mod_pow(&us[i], &group.modulus()));
+        b_prime = b_prime.mul(&es[i].b.mod_pow(&us[i], &group.modulus()));
+        t_tilde3_temp = t_tilde3_temp.mul(&h_generators[i].mod_pow(&proof.s.s_primes[i], &group.modulus()));
+        t_tilde41_temp = t_tilde41_temp.mul(&e_primes[i].a.mod_pow(&proof.s.s_primes[i], &group.modulus()));
+        t_tilde42_temp = t_tilde42_temp.mul(&e_primes[i].b.mod_pow(&proof.s.s_primes[i], &group.modulus()));
+        
     }
-    
-    
-    let c_bar = c_bar_num - c_bar_den;
-    let c_hat = proof.c_hats[N - 1] - (h_initial * u);
 
-    let y = yChallengeInput {
+    let c_bar = c_bar_num.div(&c_bar_den).modulo(&group.modulus());
+    
+    u = u.modulo(&group.exp_modulus());
+
+    c_tilde = c_tilde.modulo(&group.modulus());
+    a_prime = a_prime.modulo(&group.modulus());
+    b_prime = b_prime.modulo(&group.modulus());
+    t_tilde3_temp = t_tilde3_temp.modulo(&group.modulus());
+    t_tilde41_temp = t_tilde41_temp.modulo(&group.modulus());
+    t_tilde42_temp = t_tilde42_temp.modulo(&group.modulus());
+    
+    let c_hat = proof.c_hats[N - 1].div(&h_initial.mod_pow(&u, &group.modulus()))
+        .modulo(&group.modulus());
+        
+    let y = YChallengeInput {
         es: es,
         e_primes: e_primes,
         cs: &proof.cs,
@@ -255,39 +286,59 @@ fn check_proof<E: Element>(proof: &Proof<E>, es: &Vec<Ciphertext<E>>, e_primes: 
         pk: pk
     };
 
-    let c = hashing::shuffle_proof_challenge(&y, &proof.t);
-    let t_prime1 = (c_bar * (-c)) + (RISTRETTO_BASEPOINT_POINT * proof.s.s1);
-    let t_prime2 = (c_hat * (-c)) + (RISTRETTO_BASEPOINT_POINT * proof.s.s2);
-    let t_prime3 = (c_tilde * (-c)) + (RISTRETTO_BASEPOINT_POINT * proof.s.s3) + t_tilde3_temp;    
-    let t_prime41 = (a_prime * (-c)) + (pk.0 * (-proof.s.s4)) + t_tilde41_temp;
-    let t_prime42 = (b_prime * (-c)) + (RISTRETTO_BASEPOINT_POINT * (-proof.s.s4)) + t_tilde42_temp;
+    let c = hashing::shuffle_proof_challenge(&y, &proof.t, hasher);
+    
+    let t_prime1 = (c_bar.mod_pow(&c.neg(), &group.modulus()))
+        .mul(&group.generator().mod_pow(&proof.s.s1, &group.modulus()))
+        .modulo(&group.modulus());
+    
+    let t_prime2 = (c_hat.mod_pow(&c.neg(), &group.modulus()))
+        .mul(&group.generator().mod_pow(&proof.s.s2, &group.modulus()))
+        .modulo(&group.modulus());
+    
+    let t_prime3 = (c_tilde.mod_pow(&c.neg(), &group.modulus()))
+        .mul(&group.generator().mod_pow(&proof.s.s3, &group.modulus()))
+        .mul(&t_tilde3_temp)
+        .modulo(&group.modulus());
+    
+    let t_prime41 = (a_prime.mod_pow(&c.neg(), &group.modulus()))
+        .mul(&pk.value.mod_pow(&proof.s.s4.neg(), &group.modulus()))
+        .mul(&t_tilde41_temp)
+        .modulo(&group.modulus());
 
+    let t_prime42 = (b_prime.mod_pow(&c.neg(), &group.modulus()))
+        .mul(&group.generator().mod_pow(&proof.s.s4.neg(), &group.modulus()))
+        .mul(&t_tilde42_temp)
+        .modulo(&group.modulus());
+        
+    
     let mut t_hat_primes = Vec::with_capacity(N);
     for i in 0..N {
         let c_term = if i == 0 {
             h_initial
         } else {
-            proof.c_hats[i - 1]
+            &proof.c_hats[i - 1]
         };
-        let next = (proof.c_hats[i] * (-c)) + (RISTRETTO_BASEPOINT_POINT * proof.s.s_hats[i]) 
-            + (c_term * proof.s.s_primes[i]);
+        let next = (proof.c_hats[i].mod_pow(&c.neg(), &group.modulus())) 
+            .mul(&group.generator().mod_pow(&proof.s.s_hats[i], &group.modulus()))
+            .mul(&c_term.mod_pow(&proof.s.s_primes[i], &group.modulus()))
+            .modulo(&group.modulus());
         
         t_hat_primes.push(next);
     }
 
+    
     let mut checks = Vec::with_capacity(5 + N);
-    checks.push(proof.t.t1 == t_prime1);
-    checks.push(proof.t.t2 == t_prime2);
-    checks.push(proof.t.t3 == t_prime3);
-    checks.push(proof.t.t4_1 == t_prime41);
-    checks.push(proof.t.t4_2 == t_prime42);
+    checks.push(proof.t.t1.eq(&t_prime1));
+    checks.push(proof.t.t2.eq(&t_prime2));
+    checks.push(proof.t.t3.eq(&t_prime3));
+    checks.push(proof.t.t4_1.eq(&t_prime41));
+    checks.push(proof.t.t4_2.eq(&t_prime42));
     for i in 0..N {
-        checks.push(proof.t.t_hats[i] == t_hat_primes[i]);
+        checks.push(proof.t.t_hats[i].eq(&t_hat_primes[i]));
     }
     
-    return !checks.contains(&false);*/
-
-    false
+    !checks.contains(&false)
 }
 
 fn gen_permutation(size: usize) -> Vec<usize> {
@@ -339,7 +390,7 @@ fn gen_shuffle<E: Element>(ciphertexts: &Vec<Ciphertext<E>>, pk: &PublicKey<E, O
 }
 
 fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &[E], group: &dyn Group<E, OsRng>)  -> (Vec<E>, Vec<E::Exp>) {
-    let mut csprng = OsRng;
+    let csprng = OsRng;
 
     assert!(generators.len() == perm.len());
     
@@ -363,7 +414,7 @@ fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &[E], group: &dyn 
 }
 
 fn gen_commitment_chain<E: Element>(initial: &E, us: &Vec<&E::Exp>, group: &dyn Group<E, OsRng>)  -> (Vec<E>, Vec<E::Exp>) {
-    let mut csprng = OsRng;
+    let csprng = OsRng;
     let mut cs: Vec<E> = Vec::with_capacity(us.len());
     let mut rs: Vec<E::Exp> = Vec::with_capacity(us.len());
     
@@ -388,7 +439,7 @@ fn gen_commitment_chain<E: Element>(initial: &E, us: &Vec<&E::Exp>, group: &dyn 
 
 // FIXME not kosher
 fn generators<E: Element>(size: usize, group: &dyn Group<E, OsRng>) -> Vec<E> {
-    let mut csprng = OsRng;
+    let csprng = OsRng;
     let mut ret: Vec<E> = Vec::with_capacity(size);
     
     for _ in 0..size {
@@ -399,3 +450,70 @@ fn generators<E: Element>(size: usize, group: &dyn Group<E, OsRng>) -> Vec<E> {
     ret
 }
 
+
+#[test]
+fn test_shuffle_ristretto() {
+    
+    let mut csprng = OsRng;
+    let group = RistrettoGroup;
+        
+    let sk = PrivateKey::random(&group, csprng);
+    let pk = PublicKey::from(&sk);
+
+    let mut es: Vec<Ciphertext<RistrettoPoint>> = Vec::with_capacity(10);
+
+    let N = 100;
+
+    for _ in 0..N {
+        let plaintext: RistrettoPoint = group.rnd(csprng);
+        let c = pk.encrypt(plaintext, csprng);
+        es.push(c);
+    }
+
+    let hs = generators(es.len() + 1, &group);
+    let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
+    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, &RistrettoHasher);
+    let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, &RistrettoHasher);
+
+    assert!(ok == true);
+}
+
+#[test]
+fn test_shuffle_rug() {
+    
+    const P_STR: &str = "B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFEF324E7738926CFBE5F4BF8D8D8C31D763DA06C80ABB1185EB4F7C7B5757F5958490CFD47D7C19BB42158D9554F7B46BCED55C4D79FD5F24D6613C31C3839A2DDF8A9A276BCFBFA1C877C56284DAB79CD4C2B3293D20E9E5EAF02AC60ACC93ED874422A52ECB238FEEE5AB6ADD835FD1A0753D0A8F78E537D2B95BB79D8DCAEC642C1E9F23B829B5C2780BF38737DF8BB300D01334A0D0BD8645CBFA73A6160FFE393C48CBBBCA060F0FF8EC6D31BEB5CCEED7F2F0BB088017163BC60DF45A0ECB1BCD289B06CBBFEA21AD08E1847F3F7378D56CED94640D6EF0D3D37BE69D0063";
+    const Q_STR: &str = "5bf0a8b1457695355fb8ac404e7a79e3b1738b079c5a6d2b53c26c8228c867f799273b9c49367df2fa5fc6c6c618ebb1ed0364055d88c2f5a7be3dababfacac24867ea3ebe0cdda10ac6caaa7bda35e76aae26bcfeaf926b309e18e1c1cd16efc54d13b5e7dfd0e43be2b1426d5bce6a6159949e9074f2f5781563056649f6c3a21152976591c7f772d5b56ec1afe8d03a9e8547bc729be95caddbcec6e57632160f4f91dc14dae13c05f9c39befc5d98068099a50685ec322e5fd39d30b07ff1c9e2465dde5030787fc763698df5ae6776bf9785d84400b8b1de306fa2d07658de6944d8365dff510d68470c23f9fb9bc6ab676ca3206b77869e9bdf34e8031";
+
+    let p = Integer::from_str_radix(P_STR, 16).unwrap();
+    let q = Integer::from_str_radix(Q_STR, 16).unwrap();
+    let g = Integer::from(3);
+        
+    assert!(g.clone().jacobi(&p) == 1);
+
+    let group = RugGroup {
+        generator: g,
+        modulus: p.clone(),
+        modulus_exp: q
+    };
+    let mut csprng = OsRng;
+        
+    let sk = PrivateKey::random(&group, csprng);
+    let pk = PublicKey::from(&sk);
+
+    let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(10);
+
+    let N = 100;
+
+    for _ in 0..N {
+        let plaintext: Integer = group.encode(group.rnd_exp(csprng));
+        let c = pk.encrypt(plaintext, csprng);
+        es.push(c);
+    }
+
+    let hs = generators(es.len() + 1, &group);
+    let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
+    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, &RugHasher);
+    // let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, &RugHasher);
+
+    // assert!(ok == true);
+}
