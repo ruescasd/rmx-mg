@@ -9,6 +9,9 @@ use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
 
+use crate::hashing::ExpFromHash;
+use crate::hashing::ByteSource;
+
 // https://github.com/bfh-evg/unicrypt/blob/2c9b223c1abc6266aa56ace5562200a5050a0c2a/src/main/java/ch/bfh/unicrypt/helper/prime/SafePrime.java
 const P_STR: &str = "B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFEF324E7738926CFBE5F4BF8D8D8C31D763DA06C80ABB1185EB4F7C7B5757F5958490CFD47D7C19BB42158D9554F7B46BCED55C4D79FD5F24D6613C31C3839A2DDF8A9A276BCFBFA1C877C56284DAB79CD4C2B3293D20E9E5EAF02AC60ACC93ED874422A52ECB238FEEE5AB6ADD835FD1A0753D0A8F78E537D2B95BB79D8DCAEC642C1E9F23B829B5C2780BF38737DF8BB300D01334A0D0BD8645CBFA73A6160FFE393C48CBBBCA060F0FF8EC6D31BEB5CCEED7F2F0BB088017163BC60DF45A0ECB1BCD289B06CBBFEA21AD08E1847F3F7378D56CED94640D6EF0D3D37BE69D0063";
 const Q_STR: &str = "5bf0a8b1457695355fb8ac404e7a79e3b1738b079c5a6d2b53c26c8228c867f799273b9c49367df2fa5fc6c6c618ebb1ed0364055d88c2f5a7be3dababfacac24867ea3ebe0cdda10ac6caaa7bda35e76aae26bcfeaf926b309e18e1c1cd16efc54d13b5e7dfd0e43be2b1426d5bce6a6159949e9074f2f5781563056649f6c3a21152976591c7f772d5b56ec1afe8d03a9e8547bc729be95caddbcec6e57632160f4f91dc14dae13c05f9c39befc5d98068099a50685ec322e5fd39d30b07ff1c9e2465dde5030787fc763698df5ae6776bf9785d84400b8b1de306fa2d07658de6944d8365dff510d68470c23f9fb9bc6ab676ca3206b77869e9bdf34e8031";
@@ -22,33 +25,39 @@ impl RandGen for OsRandgen {
     }
 }
 
-pub trait Element {
+pub trait Element: ByteSource {
     type Exp: Exponent;
     type Plaintext;
     
-    fn mult(&self, other: &Self) -> Self;
+    fn mul(&self, other: &Self) -> Self;
     fn div(&self, other: &Self) -> Self;
     fn mod_pow(&self, exp: &Self::Exp, modulus: &Self) -> Self;
     fn modulo(&self, modulus: &Self) -> Self;
 }
 
-pub trait Exponent {
+pub trait Exponent: Clone {
     fn add(&self, other: &Self) -> Self;
     fn sub(&self, other: &Self) -> Self;
-    fn mult(&self, other: &Self) -> Self;
+    fn neg(&self) -> Self;
+    fn mul(&self, other: &Self) -> Self;
     // fn div(&self, other: &Self) -> Self;
     fn modulo(&self, modulus: &Self) -> Self;
+    fn add_identity() -> Self;
+    fn mul_identity() -> Self;
 }
 
 impl Exponent for Integer {
     fn add(&self, other: &Integer) -> Integer {
-        self.clone() + other.clone()
+        Integer::from(self + other)
     }
     fn sub(&self, other: &Integer) -> Integer {
-        self.clone() - other.clone()
+        Integer::from(self - other)
     }
-    fn mult(&self, other: &Integer) -> Integer {
-        self.clone() * other.clone()
+    fn neg(&self) -> Integer {
+        Integer::from(-self)
+    }
+    fn mul(&self, other: &Integer) -> Integer {
+        Integer::from(self * other)
     }
     /* fn div(&self, other: &Integer) -> Integer {
         self.clone() / other.clone()
@@ -61,6 +70,13 @@ impl Exponent for Integer {
         
         rem
     }
+
+    fn add_identity() -> Integer {
+        Integer::from(0)
+    }
+    fn mul_identity() -> Integer {
+        Integer::from(1)
+    }
 }
 impl Exponent for Scalar {
     fn add(&self, other: &Scalar) -> Scalar {
@@ -69,7 +85,10 @@ impl Exponent for Scalar {
     fn sub(&self, other: &Scalar) -> Scalar {
         self - other
     }
-    fn mult(&self, other: &Scalar) -> Scalar {
+    fn neg(&self) -> Scalar {
+        -self
+    }
+    fn mul(&self, other: &Scalar) -> Scalar {
         self * other
     }
     /* fn div(&self, other: &Scalar) -> Scalar {
@@ -78,13 +97,19 @@ impl Exponent for Scalar {
     fn modulo(&self, modulus: &Scalar) -> Scalar {
         *self   
     }
+    fn add_identity() -> Scalar {
+        Scalar::zero()
+    }
+    fn mul_identity() -> Scalar {
+        Scalar::one()
+    }
 }
 
 impl Element for Integer {
     type Exp = Integer;
     type Plaintext = Integer;
 
-    fn mult(&self, other: &Self) -> Self {
+    fn mul(&self, other: &Self) -> Self {
         self.clone() * other.clone()
     }
     fn div(&self, other: &Self) -> Self {
@@ -107,7 +132,7 @@ impl Element for RistrettoPoint {
     type Exp = Scalar;
     type Plaintext = [u8; 16];
 
-    fn mult(&self, other: &Self) -> Self {
+    fn mul(&self, other: &Self) -> Self {
         self + other
     }
     fn div(&self, other: &Self) -> Self {
@@ -121,7 +146,7 @@ impl Element for RistrettoPoint {
     }
 }
 
-pub trait Group<E: Element, T: RngCore + CryptoRng> {    
+pub trait Group<E: Element, T: RngCore + CryptoRng>: ExpFromHash<E::Exp> {    
     fn generator(&self) -> E;
     fn rnd(&self, rng: T) -> E;
     fn modulus(&self) -> E;
@@ -300,7 +325,7 @@ impl<'a, E: Element, T: RngCore + CryptoRng> PublicKey<'a, E, T> {
     pub fn encrypt(&self, plaintext: E, rng: T) -> Ciphertext<E> {
         let randomness = self.group.rnd_exp(rng);
         Ciphertext {
-            a: plaintext.mult(&self.value.mod_pow(&randomness, &self.group.modulus())),
+            a: plaintext.mul(&self.value.mod_pow(&randomness, &self.group.modulus())),
             b: self.group.generator().mod_pow(&randomness, &self.group.modulus())
         }
     }

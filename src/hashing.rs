@@ -81,10 +81,10 @@ fn concat_bytes<T: ByteSource>(cs: &Vec<T>) -> Vec<u8> {
         });
 }
 
-pub fn shuffle_proof_us<E: Element + ByteSource, H: ExpFromHash<E::Exp>>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
-    cs: &Vec<E>, group: H, n: usize) -> Vec<E::Exp> {
+pub fn shuffle_proof_us<E: Element + ByteSource>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
+    cs: &Vec<E>, group: &dyn Group<E, OsRng>, n: usize) -> Vec<E::Exp> {
     
-        let mut prefix_vector = concat_bytes(es);
+    let mut prefix_vector = concat_bytes(es);
     prefix_vector.extend(concat_bytes(e_primes));
     prefix_vector.extend(concat_bytes(cs));
     let prefix = prefix_vector.as_slice();
@@ -105,8 +105,8 @@ pub fn shuffle_proof_us<E: Element + ByteSource, H: ExpFromHash<E::Exp>>(es: &Ve
     ret
 }
 
-pub fn shuffle_proof_challenge<E: Element + ByteSource, H: ExpFromHash<E::Exp>>(y: &YChallengeInput<E>, 
-    t: &TChallengeInput<E>, group: H) -> E::Exp {
+pub fn shuffle_proof_challenge<E: Element + ByteSource>(y: &YChallengeInput<E>, 
+    t: &TChallengeInput<E>, group: &dyn Group<E, OsRng>) -> E::Exp {
 
     let mut bytes = concat_bytes(&y.es);
     bytes.extend(concat_bytes(&y.e_primes));
@@ -127,28 +127,3 @@ pub fn shuffle_proof_challenge<E: Element + ByteSource, H: ExpFromHash<E::Exp>>(
     let u: E::Exp = group.hash_to_exp(&hasher.finalize());
     u
 }
-
-/* 
-
-https://github.com/RustCrypto/hashes/issues/42
-
-extern crate digest;
-extern crate sha3;
-
-
-
-fn main() {
-    let mut hasher = Shake256::default();
-    hasher.process(b"some nice randomness here");
-    let mut xof = hasher.xof_result();
-
-    let mut buf = [0; 4];
-
-    for _ in 0..5 {
-        xof.read(&mut buf);
-        println!("{:?}", buf);
-    }
-}
-
-
-*/
