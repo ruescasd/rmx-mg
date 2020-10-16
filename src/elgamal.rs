@@ -30,7 +30,7 @@ pub trait Element: ByteSource + Clone {
     type Plaintext;
     
     fn mul(&self, other: &Self) -> Self;
-    fn div(&self, other: &Self) -> Self;
+    fn div(&self, other: &Self, modulus: &Self) -> Self;
     fn mod_pow(&self, exp: &Self::Exp, modulus: &Self) -> Self;
     fn modulo(&self, modulus: &Self) -> Self;
     fn eq(&self, other: &Self) -> bool;
@@ -114,11 +114,13 @@ impl Element for Integer {
     fn mul(&self, other: &Self) -> Self {
         self.clone() * other.clone()
     }
-    fn div(&self, other: &Self) -> Self {
-        self.clone() / other.clone()
+    fn div(&self, other: &Self, modulus: &Self) -> Self {
+        self.clone() * other.clone().invert(modulus).unwrap()
     }
     fn mod_pow(&self, other: &Self::Exp, modulus: &Self) -> Self {
-        self.clone().pow_mod(&other, modulus).unwrap()   
+        let ret = self.clone().pow_mod(&other, modulus);
+        
+        ret.unwrap()
     }
     fn modulo(&self, modulus: &Self) -> Self {
         let (_, mut rem) = self.clone().div_rem(modulus.clone());
@@ -140,7 +142,7 @@ impl Element for RistrettoPoint {
     fn mul(&self, other: &Self) -> Self {
         self + other
     }
-    fn div(&self, other: &Self) -> Self {
+    fn div(&self, other: &Self, modulus: &Self) -> Self {
         self - other
     }
     fn mod_pow(&self, other: &Self::Exp, _modulus: &Self) -> Self {
@@ -319,7 +321,8 @@ impl<'a, E: Element, T: RngCore + CryptoRng> PrivateKey<'a, E, T> {
     }
     
     pub fn decrypt(&self, c: Ciphertext<E>) -> E {
-        c.a.div(&c.b.mod_pow(&self.value, &self.group.modulus()))
+        c.a.div(&c.b.mod_pow(&self.value, &self.group.modulus()), 
+            &self.group.modulus()).modulo(&self.group.modulus())
     }
 }
 
