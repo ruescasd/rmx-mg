@@ -1,11 +1,6 @@
 use rand::Rng;
-use rand_core::{CryptoRng, OsRng, RngCore};
-use rug::{
-    rand::{RandGen, RandState},
-    Integer,
-};
-
-use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
+use rand_core::{OsRng};
+use rug::Integer;
 
 mod elgamal;
 mod hashing;
@@ -14,7 +9,7 @@ use elgamal::*;
 use hashing::{ByteSource, ExpFromHash, RugHasher, RistrettoHasher};
 
 fn main() {
-    /* let csprng = OsRng;
+    let csprng = OsRng;
     let rg = RistrettoGroup;
     
     let sk = PrivateKey::random(&rg, csprng);
@@ -27,7 +22,7 @@ fn main() {
     let d = sk.decrypt(c);
     
     let recovered = String::from_utf8(rg.decode(d).to_vec());
-    assert_eq!(text, recovered.unwrap());*/
+    assert_eq!(text, recovered.unwrap());
 }
 
 pub struct YChallengeInput<'a, E: Element + ByteSource> {
@@ -342,12 +337,13 @@ fn gen_shuffle<E: Element>(ciphertexts: &Vec<Ciphertext<E>>, pk: &PublicKey<E, O
     let perm: Vec<usize> = gen_permutation(ciphertexts.len());
 
     let mut e_primes = Vec::with_capacity(ciphertexts.len());
-    // let mut rs = Vec::with_capacity(ciphertexts.len());
     let mut rs_temp: Vec<Option<E::Exp>> = vec![None;ciphertexts.len()];
     let group = pk.group;
 
     /* 
     
+    // let mut rs = Vec::with_capacity(ciphertexts.len());
+
     unsafe {
         rs.set_len(ciphertexts.len());
         for i in 0..perm.len() {
@@ -497,12 +493,12 @@ fn test_shuffle_ristretto() {
     let sk = PrivateKey::random(&group, csprng);
     let pk = PublicKey::from(&sk);
 
-    let mut es: Vec<Ciphertext<RistrettoPoint>> = Vec::with_capacity(10);
+    let mut es = Vec::with_capacity(10);
 
-    let N = 100;
+    let n = 100;
 
-    for _ in 0..N {
-        let plaintext: RistrettoPoint = group.rnd(csprng);
+    for _ in 0..n {
+        let plaintext = group.rnd(csprng);
         let c = pk.encrypt(plaintext, csprng);
         es.push(c);
     }
@@ -539,7 +535,7 @@ fn test_shuffle_mg() {
     let pk = PublicKey::from(&sk);
 
     let shuffle_tests = 1;
-    let N = 100;
+    let n = 100;
  
     for i in 0..shuffle_tests {
     
@@ -547,29 +543,27 @@ fn test_shuffle_mg() {
 
         let mut now = Instant::now();
         
-        for _ in 0..N {
+        for _ in 0..n {
             let plaintext: Integer = group.encode(group.rnd_exp(csprng));
             let c = pk.encrypt(plaintext, csprng);
             es.push(c);
         }
-
-        println!("encrypted {} ciphertexts in {} seconds", N, now.elapsed().as_secs());
+        println!("encrypted {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
         now = Instant::now();
-        
         let hs = generators(es.len() + 1, &group);
+        println!("generators for {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
         now = Instant::now();
-        println!("generators for {} ciphertexts in {} seconds", N, now.elapsed().as_secs());
         let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
-        println!("gen shuffle {} ciphertexts in {} seconds", N, now.elapsed().as_secs());
+        println!("gen shuffle {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
         now = Instant::now();
         let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, &RugHasher);
-        println!("gen proof {} ciphertexts in {} seconds", N, now.elapsed().as_secs());
+        println!("gen proof {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
         now = Instant::now();
         let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, &RugHasher);
-        println!("check proof {} ciphertexts in {} seconds", N, now.elapsed().as_secs());
+        println!("check proof {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
 
         assert!(ok == true);
     }
     
-    println!("Ran {} shuffle tests, ciphertexts = {}", shuffle_tests, N);
+    println!("Ran {} shuffle tests, ciphertexts = {}", shuffle_tests, n);
 }

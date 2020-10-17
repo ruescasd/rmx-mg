@@ -1,5 +1,4 @@
 use curve25519_dalek::ristretto::{RistrettoPoint};
-use rand_core::{OsRng};
 use sha2::{Sha512, Digest};
 use curve25519_dalek::scalar::Scalar;
 use rug::{
@@ -76,11 +75,6 @@ impl ByteSource for Integer {
         self.to_digits::<u8>(Order::Lsf)
     }
 }
-
-fn test<E: Element + ByteSource>(e: E) -> Vec<u8> {
-    e.get_bytes()
-}
-
 
 fn concat_bytes<T: ByteSource>(cs: &Vec<T>) -> Vec<u8> {
     return 

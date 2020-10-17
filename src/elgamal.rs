@@ -9,7 +9,6 @@ use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
 
-use crate::hashing::ExpFromHash;
 use crate::hashing::ByteSource;
 
 // https://github.com/bfh-evg/unicrypt/blob/2c9b223c1abc6266aa56ace5562200a5050a0c2a/src/main/java/ch/bfh/unicrypt/helper/prime/SafePrime.java
@@ -63,25 +62,14 @@ impl Exponent for Integer {
     }
     fn modulo(&self, modulus: &Integer) -> Integer {
         let (_, mut rem) = self.clone().div_rem(modulus.clone());
-        // println!("mod on exp");
+        
         if rem < 0 {
-            println!("< 0! div exp");
             rem = rem + modulus;
         }
         
         rem
     }
     fn eq(&self, other: &Integer) -> bool {
-        if self != other {
-            let p = Integer::from_str_radix(P_STR, 16).unwrap();
-            let q = Integer::from_str_radix(Q_STR, 16).unwrap();
-            
-            println!("{:?}", self);
-            println!("{:?}", other);
-            println!("{:?}", Exponent::modulo(other, &p));
-            // println!("{:?}", Element::modulo(other, &p));
-        }
-        
         self == other
     }
 
@@ -246,7 +234,6 @@ impl RistrettoGroup {
             
             let result = cr.decompress();
             if result.is_some() {
-                // println!("* RistrettoGrup::encode: success after {} attempts", i);
                 return i + 1;
             }
             
