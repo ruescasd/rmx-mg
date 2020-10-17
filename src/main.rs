@@ -64,7 +64,10 @@ fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>,
     let csprng = OsRng;
     
     let group = pk.group;
+    
+    #[allow(non_snake_case)]
     let N = es.len();
+    
     let h_generators = &generators[1..];
     let h_initial = &generators[0];
     
@@ -207,7 +210,10 @@ fn check_proof<E: Element>(proof: &Proof<E>, es: &Vec<Ciphertext<E>>, e_primes: 
     pk: &PublicKey<E, OsRng>, generators: &Vec<E>, hasher: &dyn ExpFromHash<E::Exp>) -> bool {
     
     let group = pk.group;
+    
+    #[allow(non_snake_case)]
     let N = es.len();
+    
     let h_generators = &generators[1..];
     let h_initial = &generators[0];
     
@@ -385,7 +391,7 @@ fn gen_shuffle<E: Element>(ciphertexts: &Vec<Ciphertext<E>>, pk: &PublicKey<E, O
 
     let mut rs = Vec::with_capacity(ciphertexts.len());
 
-    for i in 0..perm.len() {
+    for _ in 0..perm.len() {
      
         let r = rs_temp.remove(0);
         rs.push(r.unwrap());
@@ -434,7 +440,7 @@ fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &[E], group: &dyn 
     let mut ret1: Vec<E> = Vec::with_capacity(perm.len());
     let mut ret2: Vec<E::Exp> = Vec::with_capacity(perm.len());
     
-    for i in 0..perm.len() {
+    for _ in 0..perm.len() {
         let c = cs.remove(0);
         let r = rs.remove(0);
 
@@ -515,20 +521,8 @@ use std::time::{Instant};
 
 #[test]
 fn test_shuffle_mg() {
-    
-    const P_STR: &str = "B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFEF324E7738926CFBE5F4BF8D8D8C31D763DA06C80ABB1185EB4F7C7B5757F5958490CFD47D7C19BB42158D9554F7B46BCED55C4D79FD5F24D6613C31C3839A2DDF8A9A276BCFBFA1C877C56284DAB79CD4C2B3293D20E9E5EAF02AC60ACC93ED874422A52ECB238FEEE5AB6ADD835FD1A0753D0A8F78E537D2B95BB79D8DCAEC642C1E9F23B829B5C2780BF38737DF8BB300D01334A0D0BD8645CBFA73A6160FFE393C48CBBBCA060F0FF8EC6D31BEB5CCEED7F2F0BB088017163BC60DF45A0ECB1BCD289B06CBBFEA21AD08E1847F3F7378D56CED94640D6EF0D3D37BE69D0063";
 
-    let p = Integer::from_str_radix(P_STR, 16).unwrap();
-    let q: Integer = (p.clone() - 1) / 2;
-    let g = Integer::from(3);
-        
-    assert!(g.clone().legendre(&p) == 1);
-
-    let group = RugGroup {
-        generator: g,
-        modulus: p.clone(),
-        modulus_exp: q
-    };
+    let group = RugGroup::default();
     let csprng = OsRng;
         
     let sk = PrivateKey::random(&group, csprng);
@@ -537,7 +531,7 @@ fn test_shuffle_mg() {
     let shuffle_tests = 1;
     let n = 100;
  
-    for i in 0..shuffle_tests {
+    for _ in 0..shuffle_tests {
     
         let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(10);
 

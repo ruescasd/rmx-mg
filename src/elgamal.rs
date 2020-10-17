@@ -11,19 +11,6 @@ use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
 
 use crate::hashing::ByteSource;
 
-// https://github.com/bfh-evg/unicrypt/blob/2c9b223c1abc6266aa56ace5562200a5050a0c2a/src/main/java/ch/bfh/unicrypt/helper/prime/SafePrime.java
-const P_STR: &str = "B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFEF324E7738926CFBE5F4BF8D8D8C31D763DA06C80ABB1185EB4F7C7B5757F5958490CFD47D7C19BB42158D9554F7B46BCED55C4D79FD5F24D6613C31C3839A2DDF8A9A276BCFBFA1C877C56284DAB79CD4C2B3293D20E9E5EAF02AC60ACC93ED874422A52ECB238FEEE5AB6ADD835FD1A0753D0A8F78E537D2B95BB79D8DCAEC642C1E9F23B829B5C2780BF38737DF8BB300D01334A0D0BD8645CBFA73A6160FFE393C48CBBBCA060F0FF8EC6D31BEB5CCEED7F2F0BB088017163BC60DF45A0ECB1BCD289B06CBBFEA21AD08E1847F3F7378D56CED94640D6EF0D3D37BE69D0063";
-const Q_STR: &str = "5bf0a8b1457695355fb8ac404e7a79e3b1738b079c5a6d2b53c26c8228c867f799273b9c49367df2fa5fc6c6c618ebb1ed0364055d88c2f5a7be3dababfacac24867ea3ebe0cdda10ac6caaa7bda35e76aae26bcfeaf926b309e18e1c1cd16efc54d13b5e7dfd0e43be2b1426d5bce6a6159949e9074f2f5781563056649f6c3a21152976591c7f772d5b56ec1afe8d03a9e8547bc729be95caddbcec6e57632160f4f91dc14dae13c05f9c39befc5d98068099a50685ec322e5fd39d30b07ff1c9e2465dde5030787fc763698df5ae6776bf9785d84400b8b1de306fa2d07658de6944d8365dff510d68470c23f9fb9bc6ab676ca3206b77869e9bdf34e8031";
-
-struct OsRandgen(OsRng);
-
-impl RandGen for OsRandgen {
-    fn gen(&mut self) -> u32 {
-        // let mut csprng = OsRng;
-        return self.0.next_u32();
-    }
-}
-
 pub trait Element: ByteSource + Clone {
     type Exp: Exponent;
     type Plaintext;
@@ -45,6 +32,92 @@ pub trait Exponent: Clone {
     
     fn add_identity() -> Self;
     fn mul_identity() -> Self;
+}
+
+pub trait Group<E: Element, T: RngCore + CryptoRng> {    
+    fn generator(&self) -> E;
+    fn rnd(&self, rng: T) -> E;
+    fn modulus(&self) -> E;
+    fn rnd_exp(&self, rng: T) -> E::Exp;
+    fn exp_modulus(&self) -> E::Exp;
+    fn encode(&self, plaintext: E::Plaintext) -> E;
+    fn decode(&self, ciphertext: E) -> E::Plaintext;
+}
+
+#[derive(Serialize, Deserialize, Copy, Clone)]
+pub struct Ciphertext<E: Element> {
+    pub a: E,
+    pub b: E
+}
+
+pub struct PrivateKey<'a, E: Element, T: RngCore + CryptoRng> {
+    pub value: E::Exp,
+    pub group: &'a dyn Group<E, T>
+}
+
+impl<'a, E: Element, T: RngCore + CryptoRng> PrivateKey<'a, E, T> {
+    pub fn random(group: &'a dyn Group<E, T>, rng: T) -> Self {
+        PrivateKey {
+            value: group.rnd_exp(rng), 
+            group: group
+        }
+    }
+    
+    pub fn decrypt(&self, c: Ciphertext<E>) -> E {
+        c.a.div(&c.b.mod_pow(&self.value, &self.group.modulus()), 
+            &self.group.modulus()).modulo(&self.group.modulus())
+    }
+}
+
+pub struct PublicKey<'a, E: Element, T: RngCore + CryptoRng> {
+    pub value: E,
+    pub group: &'a dyn Group<E, T>
+}
+
+impl<'a, E: Element, T: RngCore + CryptoRng> PublicKey<'a, E, T> {
+
+    pub fn encrypt(&self, plaintext: E, rng: T) -> Ciphertext<E> {
+        let randomness = self.group.rnd_exp(rng);
+        Ciphertext {
+            a: plaintext.mul(&self.value.mod_pow(&randomness, &self.group.modulus())),
+            b: self.group.generator().mod_pow(&randomness, &self.group.modulus())
+        }
+    }
+    
+    pub fn from(sk: &'a PrivateKey<E, T>) -> PublicKey<'a, E, T> {
+        PublicKey {
+            value: sk.group.generator().mod_pow(&sk.value, &sk.group.modulus()),
+            group: sk.group
+        }
+    }
+}
+
+impl Element for Integer {
+    type Exp = Integer;
+    type Plaintext = Integer;
+
+    fn mul(&self, other: &Self) -> Self {
+        self.clone() * other.clone()
+    }
+    fn div(&self, other: &Self, modulus: &Self) -> Self {
+        self.clone() * (other.clone().invert(modulus).unwrap())
+    }
+    fn mod_pow(&self, other: &Self::Exp, modulus: &Self) -> Self {
+        let ret = self.clone().pow_mod(&other, modulus);
+
+        ret.unwrap()
+    }
+    fn modulo(&self, modulus: &Self) -> Self {
+        let (_, mut rem) = self.clone().div_rem(modulus.clone());
+        if rem < 0 {
+            rem = rem + modulus;
+        }
+        
+        rem
+    }
+    fn eq(&self, other: &Integer) -> bool {
+        self == other
+    }
 }
 
 impl Exponent for Integer {
@@ -79,98 +152,41 @@ impl Exponent for Integer {
     fn mul_identity() -> Integer {
         Integer::from(1)
     }
-
-}
-impl Exponent for Scalar {
-    fn add(&self, other: &Scalar) -> Scalar {
-        self + other
-    }
-    fn sub(&self, other: &Scalar) -> Scalar {
-        self - other
-    }
-    fn neg(&self) -> Scalar {
-        -self
-    }
-    fn mul(&self, other: &Scalar) -> Scalar {
-        self * other
-    }
-    fn modulo(&self, _modulus: &Scalar) -> Scalar {
-        *self   
-    }
-    fn eq(&self, other: &Scalar) -> bool {
-        self == other
-    }
-    fn add_identity() -> Scalar {
-        Scalar::zero()
-    }
-    fn mul_identity() -> Scalar {
-        Scalar::one()
-    }
 }
 
-impl Element for Integer {
-    type Exp = Integer;
-    type Plaintext = Integer;
+struct OsRandgen(OsRng);
 
-    fn mul(&self, other: &Self) -> Self {
-        self.clone() * other.clone()
+impl RandGen for OsRandgen {
+    fn gen(&mut self) -> u32 {
+        return self.0.next_u32();
     }
-    fn div(&self, other: &Self, modulus: &Self) -> Self {
-        self.clone() * (other.clone().invert(modulus).unwrap())
-    }
-    fn mod_pow(&self, other: &Self::Exp, modulus: &Self) -> Self {
-        let ret = self.clone().pow_mod(&other, modulus);
-
-        ret.unwrap()
-    }
-    fn modulo(&self, modulus: &Self) -> Self {
-        let (_, mut rem) = self.clone().div_rem(modulus.clone());
-        if rem < 0 {
-            rem = rem + modulus;
-        }
-        
-        rem
-    }
-    fn eq(&self, other: &Integer) -> bool {
-        self == other
-    }
-}
-
-impl Element for RistrettoPoint {
-    type Exp = Scalar;
-    type Plaintext = [u8; 16];
-
-    fn mul(&self, other: &Self) -> Self {
-        self + other
-    }
-    fn div(&self, other: &Self, _modulus: &Self) -> Self {
-        self - other
-    }
-    fn mod_pow(&self, other: &Self::Exp, _modulus: &Self) -> Self {
-        self * other
-    }
-    fn modulo(&self, _modulus: &Self) -> Self {
-        *self
-    }
-    fn eq(&self, other: &RistrettoPoint) -> bool {
-        self == other
-    }
-}
-
-pub trait Group<E: Element, T: RngCore + CryptoRng> {    
-    fn generator(&self) -> E;
-    fn rnd(&self, rng: T) -> E;
-    fn modulus(&self) -> E;
-    fn rnd_exp(&self, rng: T) -> E::Exp;
-    fn exp_modulus(&self) -> E::Exp;
-    fn encode(&self, plaintext: E::Plaintext) -> E;
-    fn decode(&self, ciphertext: E) -> E::Plaintext;
 }
 
 pub struct RugGroup {
     pub generator: Integer,
     pub modulus: Integer,
     pub modulus_exp: Integer
+}
+
+impl RugGroup {
+
+    // https://github.com/bfh-evg/unicrypt/blob/2c9b223c1abc6266aa56ace5562200a5050a0c2a/src/main/java/ch/bfh/unicrypt/helper/prime/SafePrime.java
+    pub const P_STR: &'static str = "B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFEF324E7738926CFBE5F4BF8D8D8C31D763DA06C80ABB1185EB4F7C7B5757F5958490CFD47D7C19BB42158D9554F7B46BCED55C4D79FD5F24D6613C31C3839A2DDF8A9A276BCFBFA1C877C56284DAB79CD4C2B3293D20E9E5EAF02AC60ACC93ED874422A52ECB238FEEE5AB6ADD835FD1A0753D0A8F78E537D2B95BB79D8DCAEC642C1E9F23B829B5C2780BF38737DF8BB300D01334A0D0BD8645CBFA73A6160FFE393C48CBBBCA060F0FF8EC6D31BEB5CCEED7F2F0BB088017163BC60DF45A0ECB1BCD289B06CBBFEA21AD08E1847F3F7378D56CED94640D6EF0D3D37BE69D0063";
+    pub const Q_STR: &'static str = "5bf0a8b1457695355fb8ac404e7a79e3b1738b079c5a6d2b53c26c8228c867f799273b9c49367df2fa5fc6c6c618ebb1ed0364055d88c2f5a7be3dababfacac24867ea3ebe0cdda10ac6caaa7bda35e76aae26bcfeaf926b309e18e1c1cd16efc54d13b5e7dfd0e43be2b1426d5bce6a6159949e9074f2f5781563056649f6c3a21152976591c7f772d5b56ec1afe8d03a9e8547bc729be95caddbcec6e57632160f4f91dc14dae13c05f9c39befc5d98068099a50685ec322e5fd39d30b07ff1c9e2465dde5030787fc763698df5ae6776bf9785d84400b8b1de306fa2d07658de6944d8365dff510d68470c23f9fb9bc6ab676ca3206b77869e9bdf34e8031";
+    
+    pub fn default() -> RugGroup {
+        let p = Integer::from_str_radix(Self::P_STR, 16).unwrap();
+        let q = Integer::from_str_radix(Self::Q_STR, 16).unwrap();
+        let g = Integer::from(3);
+        
+        assert!(g.clone().legendre(&p) == 1);
+
+        RugGroup {
+            generator: g,
+            modulus: p.clone(),
+            modulus_exp: q
+        }
+    }
 }
 
 impl Group<Integer, OsRng> for RugGroup {
@@ -213,7 +229,54 @@ impl Group<Integer, OsRng> for RugGroup {
             plaintext - 1
         }
     }
+}
 
+impl Element for RistrettoPoint {
+    type Exp = Scalar;
+    type Plaintext = [u8; 16];
+
+    fn mul(&self, other: &Self) -> Self {
+        self + other
+    }
+    fn div(&self, other: &Self, _modulus: &Self) -> Self {
+        self - other
+    }
+    fn mod_pow(&self, other: &Self::Exp, _modulus: &Self) -> Self {
+        self * other
+    }
+    fn modulo(&self, _modulus: &Self) -> Self {
+        *self
+    }
+    fn eq(&self, other: &RistrettoPoint) -> bool {
+        self == other
+    }
+}
+
+impl Exponent for Scalar {
+    fn add(&self, other: &Scalar) -> Scalar {
+        self + other
+    }
+    fn sub(&self, other: &Scalar) -> Scalar {
+        self - other
+    }
+    fn neg(&self) -> Scalar {
+        -self
+    }
+    fn mul(&self, other: &Scalar) -> Scalar {
+        self * other
+    }
+    fn modulo(&self, _modulus: &Scalar) -> Scalar {
+        *self   
+    }
+    fn eq(&self, other: &Scalar) -> bool {
+        self == other
+    }
+    fn add_identity() -> Scalar {
+        Scalar::zero()
+    }
+    fn mul_identity() -> Scalar {
+        Scalar::one()
+    }
 }
 
 pub struct RistrettoGroup;
@@ -266,6 +329,7 @@ impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
 
         // cdf geometric distribution: 1-(1-p)^k
         // FIXME why is p = 1/4 and not 1/8 since ristretto uses cofactor 8 curve?
+        // probability of failure after 1000 attempts:
         // 1-(1-1/4)^1000 =  0.9999999999996792797815
         for _i in 0..1000 {
             let id_bytes = id.to_be_bytes();
@@ -293,53 +357,7 @@ impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
     }
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone)]
-pub struct Ciphertext<E: Element> {
-    pub a: E,
-    pub b: E
-}
 
-pub struct PrivateKey<'a, E: Element, T: RngCore + CryptoRng> {
-    pub value: E::Exp,
-    pub group: &'a dyn Group<E, T>
-}
-
-impl<'a, E: Element, T: RngCore + CryptoRng> PrivateKey<'a, E, T> {
-    pub fn random(group: &'a dyn Group<E, T>, rng: T) -> Self {
-        PrivateKey {
-            value: group.rnd_exp(rng), 
-            group: group
-        }
-    }
-    
-    pub fn decrypt(&self, c: Ciphertext<E>) -> E {
-        c.a.div(&c.b.mod_pow(&self.value, &self.group.modulus()), 
-            &self.group.modulus()).modulo(&self.group.modulus())
-    }
-}
-
-pub struct PublicKey<'a, E: Element, T: RngCore + CryptoRng> {
-    pub value: E,
-    pub group: &'a dyn Group<E, T>
-}
-
-impl<'a, E: Element, T: RngCore + CryptoRng> PublicKey<'a, E, T> {
-
-    pub fn encrypt(&self, plaintext: E, rng: T) -> Ciphertext<E> {
-        let randomness = self.group.rnd_exp(rng);
-        Ciphertext {
-            a: plaintext.mul(&self.value.mod_pow(&randomness, &self.group.modulus())),
-            b: self.group.generator().mod_pow(&randomness, &self.group.modulus())
-        }
-    }
-    
-    pub fn from(sk: &'a PrivateKey<E, T>) -> PublicKey<'a, E, T> {
-        PublicKey {
-            value: sk.group.generator().mod_pow(&sk.value, &sk.group.modulus()),
-            group: sk.group
-        }
-    }
-}
 
 use std::convert::TryInto;
 
@@ -377,18 +395,7 @@ mod tests {
     #[test]
     fn test_mg() {
         let csprng = OsRng;
-        
-        let p = Integer::from_str_radix(P_STR, 16).unwrap();
-        let q = Integer::from_str_radix(Q_STR, 16).unwrap();
-        let g = Integer::from(3);
-        
-        assert!(g.clone().legendre(&p) == 1);
-
-        let rg = RugGroup {
-            generator: g,
-            modulus: p.clone(),
-            modulus_exp: q
-        };
+        let rg = RugGroup::default();
         
         let sk = PrivateKey::random(&rg, csprng);
         let pk = PublicKey::from(&sk);
@@ -410,17 +417,9 @@ mod tests {
     #[test]
     #[should_panic]
     fn test_encode_panic() {
-        let p = Integer::from_str_radix(P_STR, 16).unwrap();
-        let q = Integer::from_str_radix(Q_STR, 16).unwrap();
-        let g = Integer::from(3);
-
-        let rg = RugGroup {
-            generator: g,
-            modulus: p.clone(),
-            modulus_exp: q.clone()
-        };
-
-        rg.encode(q - 1);
+        
+        let rg = RugGroup::default();
+        rg.encode(rg.exp_modulus() - 1);
     }
 
     #[test]
@@ -531,7 +530,7 @@ mod tests {
         let mut gen = OsRandgen(OsRng);
         let mut state = RandState::new_custom(&mut gen);
         
-        let p = Integer::from_str_radix(P_STR, 16).unwrap();
+        let p = Integer::from_str_radix(RugGroup::P_STR, 16).unwrap();
         let q: Integer = (p.clone() - 1) / 2;
         let g = Integer::from(3);
         assert!(g.clone().legendre(&p) == 1);
