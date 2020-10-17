@@ -16,12 +16,12 @@ use crate::hashing::ByteSource;
 const P_STR: &str = "B7E151628AED2A6ABF7158809CF4F3C762E7160F38B4DA56A784D9045190CFEF324E7738926CFBE5F4BF8D8D8C31D763DA06C80ABB1185EB4F7C7B5757F5958490CFD47D7C19BB42158D9554F7B46BCED55C4D79FD5F24D6613C31C3839A2DDF8A9A276BCFBFA1C877C56284DAB79CD4C2B3293D20E9E5EAF02AC60ACC93ED874422A52ECB238FEEE5AB6ADD835FD1A0753D0A8F78E537D2B95BB79D8DCAEC642C1E9F23B829B5C2780BF38737DF8BB300D01334A0D0BD8645CBFA73A6160FFE393C48CBBBCA060F0FF8EC6D31BEB5CCEED7F2F0BB088017163BC60DF45A0ECB1BCD289B06CBBFEA21AD08E1847F3F7378D56CED94640D6EF0D3D37BE69D0063";
 const Q_STR: &str = "5bf0a8b1457695355fb8ac404e7a79e3b1738b079c5a6d2b53c26c8228c867f799273b9c49367df2fa5fc6c6c618ebb1ed0364055d88c2f5a7be3dababfacac24867ea3ebe0cdda10ac6caaa7bda35e76aae26bcfeaf926b309e18e1c1cd16efc54d13b5e7dfd0e43be2b1426d5bce6a6159949e9074f2f5781563056649f6c3a21152976591c7f772d5b56ec1afe8d03a9e8547bc729be95caddbcec6e57632160f4f91dc14dae13c05f9c39befc5d98068099a50685ec322e5fd39d30b07ff1c9e2465dde5030787fc763698df5ae6776bf9785d84400b8b1de306fa2d07658de6944d8365dff510d68470c23f9fb9bc6ab676ca3206b77869e9bdf34e8031";
 
-struct OsRandgen;
+struct OsRandgen(OsRng);
 
 impl RandGen for OsRandgen {
     fn gen(&mut self) -> u32 {
-        let mut csprng = OsRng;
-        return csprng.next_u32();
+        // let mut csprng = OsRng;
+        return self.0.next_u32();
     }
 }
 
@@ -41,8 +41,9 @@ pub trait Exponent: Clone {
     fn sub(&self, other: &Self) -> Self;
     fn neg(&self) -> Self;
     fn mul(&self, other: &Self) -> Self;
-    // fn div(&self, other: &Self) -> Self;
     fn modulo(&self, modulus: &Self) -> Self;
+    fn eq(&self, other: &Self) -> bool;
+    
     fn add_identity() -> Self;
     fn mul_identity() -> Self;
 }
@@ -60,16 +61,28 @@ impl Exponent for Integer {
     fn mul(&self, other: &Integer) -> Integer {
         Integer::from(self * other)
     }
-    /* fn div(&self, other: &Integer) -> Integer {
-        self.clone() / other.clone()
-    }*/
     fn modulo(&self, modulus: &Integer) -> Integer {
         let (_, mut rem) = self.clone().div_rem(modulus.clone());
+        // println!("mod on exp");
         if rem < 0 {
+            println!("< 0! div exp");
             rem = rem + modulus;
         }
         
         rem
+    }
+    fn eq(&self, other: &Integer) -> bool {
+        if self != other {
+            let p = Integer::from_str_radix(P_STR, 16).unwrap();
+            let q = Integer::from_str_radix(Q_STR, 16).unwrap();
+            
+            println!("{:?}", self);
+            println!("{:?}", other);
+            println!("{:?}", Exponent::modulo(other, &p));
+            // println!("{:?}", Element::modulo(other, &p));
+        }
+        
+        self == other
     }
 
     fn add_identity() -> Integer {
@@ -93,11 +106,11 @@ impl Exponent for Scalar {
     fn mul(&self, other: &Scalar) -> Scalar {
         self * other
     }
-    /* fn div(&self, other: &Scalar) -> Scalar {
-        self / other
-    }*/
-    fn modulo(&self, modulus: &Scalar) -> Scalar {
+    fn modulo(&self, _modulus: &Scalar) -> Scalar {
         *self   
+    }
+    fn eq(&self, other: &Scalar) -> bool {
+        self == other
     }
     fn add_identity() -> Scalar {
         Scalar::zero()
@@ -115,11 +128,11 @@ impl Element for Integer {
         self.clone() * other.clone()
     }
     fn div(&self, other: &Self, modulus: &Self) -> Self {
-        self.clone() * other.clone().invert(modulus).unwrap()
+        self.clone() * (other.clone().invert(modulus).unwrap())
     }
     fn mod_pow(&self, other: &Self::Exp, modulus: &Self) -> Self {
         let ret = self.clone().pow_mod(&other, modulus);
-        
+
         ret.unwrap()
     }
     fn modulo(&self, modulus: &Self) -> Self {
@@ -142,7 +155,7 @@ impl Element for RistrettoPoint {
     fn mul(&self, other: &Self) -> Self {
         self + other
     }
-    fn div(&self, other: &Self, modulus: &Self) -> Self {
+    fn div(&self, other: &Self, _modulus: &Self) -> Self {
         self - other
     }
     fn mod_pow(&self, other: &Self::Exp, _modulus: &Self) -> Self {
@@ -177,16 +190,16 @@ impl Group<Integer, OsRng> for RugGroup {
         self.generator.clone()
     }
     fn rnd(&self, _rng: OsRng) -> Integer {
-        let mut gen: OsRandgen  = OsRandgen;
+        let mut gen: OsRandgen  = OsRandgen(_rng);
         let mut state = RandState::new_custom(&mut gen);
         
-        self.modulus.clone().random_below(&mut state)
+        self.encode(self.modulus_exp.clone().random_below(&mut state))
     }
     fn modulus(&self) -> Integer {
         self.modulus.clone()
     }
     fn rnd_exp(&self, _rng: OsRng) -> Integer {
-        let mut gen: OsRandgen  = OsRandgen;
+        let mut gen: OsRandgen  = OsRandgen(_rng);
         let mut state = RandState::new_custom(&mut gen);
         
         self.modulus_exp.clone().random_below(&mut state)
@@ -198,8 +211,8 @@ impl Group<Integer, OsRng> for RugGroup {
         assert!(plaintext < self.modulus_exp.clone() - 1);
 
         let notzero: Integer = plaintext + 1;
-        let jacobi = notzero.clone().jacobi(&self.modulus());
-        let product = jacobi * notzero;
+        let legendre = notzero.clone().legendre(&self.modulus());
+        let product = legendre * notzero;
         
         // this syntax to disambiguate between traits
         Element::modulo(&product, &self.modulus())
@@ -224,14 +237,6 @@ impl RistrettoGroup {
 
         for i in 0..100 {
             let id_bytes = id.to_be_bytes();
-            
-            // let mut bytes = plaintext.to_vec();
-            // bytes.extend_from_slice(&id_bytes);
-            // bytes.extend_from_slice(&upper);
-
-            // let mut bytes = id_bytes.to_vec();
-            // bytes.extend_from_slice(&plaintext);
-            // bytes.extend_from_slice(&upper);
             
             let mut bytes = upper.to_vec();
             bytes.extend_from_slice(&plaintext);
@@ -390,7 +395,7 @@ mod tests {
         let q = Integer::from_str_radix(Q_STR, 16).unwrap();
         let g = Integer::from(3);
         
-        assert!(g.clone().jacobi(&p) == 1);
+        assert!(g.clone().legendre(&p) == 1);
 
         let rg = RugGroup {
             generator: g,
@@ -521,8 +526,8 @@ mod tests {
     }
     
     fn encode(m: Integer, p: Integer) -> Integer {
-        let jacobi = m.clone().jacobi(&p);
-        modulus(jacobi * m, p)
+        let legendre = m.clone().legendre(&p);
+        modulus(legendre * m, p)
     }
     
     fn decode(m: Integer, q: Integer, p: Integer) -> Integer {
@@ -536,13 +541,13 @@ mod tests {
     
     #[test]
     fn test_mg_raw() {
-        let mut gen = OsRandgen;
+        let mut gen = OsRandgen(OsRng);
         let mut state = RandState::new_custom(&mut gen);
         
         let p = Integer::from_str_radix(P_STR, 16).unwrap();
         let q: Integer = (p.clone() - 1) / 2;
         let g = Integer::from(3);
-        assert!(g.clone().jacobi(&p) == 1);
+        assert!(g.clone().legendre(&p) == 1);
 
         let sk = q.clone().random_below(&mut state);
         let pk = g.clone().pow_mod(&sk, &p).unwrap();

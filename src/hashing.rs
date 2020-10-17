@@ -30,14 +30,22 @@ impl ExpFromHash<Scalar> for RistrettoHasher {
     }
 }
 
+const Q_STR: &str = "5bf0a8b1457695355fb8ac404e7a79e3b1738b079c5a6d2b53c26c8228c867f799273b9c49367df2fa5fc6c6c618ebb1ed0364055d88c2f5a7be3dababfacac24867ea3ebe0cdda10ac6caaa7bda35e76aae26bcfeaf926b309e18e1c1cd16efc54d13b5e7dfd0e43be2b1426d5bce6a6159949e9074f2f5781563056649f6c3a21152976591c7f772d5b56ec1afe8d03a9e8547bc729be95caddbcec6e57632160f4f91dc14dae13c05f9c39befc5d98068099a50685ec322e5fd39d30b07ff1c9e2465dde5030787fc763698df5ae6776bf9785d84400b8b1de306fa2d07658de6944d8365dff510d68470c23f9fb9bc6ab676ca3206b77869e9bdf34e8031";
+
 impl ExpFromHash<Integer> for RugHasher {
     
+    
+
     fn hash_to_exp(&self, bytes: &[u8]) -> Integer {
         let mut hasher = Sha512::new();
         hasher.update(bytes);
         let hashed = hasher.finalize();
+        let q = Integer::from_str_radix(Q_STR, 16).unwrap();
 
-        Integer::from_digits(&hashed, Order::Lsf)
+
+        let (_, rem) = Integer::from_digits(&hashed, Order::Lsf).div_rem(q);
+
+        rem
     }
 }
 
