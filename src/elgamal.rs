@@ -35,6 +35,8 @@ pub trait Exponent: Clone {
 }
 
 pub trait Group<E: Element, T: RngCore + CryptoRng> {    
+    // fn gen_private_key(&self)
+    // fn get_public_key(&self)
     fn generator(&self) -> E;
     fn rnd(&self, rng: T) -> E;
     fn modulus(&self) -> E;
@@ -44,7 +46,7 @@ pub trait Group<E: Element, T: RngCore + CryptoRng> {
     fn decode(&self, ciphertext: E) -> E::Plaintext;
 }
 
-#[derive(Serialize, Deserialize, Copy, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Ciphertext<E: Element> {
     pub a: E,
     pub b: E
@@ -162,6 +164,7 @@ impl RandGen for OsRandgen {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct RugGroup {
     pub generator: Integer,
     pub modulus: Integer,
@@ -327,11 +330,17 @@ impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
         let upper = [0u8; 12];
         let mut id: u32 = 0;
 
-        // cdf geometric distribution: 1-(1-p)^k
+        
         // FIXME why is p = 1/4 and not 1/8 since ristretto uses cofactor 8 curve?
-        // probability of failure after 1000 attempts:
-        // 1-(1-1/4)^1000 =  0.9999999999996792797815
-        for _i in 0..1000 {
+        // Update: see 
+        // https://github.com/hdevalence/ristretto255-data-encoding/blob/master/src/main.rs
+        // https://github.com/dalek-cryptography/curve25519-dalek/issues/322
+        // 
+        //
+        // cdf geometric distribution: 1-(1-p)^k
+        // probability of sucess after 100 attempts:
+        // 1-(1-1/4)^100 = 0.9999999999996792797815
+        for _i in 0..100 {
             let id_bytes = id.to_be_bytes();
                         
             let mut bytes = upper.to_vec();
@@ -553,4 +562,31 @@ mod tests {
         assert_eq!(m_, m);
     }
 
+}
+
+#[test]
+fn test_serde() {
+    use bincode;
+    let csprng = OsRng;
+    let rg = RugGroup::default();
+
+    let mut bytes = bincode::serialize(&rg).unwrap();
+    
+    let sk = PrivateKey::random(&rg, csprng);
+    
+    // let mut bytes = bincode::serialize(&sk).unwrap();
+    
+    let pk = PublicKey::from(&sk);
+
+    let plaintext = rg.rnd_exp(csprng);
+    
+    let encoded = rg.encode(plaintext.clone());
+    let c = pk.encrypt(encoded.clone(), csprng);
+    
+    bytes = bincode::serialize(&c).unwrap();
+    let d: Ciphertext<Integer> = bincode::deserialize(&bytes).unwrap();
+
+    assert_eq!(c.a, d.a);
+    assert_eq!(c.b, d.b);
+    // assert_eq!(enc_plaintext.points, decoded.points);
 }
