@@ -7,7 +7,7 @@ use rug::{
 };
 
 use crate::elgamal::*;
-use crate::{YChallengeInput, TChallengeInput};
+use crate::{YChallengeInput, TValues};
 
 pub trait ByteSource {
     fn get_bytes(&self) -> Vec<u8>;
@@ -111,13 +111,13 @@ pub fn shuffle_proof_us<E: Element + ByteSource>(es: &Vec<Ciphertext<E>>, e_prim
 }
 
 pub fn shuffle_proof_challenge<E: Element + ByteSource>(y: &YChallengeInput<E>, 
-    t: &TChallengeInput<E>, exp_hasher: &dyn ExpFromHash<E::Exp>) -> E::Exp {
+    t: &TValues<E>, exp_hasher: &dyn ExpFromHash<E::Exp>) -> E::Exp {
 
     let mut bytes = concat_bytes(&y.es);
     bytes.extend(concat_bytes(&y.e_primes));
     bytes.extend(concat_bytes(&y.cs));
     bytes.extend(concat_bytes(&y.c_hats));
-    bytes.extend(y.pk.value.get_bytes());
+    bytes.extend(y.pk.value().get_bytes());
     
     bytes.extend(t.t1.get_bytes());
     bytes.extend(t.t2.get_bytes());
