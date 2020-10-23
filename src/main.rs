@@ -10,7 +10,6 @@ mod rug_elgamal;
 mod dto;
 
 use elgamal::*;
-use rug_elgamal::*;
 use ristretto_elgamal::*;
 use hashing::{ByteSource, ExpFromHash, RugHasher, RistrettoHasher};
 

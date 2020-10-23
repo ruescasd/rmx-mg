@@ -1,4 +1,4 @@
-use rand_core::{CryptoRng, OsRng, RngCore};
+use rand_core::{CryptoRng, RngCore};
 
 use serde::{Deserialize, Serialize};
 

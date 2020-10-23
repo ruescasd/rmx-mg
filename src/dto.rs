@@ -1,38 +1,25 @@
 use crate::elgamal::*;
-use crate::elgamal::*;
 use crate::rug_elgamal::*;
 use crate::ristretto_elgamal::*;
-use crate::hashing::{ByteSource, ExpFromHash, RugHasher, RistrettoHasher};
+use crate::hashing::{RugHasher, RistrettoHasher};
 use rand_core::{OsRng};
 
 use rug::{Integer};
-use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
+use curve25519_dalek::ristretto::{RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 
 use serde::{Deserialize, Serialize};
 
 use crate::*;
 
-struct ShuffleDTO {
-    shuffled: Vec<Ciphertext<Integer>>
-}
-
 #[test]
-fn test_serde() {
+fn test_serde_mg() {
     use bincode;
     let csprng = OsRng;
     let group = RugGroup::default();
-
-    let mut bytes = bincode::serialize(&group).unwrap();
-
+    
     let sk = group.gen_key_conc(csprng);
     let pk = sk.get_public_key_conc();
-
-    /* let sk = PrivateKeyRug {
-        value: group.rnd_exp(csprng),
-        group: group.clone()
-    };*/
-    
 
     let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(10);
     
@@ -46,29 +33,65 @@ fn test_serde() {
     let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
     let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, &RugHasher);
     
-    bytes = bincode::serialize(&sk).unwrap();
-    bytes = bincode::serialize(&pk).unwrap();
-    bytes = bincode::serialize(&es).unwrap();
-    bytes = bincode::serialize(&e_primes).unwrap();
-    bytes = bincode::serialize(&proof).unwrap();
+    let _group_b = bincode::serialize(&group).unwrap();
+    let _sk_b = bincode::serialize(&sk).unwrap();
+    let pk_b = bincode::serialize(&pk).unwrap();
+    let es_b = bincode::serialize(&es).unwrap();
+    let e_primes_b = bincode::serialize(&e_primes).unwrap();
+    let proof_b = bincode::serialize(&proof).unwrap();
     
     let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, &RugHasher);
 
     assert!(ok == true);
-    
-    /* let pk = sk.get_public_key_conc();
 
-    bytes = bincode::serialize(&pk).unwrap();
+    let pk_d: PublicKeyRug = bincode::deserialize(&pk_b).unwrap();
+    let es_d: Vec<Ciphertext<Integer>> = bincode::deserialize(&es_b).unwrap();
+    let e_primes_d: Vec<Ciphertext<Integer>> = bincode::deserialize(&e_primes_b).unwrap();
+    let proof_d: Proof<Integer, Integer> = bincode::deserialize(&proof_b).unwrap();
 
-    let plaintext = group.rnd_exp(csprng);
-    
-    let encoded = group.encode(plaintext.clone());
-    let c = pk.encrypt(encoded.clone(), csprng);
-    
-    let mut bytes = bincode::serialize(&c).unwrap();
-    let d: Ciphertext<Integer> = bincode::deserialize(&bytes).unwrap();
+    let ok_d = check_proof(&proof_d, &es_d, &e_primes_d, &pk_d, &hs, &RugHasher);
 
-    assert_eq!(c.a, d.a);
-    assert_eq!(c.b, d.b);*/
-    // assert_eq!(enc_plaintext.points, decoded.points);
+    assert!(ok_d == true);
+}
+
+#[test]
+fn test_serde_ristretto() {
+    use bincode;
+    let csprng = OsRng;
+    let group = RistrettoGroup;
+    
+    let sk = group.gen_key_conc(csprng);
+    let pk = sk.get_public_key_conc();
+
+    let mut es: Vec<Ciphertext<RistrettoPoint>> = Vec::with_capacity(10);
+    
+    for _ in 0..10 {
+        let text = "16 byte message!";
+        let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
+        let c = pk.encrypt(plaintext, csprng);
+        es.push(c);
+    }
+    
+    let hs = generators(es.len() + 1, &group);
+    let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
+    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, &RistrettoHasher);
+    
+    let _group_b = bincode::serialize(&group).unwrap();
+    let _sk_b = bincode::serialize(&sk).unwrap();
+    let pk_b = bincode::serialize(&pk).unwrap();
+    let es_b = bincode::serialize(&es).unwrap();
+    let e_primes_b = bincode::serialize(&e_primes).unwrap();
+    let proof_b = bincode::serialize(&proof).unwrap();
+    
+    let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, &RistrettoHasher);
+
+    assert!(ok == true);
+
+    let pk_d: PublicKeyRistretto = bincode::deserialize(&pk_b).unwrap();
+    let es_d: Vec<Ciphertext<RistrettoPoint>> = bincode::deserialize(&es_b).unwrap();
+    let e_primes_d: Vec<Ciphertext<RistrettoPoint>> = bincode::deserialize(&e_primes_b).unwrap();
+    let proof_d: Proof<RistrettoPoint, Scalar> = bincode::deserialize(&proof_b).unwrap();
+
+    let ok_d = check_proof(&proof_d, &es_d, &e_primes_d, &pk_d, &hs, &RistrettoHasher);
+    assert!(ok_d == true);
 }

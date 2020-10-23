@@ -1,4 +1,4 @@
-use rand_core::{CryptoRng, OsRng, RngCore};
+use rand_core::{OsRng, RngCore};
 use serde::{Deserialize, Serialize};
 
 use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
@@ -7,14 +7,27 @@ use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
 
 use crate::elgamal::*;
 
+#[derive(Serialize, Deserialize)]
 pub struct PublicKeyRistretto {
     pub value: RistrettoPoint,
     pub group: RistrettoGroup
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct PrivateKeyRistretto {
     pub value: Scalar,
     pub group: RistrettoGroup
+}
+
+impl PrivateKeyRistretto {
+    pub fn get_public_key_conc(&self) -> PublicKeyRistretto { 
+        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
+        
+        PublicKeyRistretto {
+            value: value,
+            group: self.group.clone()
+        }
+    }
 }
 
 impl PrivateK<RistrettoPoint, OsRng> for PrivateKeyRistretto {
