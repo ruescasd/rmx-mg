@@ -8,8 +8,6 @@ use rug::{Integer};
 use curve25519_dalek::ristretto::{RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 
-use serde::{Deserialize, Serialize};
-
 use crate::*;
 
 #[test]

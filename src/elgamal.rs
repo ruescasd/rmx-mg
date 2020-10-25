@@ -44,6 +44,18 @@ pub struct Ciphertext<E: Element> {
     pub b: E
 }
 
+pub trait PrivateK<E: Element, T: RngCore + CryptoRng> {
+    fn decrypt(&self, c: Ciphertext<E>) -> E;
+    fn value(&self) -> &E::Exp;
+    fn get_public_key(&self) -> Box<dyn PublicK<E, T>>;
+}
+
+pub trait PublicK<E: Element, T: RngCore + CryptoRng> {
+    fn encrypt(&self, plaintext: E, rng: T) -> Ciphertext<E>;
+    fn value(&self) -> &E;
+    fn group(&self) -> &dyn Group<E, T>;
+}
+
 pub struct PrivateKey<'a, E: Element, T: RngCore + CryptoRng> {
     pub value: E::Exp,
     pub group: &'a dyn Group<E, T>
@@ -61,18 +73,6 @@ impl<'a, E: Element, T: RngCore + CryptoRng> PrivateKey<'a, E, T> {
         c.a.div(&c.b.mod_pow(&self.value, &self.group.modulus()), 
             &self.group.modulus()).modulo(&self.group.modulus())
     }
-}
-
-pub trait PrivateK<E: Element, T: RngCore + CryptoRng> {
-    fn decrypt(&self, c: Ciphertext<E>) -> E;
-    fn value(&self) -> &E::Exp;
-    fn get_public_key(&self) -> Box<dyn PublicK<E, T>>;
-}
-
-pub trait PublicK<E: Element, T: RngCore + CryptoRng> {
-    fn encrypt(&self, plaintext: E, rng: T) -> Ciphertext<E>;
-    fn value(&self) -> &E;
-    fn group(&self) -> &dyn Group<E, T>;
 }
 
 pub struct PublicKey<'a, E: Element, T: RngCore + CryptoRng> {
