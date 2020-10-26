@@ -5,6 +5,7 @@ use rug::{
 };
 use serde::{Deserialize, Serialize};
 
+use crate::hashing::{RugHasher};
 use crate::elgamal::*;
 
 #[derive(Serialize, Deserialize)]
@@ -306,3 +307,17 @@ fn test_mg() {
     let d_zero = rg.decode(sk.decrypt(c_zero));
     assert_eq!(d_zero, zero);
 }
+
+#[test]
+    fn test_mg_schnorr() {
+        let mut csprng = OsRng;
+        let group = RugGroup::default();
+        let secret = group.rnd_exp(csprng);
+        let public = group.generator().mod_pow(&secret, &group.modulus());
+        let schnorr = group.schnorr_prove(&secret, &public, csprng, &RugHasher);
+        let verified = group.schnorr_verify(&public, &schnorr, &RugHasher);
+        assert!(verified == true);
+        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
+        let verified_false = group.schnorr_verify(&public_false, &schnorr, &RugHasher);
+        assert!(verified_false == false);
+    }

@@ -63,7 +63,8 @@ pub trait Group<E: Element, T: RngCore + CryptoRng> {
         let challenge_ = schnorr_proof_challenge(&self.generator(), &public, &proof.commitment, exp_hasher);
         let ok1 = challenge_.eq(&proof.challenge);
         let lhs = self.generator().mod_pow(&proof.response, &self.modulus());
-        let rhs = proof.commitment.mul(&public.mod_pow(&proof.challenge, &self.modulus()));
+        let rhs = proof.commitment.mul(&public.mod_pow(&proof.challenge, &self.modulus()))
+            .modulo(&self.modulus());
         let ok2 = lhs.eq(&rhs);
         ok1 && ok2
     }
