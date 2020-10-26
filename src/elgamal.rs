@@ -34,8 +34,7 @@ pub struct Schnorr<E: Element> {
     response: E::Exp
 }
 
-use crate::hashing::{ExpFromHash, RugHasher, RistrettoHasher, schnorr_proof_challenge};
-
+use crate::hashing::{ExpFromHash, schnorr_proof_challenge};
 
 pub trait Group<E: Element, T: RngCore + CryptoRng> {
     fn generator(&self) -> E;
