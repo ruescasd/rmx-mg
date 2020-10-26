@@ -33,8 +33,6 @@ const Q_STR: &str = "5bf0a8b1457695355fb8ac404e7a79e3b1738b079c5a6d2b53c26c8228c
 
 impl ExpFromHash<Integer> for RugHasher {
     
-    
-
     fn hash_to_exp(&self, bytes: &[u8]) -> Integer {
         let mut hasher = Sha512::new();
         hasher.update(bytes);
@@ -86,7 +84,17 @@ fn concat_bytes<T: ByteSource>(cs: &Vec<T>) -> Vec<u8> {
         });
 }
 
-pub fn shuffle_proof_us<E: Element + ByteSource>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
+fn concat_bytes_ref<T: ByteSource>(cs: &Vec<&T>) -> Vec<u8> {
+    return 
+        cs.iter()
+        .map(|x| x.get_bytes())
+        .fold(vec![], |mut a, b| {
+            a.extend(b);
+            a
+        });
+}
+
+pub fn shuffle_proof_us<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
     cs: &Vec<E>, exp_hasher: &dyn ExpFromHash<E::Exp>, n: usize) -> Vec<E::Exp> {
     
     let mut prefix_vector = concat_bytes(es);
@@ -100,17 +108,18 @@ pub fn shuffle_proof_us<E: Element + ByteSource>(es: &Vec<Ciphertext<E>>, e_prim
             prefix, 
             i.to_be_bytes().to_vec().as_slice()
         ].concat();    
-        let mut hasher = Sha512::new();
-        hasher.update(next_bytes);
+        // let mut hasher = Sha512::new();
+        // hasher.update(next_bytes);
         
-        let u: E::Exp = exp_hasher.hash_to_exp(&hasher.finalize());
+        // let u: E::Exp = exp_hasher.hash_to_exp(&hasher.finalize());
+        let u: E::Exp = exp_hasher.hash_to_exp(&next_bytes);
         ret.push(u);
     }
     
     ret
 }
 
-pub fn shuffle_proof_challenge<E: Element + ByteSource>(y: &YChallengeInput<E>, 
+pub fn shuffle_proof_challenge<E: Element>(y: &YChallengeInput<E>, 
     t: &TValues<E>, exp_hasher: &dyn ExpFromHash<E::Exp>) -> E::Exp {
 
     let mut bytes = concat_bytes(&y.es);
@@ -126,9 +135,16 @@ pub fn shuffle_proof_challenge<E: Element + ByteSource>(y: &YChallengeInput<E>,
     bytes.extend(t.t4_2.get_bytes());
     bytes.extend(concat_bytes(&t.t_hats));
 
-    let mut hasher = Sha512::new();
-    hasher.update(bytes);
+    // let mut hasher = Sha512::new();
+    // hasher.update(bytes);
 
-    let u: E::Exp = exp_hasher.hash_to_exp(&hasher.finalize());
-    u
+    // let u: E::Exp = exp_hasher.hash_to_exp(&hasher.finalize());
+    exp_hasher.hash_to_exp(&bytes)
+}
+
+pub fn schnorr_proof_challenge<E: Element>(g: &E, public: &E, 
+    commitment: &E, exp_hasher: &dyn ExpFromHash<E::Exp>) -> E::Exp {
+    
+    let mut bytes = concat_bytes_ref(&[g, public, commitment].to_vec());
+    exp_hasher.hash_to_exp(&bytes)
 }

@@ -6,6 +6,7 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
 
 use crate::elgamal::*;
+use crate::hashing::{RistrettoHasher};
 
 #[derive(Serialize, Deserialize)]
 pub struct PublicKeyRistretto {
@@ -290,6 +291,20 @@ mod tests {
         let recovered_ = String::from_utf8(d_.compress().as_bytes().to_vec());
         
         assert_eq!(text, recovered_.unwrap());
+    }
+
+    #[test]
+    fn test_r_schnorr() {
+        let mut csprng = OsRng;
+        let group = RistrettoGroup;
+        let secret = group.rnd_exp(csprng);
+        let public = group.generator().mod_pow(&secret, &group.modulus());
+        let schnorr = group.schnorr_prove(&secret, &public, csprng, &RistrettoHasher);
+        let verified = group.schnorr_verify(&public, &schnorr, &RistrettoHasher);
+        assert!(verified == true);
+        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
+        let verified_false = group.schnorr_verify(&public_false, &schnorr, &RistrettoHasher);
+        assert!(verified_false == false);
     }
 
     extern crate textplots;

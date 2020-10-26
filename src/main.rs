@@ -8,6 +8,7 @@ mod hashing;
 mod ristretto_elgamal;
 mod rug_elgamal;
 mod dto;
+mod zkp;
 
 use elgamal::*;
 use ristretto_elgamal::*;

@@ -27,6 +27,16 @@ pub trait Exponent: Clone {
     fn mul_identity() -> Self;
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct Schnorr<E: Element> {
+    commitment: E,
+    challenge: E::Exp,
+    response: E::Exp
+}
+
+use crate::hashing::{ExpFromHash, RugHasher, RistrettoHasher, schnorr_proof_challenge};
+
+
 pub trait Group<E: Element, T: RngCore + CryptoRng> {
     fn generator(&self) -> E;
     fn rnd(&self, rng: T) -> E;
@@ -36,6 +46,27 @@ pub trait Group<E: Element, T: RngCore + CryptoRng> {
     fn gen_key(&self, rng: T) -> Box<dyn PrivateK<E, T>>;
     fn encode(&self, plaintext: E::Plaintext) -> E;
     fn decode(&self, ciphertext: E) -> E::Plaintext;
+    fn schnorr_prove(&self, secret: &E::Exp, public: &E, rng: T,
+        exp_hasher: &dyn ExpFromHash<E::Exp>) -> Schnorr<E> {
+        let r = self.rnd_exp(rng);
+        let commitment = self.generator().mod_pow(&r, &self.modulus());
+        let challenge: E::Exp = schnorr_proof_challenge(&self.generator(), public, &commitment, exp_hasher);
+        let response = r.add(&challenge.mul(secret)).modulo(&self.exp_modulus());
+
+        Schnorr {
+            commitment: commitment,
+            challenge: challenge,
+            response: response
+        }
+    }
+    fn schnorr_verify(&self, public: &E, proof: &Schnorr<E>, exp_hasher: &dyn ExpFromHash<E::Exp>) -> bool {
+        let challenge_ = schnorr_proof_challenge(&self.generator(), &public, &proof.commitment, exp_hasher);
+        let ok1 = challenge_.eq(&proof.challenge);
+        let lhs = self.generator().mod_pow(&proof.response, &self.modulus());
+        let rhs = proof.commitment.mul(&public.mod_pow(&proof.challenge, &self.modulus()));
+        let ok2 = lhs.eq(&rhs);
+        ok1 && ok2
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]
