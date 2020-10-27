@@ -17,7 +17,6 @@ use hashing::{ByteSource, ExpFromHash};
 fn main() {
 }
 
-
 pub struct YChallengeInput<'a, E: Element + ByteSource> {
     pub es: &'a Vec<Ciphertext<E>>,
     pub e_primes: &'a Vec<Ciphertext<E>>,

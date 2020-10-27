@@ -294,21 +294,6 @@ mod tests {
         assert_eq!(text, recovered_.unwrap());
     }
 
-    #[test]
-    fn test_r_schnorr() {
-        let csprng = OsRng;
-        let group = RistrettoGroup;
-        let g = group.generator();
-        let secret = group.rnd_exp(csprng);
-        let public = g.mod_pow(&secret, &group.modulus());
-        let schnorr = group.schnorr_prove(&secret, &public, &g, csprng);
-        let verified = group.schnorr_verify(&public, &g, &schnorr);
-        assert!(verified == true);
-        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
-        let verified_false = group.schnorr_verify(&public_false, &g, &schnorr);
-        assert!(verified_false == false);
-    }
-
     extern crate textplots;
     use textplots::{utils, Chart, Plot, Shape};
 
@@ -341,4 +326,36 @@ mod tests {
         .nice();
     }
 
+    #[test]
+    fn test_r_schnorr() {
+        let csprng = OsRng;
+        let group = RistrettoGroup;
+        let g = group.generator();
+        let secret = group.rnd_exp(csprng);
+        let public = g.mod_pow(&secret, &group.modulus());
+        let schnorr = group.schnorr_prove(&secret, &public, &g, csprng);
+        let verified = group.schnorr_verify(&public, &g, &schnorr);
+        assert!(verified == true);
+        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
+        let verified_false = group.schnorr_verify(&public_false, &g, &schnorr);
+        assert!(verified_false == false);
+    }
+
+    #[test]
+    fn test_r_chaumpedersen() {
+        let csprng = OsRng;
+        let group = RistrettoGroup;
+        let g1 = group.generator();
+        let g2 = group.rnd(csprng);
+        let secret = group.rnd_exp(csprng);
+        let public1 = g1.mod_pow(&secret, &group.modulus());
+        let public2 = g2.mod_pow(&secret, &group.modulus());
+        let proof = group.cp_prove(&secret, &public1, &public2, &g1, &g2, csprng);
+        let verified = group.cp_verify(&public1, &public2, &g1, &g2, &proof);
+        
+        assert!(verified == true);
+        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
+        let verified_false = group.cp_verify(&public1, &public_false, &g1, &g2, &proof);
+        assert!(verified_false == false);
+    }
 }
