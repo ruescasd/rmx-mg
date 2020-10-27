@@ -32,14 +32,11 @@ impl PrivateKeyRug {
 }
 
 impl PrivateK<Integer, OsRng> for PrivateKeyRug {
-
-    fn decrypt(&self, c: Ciphertext<Integer>) -> Integer {
-        let modulus = &self.group.modulus();
-        
-        c.a.div(&c.b.mod_pow(&self.value, modulus), modulus)
-    }
     fn value(&self) -> &Integer {
         &self.value
+    }
+    fn group(&self) -> &dyn Group<Integer, OsRng> {
+        &self.group
     }
     fn get_public_key(&self) -> Box<dyn PublicK<Integer, OsRng>> {
         let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
@@ -52,21 +49,6 @@ impl PrivateK<Integer, OsRng> for PrivateKeyRug {
 }
 
 impl PublicK<Integer, OsRng> for PublicKeyRug {
-    fn encrypt(&self, plaintext: Integer, rng: OsRng) -> Ciphertext<Integer> {
-        let randomness = self.group.rnd_exp(rng);
-        let modulus = &self.group.modulus();
-
-        // this syntax to disambiguate
-        let mut a = Element::mul(&plaintext, &self.value.mod_pow(&randomness, modulus));
-        a = Element::modulo(&a, modulus);
-
-        let b = self.group.generator().mod_pow(&randomness, modulus);
-        
-        Ciphertext {
-            a: a,
-            b: b
-        }
-    }
     fn value(&self) -> &Integer {
         &self.value
     }
@@ -292,24 +274,24 @@ fn decode(m: Integer, q: Integer, p: Integer) -> Integer {
 } 
 
 #[test]
-fn test_mg() {
+fn test_elgamal_mg() {
     let csprng = OsRng;
-    let rg = RugGroup::default();
+    let group = RugGroup::default();
     
-    let sk = PrivateKey::random(&rg, csprng);
-    let pk = PublicKey::from(&sk);
+    let sk = group.gen_key_conc(csprng);
+    let pk = sk.get_public_key_conc();
 
-    let plaintext = rg.rnd_exp(csprng);
+    let plaintext = group.rnd_exp(csprng);
     
-    let encoded = rg.encode(plaintext.clone());
+    let encoded = group.encode(plaintext.clone());
     let c = pk.encrypt(encoded.clone(), csprng);
-    let d = rg.decode(sk.decrypt(c));
+    let d = group.decode(sk.decrypt(c));
     assert_eq!(d, plaintext);
 
     let zero = Integer::from(0);
-    let encoded_zero = rg.encode(zero.clone());
+    let encoded_zero = group.encode(zero.clone());
     let c_zero = pk.encrypt(encoded_zero.clone(), csprng);
-    let d_zero = rg.decode(sk.decrypt(c_zero));
+    let d_zero = group.decode(sk.decrypt(c_zero));
     assert_eq!(d_zero, zero);
 }
 

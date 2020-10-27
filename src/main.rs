@@ -15,20 +15,6 @@ use ristretto_elgamal::*;
 use hashing::{ByteSource, ExpFromHash};
 
 fn main() {
-    let csprng = OsRng;
-    let rg = RistrettoGroup;
-    
-    let sk = PrivateKey::random(&rg, csprng);
-    let pk = PublicKey::from(&sk);
-    
-    let text = "16 byte message!";
-    let plaintext = rg.encode(to_u8_16(text.as_bytes().to_vec()));
-    
-    let c = pk.encrypt(plaintext, csprng);    
-    let d = sk.decrypt(c);
-    
-    let recovered = String::from_utf8(rg.decode(d).to_vec());
-    assert_eq!(text, recovered.unwrap());
 }
 
 

@@ -40,6 +40,9 @@ impl PrivateK<RistrettoPoint, OsRng> for PrivateKeyRistretto {
     fn value(&self) -> &Scalar {
         &self.value
     }
+    fn group(&self) -> &dyn Group<RistrettoPoint, OsRng> {
+        &self.group
+    }
     fn get_public_key(&self) -> Box<dyn PublicK<RistrettoPoint, OsRng>> {
         let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
         
@@ -51,13 +54,6 @@ impl PrivateK<RistrettoPoint, OsRng> for PrivateKeyRistretto {
 }
 
 impl PublicK<RistrettoPoint, OsRng> for PublicKeyRistretto {
-    fn encrypt(&self, plaintext: RistrettoPoint, rng: OsRng) -> Ciphertext<RistrettoPoint> {
-        let randomness = self.group.rnd_exp(rng);
-        Ciphertext {
-            a: plaintext.mul(&self.value.mod_pow(&randomness, &self.group.modulus())),
-            b: self.group.generator().mod_pow(&randomness, &self.group.modulus())
-        }
-    }
     fn value(&self) -> &RistrettoPoint {
         &self.value
     }
@@ -234,20 +230,20 @@ mod tests {
     use super::*;
     
     #[test]
-    fn test_ristretto() {
+    fn test_elgamal_ristretto() {
         let csprng = OsRng;
-        let rg = RistrettoGroup;
+        let group = RistrettoGroup;
         
-        let sk = PrivateKey::random(&rg, csprng);
-        let pk = PublicKey::from(&sk);
+        let sk = group.gen_key_conc(csprng);
+        let pk = sk.get_public_key_conc();
         
         let text = "16 byte message!";
-        let plaintext = rg.encode(to_u8_16(text.as_bytes().to_vec()));
+        let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
       
         let c = pk.encrypt(plaintext, csprng);    
         let d = sk.decrypt(c);
         
-        let recovered = String::from_utf8(rg.decode(d).to_vec());
+        let recovered = String::from_utf8(group.decode(d).to_vec());
         assert_eq!(text, recovered.unwrap());
     }
 
@@ -283,9 +279,9 @@ mod tests {
             183, 193,  36, 180, 82, 206,  98,  41
         ];
 
-        let sk_ = PrivateKey {
+        let sk_ = PrivateKeyRistretto {
             value: Scalar::from_bytes_mod_order(skb), 
-            group: &rg
+            group: rg
         };
         let c_ = Ciphertext {
             a: CompressedRistretto(a).decompress().unwrap(),

@@ -121,55 +121,27 @@ pub struct Ciphertext<E: Element> {
 }
 
 pub trait PrivateK<E: Element, T: RngCore + CryptoRng> {
-    fn decrypt(&self, c: Ciphertext<E>) -> E;
+    fn decrypt(&self, c: Ciphertext<E>) -> E {
+        let modulus = &self.group().modulus();
+        
+        c.a.div(&c.b.mod_pow(&self.value(), modulus), modulus)
+            .modulo(modulus)
+    }
     fn value(&self) -> &E::Exp;
+    fn group(&self) -> &dyn Group<E, T>;
     fn get_public_key(&self) -> Box<dyn PublicK<E, T>>;
 }
 
 pub trait PublicK<E: Element, T: RngCore + CryptoRng> {
-    fn encrypt(&self, plaintext: E, rng: T) -> Ciphertext<E>;
+    fn encrypt(&self, plaintext: E, rng: T) -> Ciphertext<E> {
+        let group = self.group();
+        let randomness = group.rnd_exp(rng);
+        Ciphertext {
+            a: plaintext.mul(&self.value().mod_pow(&randomness, &group.modulus()))
+                .modulo(&group.modulus()),
+            b: group.generator().mod_pow(&randomness, &group.modulus())
+        }
+    }
     fn value(&self) -> &E;
     fn group(&self) -> &dyn Group<E, T>;
-}
-
-pub struct PrivateKey<'a, E: Element, T: RngCore + CryptoRng> {
-    pub value: E::Exp,
-    pub group: &'a dyn Group<E, T>
-}
-
-impl<'a, E: Element, T: RngCore + CryptoRng> PrivateKey<'a, E, T> {
-    pub fn random(group: &'a dyn Group<E, T>, rng: T) -> Self {
-        PrivateKey {
-            value: group.rnd_exp(rng), 
-            group: group
-        }
-    }
-    
-    pub fn decrypt(&self, c: Ciphertext<E>) -> E {
-        c.a.div(&c.b.mod_pow(&self.value, &self.group.modulus()), 
-            &self.group.modulus()).modulo(&self.group.modulus())
-    }
-}
-
-pub struct PublicKey<'a, E: Element, T: RngCore + CryptoRng> {
-    pub value: E,
-    pub group: &'a dyn Group<E, T>
-}
-
-impl<'a, E: Element, T: RngCore + CryptoRng> PublicKey<'a, E, T> {
-
-    pub fn encrypt(&self, plaintext: E, rng: T) -> Ciphertext<E> {
-        let randomness = self.group.rnd_exp(rng);
-        Ciphertext {
-            a: plaintext.mul(&self.value.mod_pow(&randomness, &self.group.modulus())),
-            b: self.group.generator().mod_pow(&randomness, &self.group.modulus())
-        }
-    }
-    
-    pub fn from(sk: &'a PrivateKey<E, T>) -> PublicKey<'a, E, T> {
-        PublicKey {
-            value: sk.group.generator().mod_pow(&sk.value, &sk.group.modulus()),
-            group: sk.group
-        }
-    }
 }
