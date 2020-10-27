@@ -317,12 +317,13 @@ fn test_mg() {
     fn test_mg_schnorr() {
         let csprng = OsRng;
         let group = RugGroup::default();
+        let g = group.generator();
         let secret = group.rnd_exp(csprng);
-        let public = group.generator().mod_pow(&secret, &group.modulus());
-        let schnorr = group.schnorr_prove(&secret, &public, csprng);
-        let verified = group.schnorr_verify(&public, &schnorr);
+        let public = g.mod_pow(&secret, &group.modulus());
+        let schnorr = group.schnorr_prove(&secret, &public, &g, csprng);
+        let verified = group.schnorr_verify(&public, &g, &schnorr);
         assert!(verified == true);
         let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
-        let verified_false = group.schnorr_verify(&public_false, &schnorr);
+        let verified_false = group.schnorr_verify(&public_false, &g, &schnorr);
         assert!(verified_false == false);
     }

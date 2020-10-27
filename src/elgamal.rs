@@ -48,10 +48,10 @@ pub trait Group<E: Element, T: RngCore + CryptoRng> {
     fn decode(&self, ciphertext: E) -> E::Plaintext;
     fn exp_hasher(&self) -> Box<dyn ExpFromHash<E::Exp>>;
     
-    fn schnorr_prove(&self, secret: &E::Exp, public: &E, rng: T) -> Schnorr<E> {
+    fn schnorr_prove(&self, secret: &E::Exp, public: &E, g: &E, rng: T) -> Schnorr<E> {
         let r = self.rnd_exp(rng);
-        let commitment = self.generator().mod_pow(&r, &self.modulus());
-        let challenge: E::Exp = schnorr_proof_challenge(&self.generator(), public, 
+        let commitment = g.mod_pow(&r, &self.modulus());
+        let challenge: E::Exp = schnorr_proof_challenge(g, public, 
             &commitment, &*self.exp_hasher());
         let response = r.add(&challenge.mul(secret)).modulo(&self.exp_modulus());
 
@@ -61,11 +61,11 @@ pub trait Group<E: Element, T: RngCore + CryptoRng> {
             response: response
         }
     }
-    fn schnorr_verify(&self, public: &E, proof: &Schnorr<E>) -> bool {
-        let challenge_ = schnorr_proof_challenge(&self.generator(), &public, &proof.commitment, 
+    fn schnorr_verify(&self, public: &E, g: &E, proof: &Schnorr<E>) -> bool {
+        let challenge_ = schnorr_proof_challenge(g, &public, &proof.commitment, 
             &*self.exp_hasher());
         let ok1 = challenge_.eq(&proof.challenge);
-        let lhs = self.generator().mod_pow(&proof.response, &self.modulus());
+        let lhs = g.mod_pow(&proof.response, &self.modulus());
         let rhs = proof.commitment.mul(&public.mod_pow(&proof.challenge, &self.modulus()))
             .modulo(&self.modulus());
         let ok2 = lhs.eq(&rhs);
