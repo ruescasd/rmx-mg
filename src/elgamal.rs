@@ -2,7 +2,9 @@ use rand_core::{CryptoRng, RngCore};
 
 use serde::{Deserialize, Serialize};
 
-use crate::hashing::ByteSource;
+use crate::hashing::{ByteSource, ExpFromHash, 
+    schnorr_proof_challenge,
+    cp_proof_challenge};
 
 pub trait Element: ByteSource + Clone {
     type Exp: Exponent;
@@ -34,7 +36,13 @@ pub struct Schnorr<E: Element> {
     response: E::Exp
 }
 
-use crate::hashing::{ExpFromHash, schnorr_proof_challenge};
+#[derive(Serialize, Deserialize)]
+pub struct ChaumPedersen<E: Element> {
+    commitment1: E,
+    commitment2: E,
+    challenge: E::Exp,
+    response: E::Exp
+}
 
 pub trait Group<E: Element, T: RngCore + CryptoRng> {
     
@@ -72,29 +80,38 @@ pub trait Group<E: Element, T: RngCore + CryptoRng> {
         ok1 && ok2
     }
 
-    /* fn cp_prove(&self, secret: &E::Exp, public1: &E, public2: E, gen1: &E, gen2: &E, 
-        rng: T, exp_hasher: &dyn ExpFromHash<E::Exp>) -> Schnorr<E> {
-        
+    fn cp_prove(&self, secret: &E::Exp, public1: &E, public2: &E, g1: &E, g2: &E, rng: T) -> ChaumPedersen<E> {
         let r = self.rnd_exp(rng);
-        let commitment = self.generator().mod_pow(&r, &self.modulus());
-        let challenge: E::Exp = schnorr_proof_challenge(&self.generator(), public, &commitment, exp_hasher);
+        let commitment1 = g1.mod_pow(&r, &self.modulus());
+        let commitment2 = g2.mod_pow(&r, &self.modulus());
+        let challenge: E::Exp = cp_proof_challenge(g1, g2, public1, public2,
+            &commitment1, &commitment2, &*self.exp_hasher());
         let response = r.add(&challenge.mul(secret)).modulo(&self.exp_modulus());
 
-        Schnorr {
-            commitment: commitment,
+        ChaumPedersen {
+            commitment1: commitment1,
+            commitment2: commitment2,
             challenge: challenge,
             response: response
         }
     }
-    fn cp_verify(&self, public: &E, proof: &Schnorr<E>, exp_hasher: &dyn ExpFromHash<E::Exp>) -> bool {
-        let challenge_ = schnorr_proof_challenge(&self.generator(), &public, &proof.commitment, exp_hasher);
+    
+    fn cp_verify(&self, public1: &E, public2: &E, g1: &E, g2: &E, proof: &ChaumPedersen<E>) -> bool {
+        let challenge_ = cp_proof_challenge(g1, g2, public1, public2,
+            &proof.commitment1, &proof.commitment2, &*self.exp_hasher());
         let ok1 = challenge_.eq(&proof.challenge);
-        let lhs = self.generator().mod_pow(&proof.response, &self.modulus());
-        let rhs = proof.commitment.mul(&public.mod_pow(&proof.challenge, &self.modulus()))
+        
+        let lhs1 = g1.mod_pow(&proof.response, &self.modulus());
+        let rhs1 = proof.commitment1.mul(&public1.mod_pow(&proof.challenge, &self.modulus()))
             .modulo(&self.modulus());
-        let ok2 = lhs.eq(&rhs);
-        ok1 && ok2
-    } */
+        let lhs2 = g2.mod_pow(&proof.response, &self.modulus());
+        let rhs2 = proof.commitment2.mul(&public2.mod_pow(&proof.challenge, &self.modulus()))
+            .modulo(&self.modulus());
+        let ok2 = lhs1.eq(&rhs1);
+        let ok3 = lhs2.eq(&rhs2);
+        
+        ok1 && ok2 && ok3
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone)]

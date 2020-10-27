@@ -1,7 +1,6 @@
 use crate::elgamal::*;
 use crate::rug_elgamal::*;
 use crate::ristretto_elgamal::*;
-use crate::hashing::{RugHasher, RistrettoHasher};
 use rand_core::{OsRng};
 
 use rug::{Integer};
@@ -15,6 +14,7 @@ fn test_serde_mg() {
     use bincode;
     let csprng = OsRng;
     let group = RugGroup::default();
+    let exp_hasher = &*group.exp_hasher();
     
     let sk = group.gen_key_conc(csprng);
     let pk = sk.get_public_key_conc();
@@ -29,7 +29,7 @@ fn test_serde_mg() {
     
     let hs = generators(es.len() + 1, &group);
     let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
-    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, &RugHasher);
+    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, exp_hasher);
     
     let _group_b = bincode::serialize(&group).unwrap();
     let _sk_b = bincode::serialize(&sk).unwrap();
@@ -38,7 +38,7 @@ fn test_serde_mg() {
     let e_primes_b = bincode::serialize(&e_primes).unwrap();
     let proof_b = bincode::serialize(&proof).unwrap();
     
-    let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, &RugHasher);
+    let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, exp_hasher);
 
     assert!(ok == true);
 
@@ -47,7 +47,7 @@ fn test_serde_mg() {
     let e_primes_d: Vec<Ciphertext<Integer>> = bincode::deserialize(&e_primes_b).unwrap();
     let proof_d: Proof<Integer, Integer> = bincode::deserialize(&proof_b).unwrap();
 
-    let ok_d = check_proof(&proof_d, &es_d, &e_primes_d, &pk_d, &hs, &RugHasher);
+    let ok_d = check_proof(&proof_d, &es_d, &e_primes_d, &pk_d, &hs, exp_hasher);
 
     assert!(ok_d == true);
 }
@@ -57,6 +57,7 @@ fn test_serde_ristretto() {
     use bincode;
     let csprng = OsRng;
     let group = RistrettoGroup;
+    let exp_hasher = &*group.exp_hasher();
     
     let sk = group.gen_key_conc(csprng);
     let pk = sk.get_public_key_conc();
@@ -72,7 +73,7 @@ fn test_serde_ristretto() {
     
     let hs = generators(es.len() + 1, &group);
     let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
-    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, &RistrettoHasher);
+    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, exp_hasher);
     
     let _group_b = bincode::serialize(&group).unwrap();
     let _sk_b = bincode::serialize(&sk).unwrap();
@@ -81,7 +82,7 @@ fn test_serde_ristretto() {
     let e_primes_b = bincode::serialize(&e_primes).unwrap();
     let proof_b = bincode::serialize(&proof).unwrap();
     
-    let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, &RistrettoHasher);
+    let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, exp_hasher);
 
     assert!(ok == true);
 
@@ -90,6 +91,6 @@ fn test_serde_ristretto() {
     let e_primes_d: Vec<Ciphertext<RistrettoPoint>> = bincode::deserialize(&e_primes_b).unwrap();
     let proof_d: Proof<RistrettoPoint, Scalar> = bincode::deserialize(&proof_b).unwrap();
 
-    let ok_d = check_proof(&proof_d, &es_d, &e_primes_d, &pk_d, &hs, &RistrettoHasher);
+    let ok_d = check_proof(&proof_d, &es_d, &e_primes_d, &pk_d, &hs, exp_hasher);
     assert!(ok_d == true);
 }

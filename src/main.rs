@@ -12,7 +12,7 @@ mod zkp;
 
 use elgamal::*;
 use ristretto_elgamal::*;
-use hashing::{ByteSource, ExpFromHash, RugHasher, RistrettoHasher};
+use hashing::{ByteSource, ExpFromHash};
 
 fn main() {
     let csprng = OsRng;
@@ -49,15 +49,6 @@ pub struct TValues<E: Element + ByteSource> {
     pub t4_2: E,
     pub t_hats: Vec<E>
 }
-
-/*pub struct Responses<E: Element> {
-    s1: E::Exp,
-    s2: E::Exp,
-    s3: E::Exp,
-    s4: E::Exp,
-    s_hats: Vec<E::Exp>,
-    s_primes: Vec<E::Exp>
-}*/
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Responses<X: Exponent> {
@@ -472,6 +463,7 @@ fn test_shuffle_ristretto() {
     
     let csprng = OsRng;
     let group = RistrettoGroup;
+    let exp_hasher = &*group.exp_hasher();
         
     // let sk = PrivateKey::random(&group, csprng);
     // let pk = PublicKey::from(&sk);
@@ -491,8 +483,8 @@ fn test_shuffle_ristretto() {
 
     let hs = generators(es.len() + 1, &group);
     let (e_primes, rs, perm) = gen_shuffle(&es, &*pk2);
-    let proof = gen_proof(&es, &e_primes, &rs, &perm, &*pk2, &hs, &RistrettoHasher);
-    let ok = check_proof(&proof, &es, &e_primes, &*pk2, &hs, &RistrettoHasher);
+    let proof = gen_proof(&es, &e_primes, &rs, &perm, &*pk2, &hs, exp_hasher);
+    let ok = check_proof(&proof, &es, &e_primes, &*pk2, &hs, exp_hasher);
 
     assert!(ok == true);
 }
@@ -505,6 +497,7 @@ use rug_elgamal::*;
 fn test_shuffle_mg() {
 
     let group = RugGroup::default();
+    let exp_hasher = &*group.exp_hasher();
     let csprng = OsRng;
         
     // let sk = PrivateKey::random(&group, csprng);
@@ -542,10 +535,10 @@ fn test_shuffle_mg() {
         let (e_primes, rs, perm) = gen_shuffle(&es, &pk2);
         println!("gen shuffle {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
         now = Instant::now();
-        let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk2, &hs, &RugHasher);
+        let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk2, &hs, exp_hasher);
         println!("gen proof {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
         now = Instant::now();
-        let ok = check_proof(&proof, &es, &e_primes, &pk2, &hs, &RugHasher);
+        let ok = check_proof(&proof, &es, &e_primes, &pk2, &hs, exp_hasher);
         println!("check proof {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
 
         assert!(ok == true);

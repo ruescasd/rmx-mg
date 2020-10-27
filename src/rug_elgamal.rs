@@ -228,7 +228,7 @@ impl Group<Integer, OsRng> for RugGroup {
     }
     
     fn exp_hasher(&self) -> Box<dyn ExpFromHash<Integer>> {
-        Box::new(RugHasher)
+        Box::new(RugHasher(self.modulus_exp.clone()))
     }
     
 }
