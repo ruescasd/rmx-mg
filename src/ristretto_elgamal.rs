@@ -6,7 +6,7 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
 
 use crate::elgamal::*;
-use crate::hashing::{RistrettoHasher};
+use crate::hashing::{ExpFromHash, RistrettoHasher};
 
 #[derive(Serialize, Deserialize)]
 pub struct PublicKeyRistretto {
@@ -210,6 +210,11 @@ impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
             group: self.clone()
         })
     }
+
+    fn exp_hasher(&self) -> Box<dyn ExpFromHash<Scalar>> {
+        Box::new(RistrettoHasher)
+    }
+    
 }
 
 use std::convert::TryInto;
@@ -295,15 +300,15 @@ mod tests {
 
     #[test]
     fn test_r_schnorr() {
-        let mut csprng = OsRng;
+        let csprng = OsRng;
         let group = RistrettoGroup;
         let secret = group.rnd_exp(csprng);
         let public = group.generator().mod_pow(&secret, &group.modulus());
-        let schnorr = group.schnorr_prove(&secret, &public, csprng, &RistrettoHasher);
-        let verified = group.schnorr_verify(&public, &schnorr, &RistrettoHasher);
+        let schnorr = group.schnorr_prove(&secret, &public, csprng);
+        let verified = group.schnorr_verify(&public, &schnorr);
         assert!(verified == true);
         let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
-        let verified_false = group.schnorr_verify(&public_false, &schnorr, &RistrettoHasher);
+        let verified_false = group.schnorr_verify(&public_false, &schnorr);
         assert!(verified_false == false);
     }
 

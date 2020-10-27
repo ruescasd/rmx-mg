@@ -5,7 +5,7 @@ use rug::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::hashing::{RugHasher};
+use crate::hashing::{ExpFromHash, RugHasher};
 use crate::elgamal::*;
 
 #[derive(Serialize, Deserialize)]
@@ -226,6 +226,11 @@ impl Group<Integer, OsRng> for RugGroup {
             group: self.clone()
         })
     }
+    
+    fn exp_hasher(&self) -> Box<dyn ExpFromHash<Integer>> {
+        Box::new(RugHasher)
+    }
+    
 }
 
 #[test]
@@ -310,14 +315,14 @@ fn test_mg() {
 
 #[test]
     fn test_mg_schnorr() {
-        let mut csprng = OsRng;
+        let csprng = OsRng;
         let group = RugGroup::default();
         let secret = group.rnd_exp(csprng);
         let public = group.generator().mod_pow(&secret, &group.modulus());
-        let schnorr = group.schnorr_prove(&secret, &public, csprng, &RugHasher);
-        let verified = group.schnorr_verify(&public, &schnorr, &RugHasher);
+        let schnorr = group.schnorr_prove(&secret, &public, csprng);
+        let verified = group.schnorr_verify(&public, &schnorr);
         assert!(verified == true);
         let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
-        let verified_false = group.schnorr_verify(&public_false, &schnorr, &RugHasher);
+        let verified_false = group.schnorr_verify(&public_false, &schnorr);
         assert!(verified_false == false);
     }

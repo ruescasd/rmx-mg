@@ -37,6 +37,7 @@ impl ExpFromHash<Integer> for RugHasher {
         let mut hasher = Sha512::new();
         hasher.update(bytes);
         let hashed = hasher.finalize();
+        // FIXME hardcoded group info
         let q = Integer::from_str_radix(Q_STR, 16).unwrap();
 
 
@@ -145,6 +146,6 @@ pub fn shuffle_proof_challenge<E: Element>(y: &YChallengeInput<E>,
 pub fn schnorr_proof_challenge<E: Element>(g: &E, public: &E, 
     commitment: &E, exp_hasher: &dyn ExpFromHash<E::Exp>) -> E::Exp {
     
-    let mut bytes = concat_bytes_ref(&[g, public, commitment].to_vec());
+    let bytes = concat_bytes_ref(&[g, public, commitment].to_vec());
     exp_hasher.hash_to_exp(&bytes)
 }
