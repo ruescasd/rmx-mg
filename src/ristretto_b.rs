@@ -5,7 +5,7 @@ use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
 
-use crate::elgamal::*;
+use crate::generic::*;
 use crate::hashing::{HashTo, RistrettoHasher};
 
 #[derive(Serialize, Deserialize)]

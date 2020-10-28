@@ -6,7 +6,7 @@ use rug::{
 use serde::{Deserialize, Serialize};
 
 use crate::hashing::{HashTo, RugHasher};
-use crate::elgamal::*;
+use crate::generic::*;
 
 #[derive(Serialize, Deserialize)]
 pub struct PublicKeyRug {

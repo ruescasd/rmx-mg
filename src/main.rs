@@ -3,14 +3,15 @@ use rand_core::{OsRng};
 use rug::Integer;
 use serde::{Deserialize, Serialize};
 
-mod elgamal;
+mod generic;
 mod hashing;
-mod ristretto_elgamal;
-mod rug_elgamal;
+mod ristretto_b;
+mod rug_b;
 mod dto;
 
-use elgamal::*;
-use ristretto_elgamal::*;
+use generic::*;
+use ristretto_b::*;
+use rug_b::*;
 use hashing::{HashBytes, HashTo};
 
 fn main() {
@@ -474,8 +475,6 @@ fn test_shuffle_ristretto() {
 }
 
 use std::time::{Instant};
-
-use rug_elgamal::*;
 
 #[test]
 fn test_shuffle_mg() {

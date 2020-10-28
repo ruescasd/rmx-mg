@@ -1,6 +1,6 @@
-use crate::elgamal::*;
-use crate::rug_elgamal::*;
-use crate::ristretto_elgamal::*;
+use crate::generic::*;
+use crate::rug_b::*;
+use crate::ristretto_b::*;
 use rand_core::{OsRng};
 
 use rug::{Integer};
