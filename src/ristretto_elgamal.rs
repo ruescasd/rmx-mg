@@ -6,7 +6,7 @@ use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
 
 use crate::elgamal::*;
-use crate::hashing::{ExpFromHash, RistrettoHasher};
+use crate::hashing::{HashTo, RistrettoHasher};
 
 #[derive(Serialize, Deserialize)]
 pub struct PublicKeyRistretto {
@@ -207,7 +207,7 @@ impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
         })
     }
 
-    fn exp_hasher(&self) -> Box<dyn ExpFromHash<Scalar>> {
+    fn exp_hasher(&self) -> Box<dyn HashTo<Scalar>> {
         Box::new(RistrettoHasher)
     }
     

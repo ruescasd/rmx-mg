@@ -2,7 +2,7 @@ use rand_core::{CryptoRng, RngCore};
 
 use serde::{Deserialize, Serialize};
 
-use crate::hashing::{HashBytes, ExpFromHash, 
+use crate::hashing::{HashBytes, HashTo, 
     schnorr_proof_challenge,
     cp_proof_challenge};
 
@@ -54,7 +54,7 @@ pub trait Group<E: Element, T: RngCore + CryptoRng> {
     fn gen_key(&self, rng: T) -> Box<dyn PrivateK<E, T>>;
     fn encode(&self, plaintext: E::Plaintext) -> E;
     fn decode(&self, ciphertext: E) -> E::Plaintext;
-    fn exp_hasher(&self) -> Box<dyn ExpFromHash<E::Exp>>;
+    fn exp_hasher(&self) -> Box<dyn HashTo<E::Exp>>;
     
     fn schnorr_prove(&self, secret: &E::Exp, public: &E, g: &E, rng: T) -> Schnorr<E> {
         let r = self.rnd_exp(rng);

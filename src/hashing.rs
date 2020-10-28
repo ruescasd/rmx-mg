@@ -13,15 +13,15 @@ pub trait HashBytes {
     fn get_bytes(&self) -> Vec<u8>;
 }
 
-pub trait ExpFromHash<T> {
-    fn hash_to_exp(&self, bytes: &[u8]) -> T;
+pub trait HashTo<T> {
+    fn hash_to(&self, bytes: &[u8]) -> T;
 }
 
 pub struct RugHasher(pub Integer);
 pub struct RistrettoHasher;
 
-impl ExpFromHash<Scalar> for RistrettoHasher {
-    fn hash_to_exp(&self, bytes: &[u8]) -> Scalar {
+impl HashTo<Scalar> for RistrettoHasher {
+    fn hash_to(&self, bytes: &[u8]) -> Scalar {
         let mut hasher = Sha512::new();
         hasher.update(bytes);
 
@@ -29,9 +29,9 @@ impl ExpFromHash<Scalar> for RistrettoHasher {
     }
 }
 
-impl ExpFromHash<Integer> for RugHasher {
+impl HashTo<Integer> for RugHasher {
     
-    fn hash_to_exp(&self, bytes: &[u8]) -> Integer {
+    fn hash_to(&self, bytes: &[u8]) -> Integer {
         let mut hasher = Sha512::new();
         hasher.update(bytes);
         let hashed = hasher.finalize();
@@ -85,7 +85,7 @@ fn concat_bytes<T: HashBytes>(cs: &Vec<T>) -> Vec<u8> {
 }
 
 pub fn shuffle_proof_us<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
-    cs: &Vec<E>, exp_hasher: &dyn ExpFromHash<E::Exp>, n: usize) -> Vec<E::Exp> {
+    cs: &Vec<E>, exp_hasher: &dyn HashTo<E::Exp>, n: usize) -> Vec<E::Exp> {
     
     let mut prefix_vector = concat_bytes(es);
     prefix_vector.extend(concat_bytes(e_primes));
@@ -99,7 +99,7 @@ pub fn shuffle_proof_us<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciph
             i.to_be_bytes().to_vec().as_slice()
         ].concat();    
         
-        let u: E::Exp = exp_hasher.hash_to_exp(&next_bytes);
+        let u: E::Exp = exp_hasher.hash_to(&next_bytes);
         ret.push(u);
     }
     
@@ -107,7 +107,7 @@ pub fn shuffle_proof_us<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciph
 }
 
 pub fn shuffle_proof_challenge<E: Element>(y: &YChallengeInput<E>, 
-    t: &TValues<E>, exp_hasher: &dyn ExpFromHash<E::Exp>) -> E::Exp {
+    t: &TValues<E>, exp_hasher: &dyn HashTo<E::Exp>) -> E::Exp {
 
     let mut bytes = concat_bytes(&y.es);
     bytes.extend(concat_bytes(&y.e_primes));
@@ -122,23 +122,23 @@ pub fn shuffle_proof_challenge<E: Element>(y: &YChallengeInput<E>,
     bytes.extend(t.t4_2.get_bytes());
     bytes.extend(concat_bytes(&t.t_hats));
 
-    exp_hasher.hash_to_exp(&bytes)
+    exp_hasher.hash_to(&bytes)
 }
 
 pub fn schnorr_proof_challenge<E: Element>(g: &E, public: &E, 
-    commitment: &E, exp_hasher: &dyn ExpFromHash<E::Exp>) -> E::Exp {
+    commitment: &E, exp_hasher: &dyn HashTo<E::Exp>) -> E::Exp {
     let values = [g, public, commitment].to_vec();
 
     let bytes = concat_bytes_iter(values);
-    exp_hasher.hash_to_exp(&bytes)
+    exp_hasher.hash_to(&bytes)
 }
 
 pub fn cp_proof_challenge<E: Element>(g1: &E, g2: &E, public1: &E, public2: &E, 
-    commitment1: &E, commitment2: &E, exp_hasher: &dyn ExpFromHash<E::Exp>) -> E::Exp {
+    commitment1: &E, commitment2: &E, exp_hasher: &dyn HashTo<E::Exp>) -> E::Exp {
     let values = [g1, g2, public1, public2, commitment1, commitment2].to_vec();
     
     let bytes = concat_bytes_iter(values);
-    exp_hasher.hash_to_exp(&bytes)
+    exp_hasher.hash_to(&bytes)
 }
 
 pub fn hash<T: HashBytes>(data: T) -> Vec<u8> {

@@ -11,7 +11,7 @@ mod dto;
 
 use elgamal::*;
 use ristretto_elgamal::*;
-use hashing::{HashBytes, ExpFromHash};
+use hashing::{HashBytes, HashTo};
 
 fn main() {
 }
@@ -55,7 +55,7 @@ pub struct Proof<E: Element + HashBytes, X: Exponent> {
 }
 
 pub fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, r_primes: &Vec<E::Exp>, 
-    perm: &Vec<usize>, pk: &dyn PublicK<E, OsRng>, generators: &Vec<E>, hasher: &dyn ExpFromHash<E::Exp>) -> Proof<E, E::Exp> {
+    perm: &Vec<usize>, pk: &dyn PublicK<E, OsRng>, generators: &Vec<E>, hasher: &dyn HashTo<E::Exp>) -> Proof<E, E::Exp> {
 
     let csprng = OsRng;
     
@@ -203,7 +203,7 @@ pub fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<
 }
 
 pub fn check_proof<E: Element>(proof: &Proof<E, E::Exp>, es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
-    pk: &dyn PublicK<E, OsRng>, generators: &Vec<E>, hasher: &dyn ExpFromHash<E::Exp>) -> bool {
+    pk: &dyn PublicK<E, OsRng>, generators: &Vec<E>, hasher: &dyn HashTo<E::Exp>) -> bool {
     
     let group = pk.group();
     

@@ -5,7 +5,7 @@ use rug::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::hashing::{ExpFromHash, RugHasher};
+use crate::hashing::{HashTo, RugHasher};
 use crate::elgamal::*;
 
 #[derive(Serialize, Deserialize)]
@@ -209,7 +209,7 @@ impl Group<Integer, OsRng> for RugGroup {
         })
     }
     
-    fn exp_hasher(&self) -> Box<dyn ExpFromHash<Integer>> {
+    fn exp_hasher(&self) -> Box<dyn HashTo<Integer>> {
         Box::new(RugHasher(self.modulus_exp.clone()))
     }
     
