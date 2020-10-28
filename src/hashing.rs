@@ -9,7 +9,7 @@ use rug::{
 use crate::elgamal::*;
 use crate::{YChallengeInput, TValues};
 
-pub trait ByteSource {
+pub trait HashBytes {
     fn get_bytes(&self) -> Vec<u8>;
 }
 
@@ -43,7 +43,7 @@ impl ExpFromHash<Integer> for RugHasher {
     }
 }
 
-impl<E: Element + ByteSource> ByteSource for Ciphertext<E> {
+impl<E: Element + HashBytes> HashBytes for Ciphertext<E> {
     fn get_bytes(&self) -> Vec<u8> {
         let mut ret = self.a.get_bytes();
         ret.extend_from_slice(&self.b.get_bytes());
@@ -52,42 +52,36 @@ impl<E: Element + ByteSource> ByteSource for Ciphertext<E> {
     }
 }
 
-impl ByteSource for RistrettoPoint {
+impl HashBytes for RistrettoPoint {
     fn get_bytes(&self) -> Vec<u8> {
         self.compress().to_bytes().to_vec()
     }
 }
 
-impl ByteSource for Scalar {
+impl HashBytes for Scalar {
     fn get_bytes(&self) -> Vec<u8> {
         self.as_bytes().to_vec()
     }
 }
 
-impl ByteSource for Integer {
+impl HashBytes for Integer {
     fn get_bytes(&self) -> Vec<u8> {
         self.to_digits::<u8>(Order::Lsf)
     }
 }
 
-fn concat_bytes<T: ByteSource>(cs: &Vec<T>) -> Vec<u8> {
-    return 
-        cs.iter()
-        .map(|x| x.get_bytes())
-        .fold(vec![], |mut a, b| {
-            a.extend(b);
-            a
-        });
+// https://stackoverflow.com/questions/39675949/is-there-a-trait-supplying-iter
+fn concat_bytes_iter<'a, H: 'a + HashBytes, I: IntoIterator<Item = &'a H>>(cs: I) -> Vec<u8> {
+    cs.into_iter()
+    .map(|x| x.get_bytes())
+    .fold(vec![], |mut a, b| {
+        a.extend(b);
+        a
+    })
 }
 
-fn concat_bytes_ref<T: ByteSource>(cs: &Vec<&T>) -> Vec<u8> {
-    return 
-        cs.iter()
-        .map(|x| x.get_bytes())
-        .fold(vec![], |mut a, b| {
-            a.extend(b);
-            a
-        });
+fn concat_bytes<T: HashBytes>(cs: &Vec<T>) -> Vec<u8> {
+    concat_bytes_iter(cs)
 }
 
 pub fn shuffle_proof_us<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
@@ -104,10 +98,7 @@ pub fn shuffle_proof_us<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciph
             prefix, 
             i.to_be_bytes().to_vec().as_slice()
         ].concat();    
-        // let mut hasher = Sha512::new();
-        // hasher.update(next_bytes);
         
-        // let u: E::Exp = exp_hasher.hash_to_exp(&hasher.finalize());
         let u: E::Exp = exp_hasher.hash_to_exp(&next_bytes);
         ret.push(u);
     }
@@ -131,24 +122,28 @@ pub fn shuffle_proof_challenge<E: Element>(y: &YChallengeInput<E>,
     bytes.extend(t.t4_2.get_bytes());
     bytes.extend(concat_bytes(&t.t_hats));
 
-    // let mut hasher = Sha512::new();
-    // hasher.update(bytes);
-
-    // let u: E::Exp = exp_hasher.hash_to_exp(&hasher.finalize());
     exp_hasher.hash_to_exp(&bytes)
 }
 
 pub fn schnorr_proof_challenge<E: Element>(g: &E, public: &E, 
     commitment: &E, exp_hasher: &dyn ExpFromHash<E::Exp>) -> E::Exp {
-    
-    let bytes = concat_bytes_ref(&[g, public, commitment].to_vec());
+    let values = [g, public, commitment].to_vec();
+
+    let bytes = concat_bytes_iter(values);
     exp_hasher.hash_to_exp(&bytes)
 }
 
 pub fn cp_proof_challenge<E: Element>(g1: &E, g2: &E, public1: &E, public2: &E, 
     commitment1: &E, commitment2: &E, exp_hasher: &dyn ExpFromHash<E::Exp>) -> E::Exp {
+    let values = [g1, g2, public1, public2, commitment1, commitment2].to_vec();
     
-    let bytes = concat_bytes_ref(&[g1, g2, public1, public2, 
-        commitment1, commitment2].to_vec());
+    let bytes = concat_bytes_iter(values);
     exp_hasher.hash_to_exp(&bytes)
+}
+
+pub fn hash<T: HashBytes>(data: T) -> Vec<u8> {
+    let bytes = data.get_bytes();
+    let mut hasher = Sha512::new();
+    hasher.update(bytes);
+    hasher.finalize().to_vec()
 }

@@ -2,11 +2,11 @@ use rand_core::{CryptoRng, RngCore};
 
 use serde::{Deserialize, Serialize};
 
-use crate::hashing::{ByteSource, ExpFromHash, 
+use crate::hashing::{HashBytes, ExpFromHash, 
     schnorr_proof_challenge,
     cp_proof_challenge};
 
-pub trait Element: ByteSource + Clone {
+pub trait Element: HashBytes + Clone {
     type Exp: Exponent;
     type Plaintext;
     

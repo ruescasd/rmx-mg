@@ -8,16 +8,15 @@ mod hashing;
 mod ristretto_elgamal;
 mod rug_elgamal;
 mod dto;
-mod zkp;
 
 use elgamal::*;
 use ristretto_elgamal::*;
-use hashing::{ByteSource, ExpFromHash};
+use hashing::{HashBytes, ExpFromHash};
 
 fn main() {
 }
 
-pub struct YChallengeInput<'a, E: Element + ByteSource> {
+pub struct YChallengeInput<'a, E: Element + HashBytes> {
     pub es: &'a Vec<Ciphertext<E>>,
     pub e_primes: &'a Vec<Ciphertext<E>>,
     pub cs: &'a Vec<E>,
@@ -26,7 +25,7 @@ pub struct YChallengeInput<'a, E: Element + ByteSource> {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct TValues<E: Element + ByteSource> {
+pub struct TValues<E: Element + HashBytes> {
     pub t1: E,
     pub t2: E,
     pub t3: E,
@@ -48,7 +47,7 @@ pub struct Responses<X: Exponent> {
 // FIXME cannot get type safety and serde to work at once, so we're using standalone exponents here
 // type safety is maintained in gen/check proof signatures
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Proof<E: Element + ByteSource, X: Exponent> {
+pub struct Proof<E: Element + HashBytes, X: Exponent> {
     t: TValues<E>,
     s: Responses<X>,
     cs: Vec<E>,
