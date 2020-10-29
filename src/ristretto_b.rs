@@ -413,9 +413,8 @@ fn test_ristretto_distributed() {
     assert!(verified1 == true);
     assert!(verified2 == true);
     
-    let aggregate_d = dec_f1.mul(&dec_f2).modulo(&group.modulus());
-    
-    let d = c.a.div(&aggregate_d, &group.modulus()).modulo(&group.modulus());
+    let decs = vec![dec_f1, dec_f2];
+    let d = km1.joint_dec(decs, c);
     let recovered = String::from_utf8(group.decode(d).to_vec());
     assert_eq!(text, recovered.unwrap());
 }

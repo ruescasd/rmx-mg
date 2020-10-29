@@ -211,38 +211,15 @@ impl<E: Element, T: RngCore + CryptoRng> Keym<E, T> {
 
         group.pk_from_value(acc)
     }
-}
 
-/* impl<E: Element, T: RngCore + CryptoRng> Keymaker<E, T> for Keym<E, T> {
-    fn key(&self) -> Box<PrivateK<E, T>> {
-        self.key
-    }
-}*/
-/*
-pub trait Keymaker<E: Element, T: RngCore + CryptoRng> {
-    fn key(&self) -> Box<PrivateK<E, T>>;
-    fn share(&self, rng: T) -> (Box<dyn PublicK<E, T>>, Schnorr<E>) {
-        let sk = self.key();
-        let group = sk.group();
-        let pk = self.key().get_public_key();
-
-        let proof = group.schnorr_prove(sk.value(), pk.value(), &group.generator(), rng);
-
-        (pk, proof)
-
-    }
-    
-    fn decryption_factor(&self, c: &Ciphertext<E>, rng: T) -> E {
-        let sk = self.key();
-        let group = sk.group();
-        let pk = self.key().get_public_key();
-        let dec_factor = self.key().decryption_factor(c);
-
-        let proof = group.cp_prove(sk.value(), pk.value(), &dec_factor, 
-            &group.generator(), &c.b, rng);
-
+    pub fn joint_dec(&self, decs: Vec<E>, c: Ciphertext<E>) -> E {
+        let group = self.sk.group();
         
-        dec_factor
-    }
+        let mut acc: E = decs[0].clone();
+        for i in 1..decs.len() {
+            acc = acc.mul(&decs[i]).modulo(&group.modulus());
+        }
 
-}*/
+        c.a.div(&acc, &group.modulus()).modulo(&group.modulus())
+    }
+}
