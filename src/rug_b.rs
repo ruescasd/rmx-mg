@@ -236,13 +236,13 @@ fn test_rug_elgamal() {
     
     let encoded = group.encode(plaintext.clone());
     let c = pk.encrypt(encoded.clone(), csprng);
-    let d = group.decode(sk.decrypt(c));
+    let d = group.decode(sk.decrypt(&c));
     assert_eq!(d, plaintext);
 
     let zero = Integer::from(0);
     let encoded_zero = group.encode(zero.clone());
     let c_zero = pk.encrypt(encoded_zero.clone(), csprng);
-    let d_zero = group.decode(sk.decrypt(c_zero));
+    let d_zero = group.decode(sk.decrypt(&c_zero));
     assert_eq!(d_zero, zero);
 }
 
@@ -277,4 +277,25 @@ fn test_rug_chaumpedersen() {
     let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
     let verified_false = group.cp_verify(&public1, &public_false, &g1, &g2, &proof);
     assert!(verified_false == false);
+}
+
+#[test]
+fn test_rug_vdecryption() {
+    let csprng = OsRng;
+    let group = RugGroup::default();
+    
+    let sk = group.gen_key_conc(csprng);
+    let pk = sk.get_public_key_conc();
+
+    let plaintext = group.rnd_exp(csprng);
+    
+    let encoded = group.encode(plaintext.clone());
+    let c = pk.encrypt(encoded.clone(), csprng);
+    let (d, proof) = sk.decrypt_and_prove(&c, csprng);
+
+    let dec_factor =  Element::modulo(&c.a.div(&d, &group.modulus()), &group.modulus());
+    let verified = group.cp_verify(&pk.value(), &dec_factor, &group.generator(), &c.b, &proof);
+    
+    assert!(verified == true);
+    assert_eq!(group.decode(d), plaintext);
 }

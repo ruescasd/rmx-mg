@@ -33,10 +33,6 @@ impl PrivateKeyRistretto {
 
 impl PrivateK<RistrettoPoint, OsRng> for PrivateKeyRistretto {
 
-    fn decrypt(&self, c: Ciphertext<RistrettoPoint>) -> RistrettoPoint {
-        c.a.div(&c.b.mod_pow(&self.value, &self.group.modulus()), 
-            &self.group.modulus()).modulo(&self.group.modulus())
-    }
     fn value(&self) -> &Scalar {
         &self.value
     }
@@ -236,7 +232,7 @@ fn test_ristretto_elgamal() {
     let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
     
     let c = pk.encrypt(plaintext, csprng);    
-    let d = sk.decrypt(c);
+    let d = sk.decrypt(&c);
     
     let recovered = String::from_utf8(group.decode(d).to_vec());
     assert_eq!(text, recovered.unwrap());
@@ -283,7 +279,7 @@ fn test_ristretto_js_encoding() {
         b: CompressedRistretto(b).decompress().unwrap()
     };
     
-    let d_: RistrettoPoint = sk_.decrypt(c_);
+    let d_: RistrettoPoint = sk_.decrypt(&c_);
     let recovered_ = String::from_utf8(d_.compress().as_bytes().to_vec());
     
     assert_eq!(text, recovered_.unwrap());
@@ -352,4 +348,26 @@ fn test_ristretto_chaumpedersen() {
     let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
     let verified_false = group.cp_verify(&public1, &public_false, &g1, &g2, &proof);
     assert!(verified_false == false);
+}
+
+#[test]
+fn test_ristretto_vdecryption() {
+    let csprng = OsRng;
+    let group = RistrettoGroup;
+    
+    let sk = group.gen_key_conc(csprng);
+    let pk = sk.get_public_key_conc();
+    
+    let text = "16 byte message!";
+    let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
+    
+    let c = pk.encrypt(plaintext, csprng);    
+    let (d, proof) = sk.decrypt_and_prove(&c, csprng);
+
+    let dec_factor = c.a.div(&d, &group.modulus()).modulo(&group.modulus());
+
+    let verified = group.cp_verify(&pk.value(), &dec_factor, &group.generator(), &c.b, &proof);
+    let recovered = String::from_utf8(group.decode(d).to_vec());
+    assert!(verified == true);
+    assert_eq!(text, recovered.unwrap());
 }
