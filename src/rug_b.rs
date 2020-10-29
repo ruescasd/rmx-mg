@@ -305,3 +305,43 @@ fn test_rug_vdecryption() {
     assert!(verified == true);
     assert_eq!(group.decode(d), plaintext);
 }
+
+#[test]
+fn test_rug_distributed() {
+    let csprng = OsRng;
+    let group = RugGroup::default();
+    
+    let km1 = Keym::gen(&group, OsRng);
+    let km2 = Keym::gen(&group, OsRng);
+    let (pk1, proof1) = km1.share(csprng);
+    let (pk2, proof2) = km2.share(csprng);
+    
+    let verified1 = group.schnorr_verify(&pk1.value(), &group.generator(), &proof1);
+    let verified2 = group.schnorr_verify(&pk2.value(), &group.generator(), &proof2);
+    assert!(verified1 == true);
+    assert!(verified2 == true);
+    
+    let plaintext = group.rnd_exp(csprng);
+    
+    let encoded = group.encode(plaintext.clone());
+    
+    let pk2_value = &pk2.value().clone();
+    let other = vec![pk2];
+    
+    let pk_combined = km1.combine(other);
+    let c = pk_combined.encrypt(encoded.clone(), csprng);
+    
+    let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
+    let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
+    
+    let verified1 = group.cp_verify(&pk1.value(), &dec_f1, &group.generator(), &c.b, &proof1);
+    let verified2 = group.cp_verify(pk2_value, &dec_f2, &group.generator(), &c.b, &proof2);
+    assert!(verified1 == true);
+    assert!(verified2 == true);
+    
+    let decs = vec![dec_f1, dec_f2];
+    let d = km1.joint_dec(decs, c);
+    
+    assert_eq!(group.decode(d), plaintext);
+}
+

@@ -382,8 +382,6 @@ fn test_ristretto_vdecryption() {
 fn test_ristretto_distributed() {
     let csprng = OsRng;
     let group = RistrettoGroup;
-    // let sk = group.gen_key(csprng);
-    // let km = Keym::from_sk(sk);
     
     let km1 = Keym::gen(&group, OsRng);
     let km2 = Keym::gen(&group, OsRng);
