@@ -215,33 +215,6 @@ impl Group<Integer, OsRng> for RugGroup {
     
 }
 
-#[test]
-fn test_mg_raw() {
-    let mut gen = OsRandgen(OsRng);
-    let mut state = RandState::new_custom(&mut gen);
-    
-    let p = Integer::from_str_radix(RugGroup::P_STR, 16).unwrap();
-    let q: Integer = (p.clone() - 1) / 2;
-    let g = Integer::from(3);
-    assert!(g.clone().legendre(&p) == 1);
-
-    let sk = q.clone().random_below(&mut state);
-    let pk = g.clone().pow_mod(&sk, &p).unwrap();
-    let m = q.clone().random_below(&mut state);
-    
-    let m_encoded = encode(m.clone(), p.clone());
-    let r = q.clone().random_below(&mut state);
-    
-    let a = g.clone().pow_mod(&r, &p).unwrap();
-    let b = modulus(m_encoded * pk.pow_mod(&r, &p).unwrap(), p.clone());
-
-    let dec_factor = a.pow_mod(&sk, &p).unwrap();
-    
-    let mut m_ = modulus(b * dec_factor.invert(&p).unwrap(), p.clone());
-    m_ = decode(m_, q, p);
-
-    assert_eq!(m_, m);
-}
 
 #[test]
 #[should_panic]
@@ -251,30 +224,8 @@ fn test_encode_panic() {
     rg.encode(rg.exp_modulus() - 1);
 }
 
-fn modulus(a: Integer, p: Integer) -> Integer {
-    let mut rem = a.div_rem(p.clone()).1;
-    if rem < 0 {
-        rem = rem + p;
-    }
-    rem
-}
-
-fn encode(m: Integer, p: Integer) -> Integer {
-    let legendre = m.clone().legendre(&p);
-    modulus(legendre * m, p)
-}
-
-fn decode(m: Integer, q: Integer, p: Integer) -> Integer {
-    if m > q {
-        p - m
-    }
-    else {
-        m
-    }
-} 
-
 #[test]
-fn test_elgamal_mg() {
+fn test_rug_elgamal() {
     let csprng = OsRng;
     let group = RugGroup::default();
     
@@ -296,7 +247,7 @@ fn test_elgamal_mg() {
 }
 
 #[test]
-fn test_mg_schnorr() {
+fn test_rug_schnorr() {
     let csprng = OsRng;
     let group = RugGroup::default();
     let g = group.generator();
@@ -311,7 +262,7 @@ fn test_mg_schnorr() {
 }
 
 #[test]
-fn test_mg_chaumpedersen() {
+fn test_rug_chaumpedersen() {
     let csprng = OsRng;
     let group = RugGroup::default();
     let g1 = group.generator();

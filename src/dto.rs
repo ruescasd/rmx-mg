@@ -10,7 +10,7 @@ use curve25519_dalek::scalar::Scalar;
 use crate::*;
 
 #[test]
-fn test_serde_mg() {
+fn test_rug_serde() {
     use bincode;
     let csprng = OsRng;
     let group = RugGroup::default();
@@ -53,7 +53,7 @@ fn test_serde_mg() {
 }
 
 #[test]
-fn test_serde_ristretto() {
+fn test_ristretto_serde() {
     use bincode;
     let csprng = OsRng;
     let group = RistrettoGroup;

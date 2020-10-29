@@ -444,7 +444,7 @@ pub fn generators<E: Element>(size: usize, group: &dyn Group<E, OsRng>) -> Vec<E
 }
 
 #[test]
-fn test_shuffle_ristretto() {
+fn test_ristretto_shuffle() {
     
     let csprng = OsRng;
     let group = RistrettoGroup;
@@ -477,7 +477,7 @@ fn test_shuffle_ristretto() {
 use std::time::{Instant};
 
 #[test]
-fn test_shuffle_mg() {
+fn test_rug_shuffle() {
 
     let group = RugGroup::default();
     let exp_hasher = &*group.exp_hasher();
