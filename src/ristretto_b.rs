@@ -202,7 +202,7 @@ impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
             group: self.clone()
         })
     }
-    fn pk_from_value(&self, value: RistrettoPoint) -> Box<PublicK<RistrettoPoint, OsRng>> {
+    fn pk_from_value(&self, value: RistrettoPoint) -> Box<dyn PublicK<RistrettoPoint, OsRng>> {
         Box::new(PublicKeyRistretto {
             value: value,
             group: self.clone()
@@ -382,9 +382,9 @@ fn test_ristretto_vdecryption() {
 fn test_ristretto_distributed() {
     let csprng = OsRng;
     let group = RistrettoGroup;
-    let sk = group.gen_key(csprng);
-    
+    // let sk = group.gen_key(csprng);
     // let km = Keym::from_sk(sk);
+    
     let km1 = Keym::gen(&group, OsRng);
     let km2 = Keym::gen(&group, OsRng);
     let (pk1, proof1) = km1.share(csprng);
@@ -399,7 +399,7 @@ fn test_ristretto_distributed() {
     let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
     
     let pk2_value = &pk2.value().clone();
-    let mut other = vec![pk2];
+    let other = vec![pk2];
     
     let pk_combined = km1.combine(other);
     let c = pk_combined.encrypt(plaintext, csprng);

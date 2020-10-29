@@ -208,7 +208,7 @@ impl Group<Integer, OsRng> for RugGroup {
             group: self.clone()
         })
     }
-    fn pk_from_value(&self, value: Integer) -> Box<PublicK<Integer, OsRng>> {
+    fn pk_from_value(&self, value: Integer) -> Box<dyn PublicK<Integer, OsRng>> {
         Box::new(PublicKeyRug {
             value: value,
             group: self.clone()
