@@ -208,6 +208,12 @@ impl Group<Integer, OsRng> for RugGroup {
             group: self.clone()
         })
     }
+    fn pk_from_value(&self, value: Integer) -> Box<PublicK<Integer, OsRng>> {
+        Box::new(PublicKeyRug {
+            value: value,
+            group: self.clone()
+        })
+    }
     
     fn exp_hasher(&self) -> Box<dyn HashTo<Integer>> {
         Box::new(RugHasher(self.modulus_exp.clone()))

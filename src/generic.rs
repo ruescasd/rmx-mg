@@ -52,6 +52,7 @@ pub trait Group<E: Element, T: RngCore + CryptoRng> {
     fn rnd_exp(&self, rng: T) -> E::Exp;
     fn exp_modulus(&self) -> E::Exp;
     fn gen_key(&self, rng: T) -> Box<dyn PrivateK<E, T>>;
+    fn pk_from_value(&self, value: E) -> Box<dyn PublicK<E, T>>;
     fn encode(&self, plaintext: E::Plaintext) -> E;
     fn decode(&self, ciphertext: E) -> E::Plaintext;
     fn exp_hasher(&self) -> Box<dyn HashTo<E::Exp>>;
@@ -140,6 +141,11 @@ pub trait PrivateK<E: Element, T: RngCore + CryptoRng> {
 
         (decrypted, proof)
     }
+    fn decryption_factor(&self, c: &Ciphertext<E>) -> E {
+        let modulus = &self.group().modulus();
+
+        c.b.mod_pow(&self.value(), modulus)
+    }
     fn value(&self) -> &E::Exp;
     fn group(&self) -> &dyn Group<E, T>;
     fn get_public_key(&self) -> Box<dyn PublicK<E, T>>;
@@ -158,3 +164,90 @@ pub trait PublicK<E: Element, T: RngCore + CryptoRng> {
     fn value(&self) -> &E;
     fn group(&self) -> &dyn Group<E, T>;
 }
+
+pub struct Keym<E: Element, T: RngCore + CryptoRng> {
+    key: Box<PrivateK<E, T>>
+}
+
+impl<E: Element, T: RngCore + CryptoRng> Keym<E, T> {
+    pub fn gen(group: &dyn Group<E, T>, rng: T) -> Keym<E, T> {
+        Keym {
+            key: group.gen_key(rng)
+        }
+    }
+    pub fn from_sk(key: Box<PrivateK<E, T>>) -> Keym<E, T> {
+        Keym {
+            key: key
+        }
+    }
+    pub fn share(&self, rng: T) -> (Box<dyn PublicK<E, T>>, Schnorr<E>) {
+        let sk = &self.key;
+        let group = sk.group();
+        let pk = self.key.get_public_key();
+
+        let proof = group.schnorr_prove(sk.value(), pk.value(), &group.generator(), rng);
+
+        (pk, proof)
+
+    }
+    
+    pub fn decryption_factor(&self, c: &Ciphertext<E>, rng: T) -> (E, ChaumPedersen<E>) {
+        let sk = &self.key;
+        let group = sk.group();
+        let pk = self.key.get_public_key();
+        let dec_factor = self.key.decryption_factor(c);
+
+        let proof = group.cp_prove(sk.value(), pk.value(), &dec_factor, 
+            &group.generator(), &c.b, rng);
+
+        
+        (dec_factor, proof)
+    }
+
+    pub fn combine(&self, other: Vec<Box<PublicK<E, T>>>) -> Box<PublicK<E, T>> {
+        let sk = &self.key;
+        let group = sk.group();
+        let pk = self.key.get_public_key();
+
+        let mut acc: E = pk.value().clone();
+        for i in 0..other.len() {
+            acc = acc.mul(&other[i].value()).modulo(&group.modulus());
+        }
+
+        group.pk_from_value(acc)
+    }
+}
+
+/* impl<E: Element, T: RngCore + CryptoRng> Keymaker<E, T> for Keym<E, T> {
+    fn key(&self) -> Box<PrivateK<E, T>> {
+        self.key
+    }
+}*/
+/*
+pub trait Keymaker<E: Element, T: RngCore + CryptoRng> {
+    fn key(&self) -> Box<PrivateK<E, T>>;
+    fn share(&self, rng: T) -> (Box<dyn PublicK<E, T>>, Schnorr<E>) {
+        let sk = self.key();
+        let group = sk.group();
+        let pk = self.key().get_public_key();
+
+        let proof = group.schnorr_prove(sk.value(), pk.value(), &group.generator(), rng);
+
+        (pk, proof)
+
+    }
+    
+    fn decryption_factor(&self, c: &Ciphertext<E>, rng: T) -> E {
+        let sk = self.key();
+        let group = sk.group();
+        let pk = self.key().get_public_key();
+        let dec_factor = self.key().decryption_factor(c);
+
+        let proof = group.cp_prove(sk.value(), pk.value(), &dec_factor, 
+            &group.generator(), &c.b, rng);
+
+        
+        dec_factor
+    }
+
+}*/
