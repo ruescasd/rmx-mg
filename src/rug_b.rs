@@ -6,7 +6,10 @@ use rug::{
 use serde::{Deserialize, Serialize};
 
 use crate::hashing::{HashTo, RugHasher};
-use crate::generic::*;
+use crate::arithm::*;
+use crate::elgamal::*;
+use crate::group::*;
+use crate::dist::*;
 
 #[derive(Serialize, Deserialize)]
 pub struct PublicKeyRug {
@@ -328,7 +331,7 @@ fn test_rug_distributed() {
     let pk2_value = &pk2.value().clone();
     let other = vec![pk2];
     
-    let pk_combined = km1.combine(other);
+    let pk_combined = km1.combine_pks(other);
     let c = pk_combined.encrypt(encoded.clone(), csprng);
     
     let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);

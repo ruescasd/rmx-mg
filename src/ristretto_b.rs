@@ -5,7 +5,10 @@ use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
 
-use crate::generic::*;
+use crate::arithm::*;
+use crate::elgamal::*;
+use crate::group::*;
+use crate::dist::*;
 use crate::hashing::{HashTo, RistrettoHasher};
 
 #[derive(Serialize, Deserialize)]
@@ -399,7 +402,7 @@ fn test_ristretto_distributed() {
     let pk2_value = &pk2.value().clone();
     let other = vec![pk2];
     
-    let pk_combined = km1.combine(other);
+    let pk_combined = km1.combine_pks(other);
     let c = pk_combined.encrypt(plaintext, csprng);
     
     

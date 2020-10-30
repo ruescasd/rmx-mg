@@ -1,4 +1,5 @@
-use crate::generic::*;
+use crate::elgamal::*;
+use crate::group::*;
 use crate::rug_b::*;
 use crate::ristretto_b::*;
 use rand_core::{OsRng};

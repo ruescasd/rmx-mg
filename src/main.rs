@@ -3,13 +3,18 @@ use rand_core::{OsRng};
 use rug::Integer;
 use serde::{Deserialize, Serialize};
 
-mod generic;
+mod arithm;
+mod group;
+mod dist;
+mod elgamal;
 mod hashing;
 mod ristretto_b;
 mod rug_b;
 mod dto;
 
-use generic::*;
+use arithm::*;
+use group::*;
+use elgamal::*;
 use ristretto_b::*;
 use rug_b::*;
 use hashing::{HashBytes, HashTo};

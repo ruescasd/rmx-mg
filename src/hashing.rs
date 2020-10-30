@@ -6,7 +6,8 @@ use rug::{
     integer::Order
 };
 
-use crate::generic::*;
+use crate::arithm::*;
+use crate::elgamal::*;
 use crate::{YChallengeInput, TValues};
 
 pub trait HashBytes {
