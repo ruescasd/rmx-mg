@@ -8,7 +8,7 @@ use rug::{Integer};
 use curve25519_dalek::ristretto::{RistrettoPoint};
 use curve25519_dalek::scalar::Scalar;
 
-use crate::*;
+use crate::shuffle::*;
 
 #[test]
 fn test_rug_serde() {

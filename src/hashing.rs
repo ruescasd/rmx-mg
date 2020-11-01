@@ -8,7 +8,7 @@ use rug::{
 
 use crate::arithm::*;
 use crate::elgamal::*;
-use crate::{YChallengeInput, TValues};
+use crate::shuffle::{YChallengeInput, TValues};
 
 pub trait HashBytes {
     fn get_bytes(&self) -> Vec<u8>;

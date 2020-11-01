@@ -3,24 +3,13 @@ use rand_core::{OsRng};
 use rug::Integer;
 use serde::{Deserialize, Serialize};
 
-mod arithm;
-mod group;
-mod dist;
-mod elgamal;
-mod hashing;
-mod ristretto_b;
-mod rug_b;
-mod dto;
-
-use arithm::*;
-use group::*;
-use elgamal::*;
-use ristretto_b::*;
-use rug_b::*;
-use hashing::{HashBytes, HashTo};
-
-fn main() {
-}
+use crate::arithm::*;
+use crate::group::*;
+use crate::elgamal::*;
+use crate::ristretto_b::*;
+use crate::rug_b::*;
+use crate::hashing;
+use crate::hashing::{HashBytes, HashTo};
 
 pub struct YChallengeInput<'a, E: Element + HashBytes> {
     pub es: &'a Vec<Ciphertext<E>>,
@@ -319,8 +308,6 @@ pub fn check_proof<E: Element>(proof: &Proof<E, E::Exp>, es: &Vec<Ciphertext<E>>
         checks.push(proof.t.t_hats[i].eq(&t_hat_primes[i]));
     }
     
-    println!("{:?}", checks);
-    
     !checks.contains(&false)
 }
 
@@ -515,22 +502,17 @@ fn test_rug_shuffle() {
             let c = pk2.encrypt(plaintext, csprng);
             es.push(c);
         }
-        println!("encrypted {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
-        now = Instant::now();
+        
         let hs = generators(es.len() + 1, &group);
-        println!("generators for {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
-        now = Instant::now();
+        
         let (e_primes, rs, perm) = gen_shuffle(&es, &pk2);
-        println!("gen shuffle {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
-        now = Instant::now();
+        
+        
         let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk2, &hs, exp_hasher);
-        println!("gen proof {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
-        now = Instant::now();
+        
+        
         let ok = check_proof(&proof, &es, &e_primes, &pk2, &hs, exp_hasher);
-        println!("check proof {} ciphertexts in {} seconds", n, now.elapsed().as_secs());
 
         assert!(ok == true);
     }
-    
-    println!("Ran {} shuffle tests, ciphertexts = {}", shuffle_tests, n);
 }
