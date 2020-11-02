@@ -327,15 +327,19 @@ pub fn gen_permutation(size: usize) -> Vec<usize> {
     return ret;
 }
 
+use std::sync::Mutex;
+
 pub fn gen_shuffle<E: Element>(ciphertexts: &Vec<Ciphertext<E>>, pk: &dyn PublicK<E, OsRng>) -> (Vec<Ciphertext<E>>, Vec<E::Exp>, Vec<usize>) {
     let csprng = OsRng;
     let perm: Vec<usize> = gen_permutation(ciphertexts.len());
 
-    let mut e_primes = Vec::with_capacity(ciphertexts.len());
+    // let mut e_primes = Vec::with_capacity(ciphertexts.len());
     let mut rs_temp: Vec<Option<E::Exp>> = vec![None;ciphertexts.len()];
+    let rs_mutex = Mutex::new(rs_temp);
     let group = pk.group();
+    let length = perm.len();
 
-    for i in 0..perm.len() {
+    /*for i in 0..perm.len() {
         let c = &ciphertexts[perm[i]];
 
         let r = group.rnd_exp(csprng);
@@ -351,15 +355,34 @@ pub fn gen_shuffle<E: Element>(ciphertexts: &Vec<Ciphertext<E>>, pk: &dyn Public
         };
         e_primes.push(c_);
         rs_temp[perm[i]] = Some(r);
-    }
+    }*/
+    
+    let e_primes = perm.iter().enumerate().map(|(i, p)| {
+        let c = &ciphertexts[*p];
+
+        let r = group.rnd_exp(csprng);
+        
+        let a = c.a.mul(&pk.value().mod_pow(&r, &group.modulus()))
+            .modulo(&group.modulus());
+        let b = c.b.mul(&group.generator().mod_pow(&r, &group.modulus()))
+            .modulo(&group.modulus());
+        
+        let c_ = Ciphertext {
+            a: a, 
+            b: b
+        };
+        // (c_, Some(r))
+        rs_mutex.lock().unwrap()[*p] = Some(r);
+        c_
+    }).collect();
+     
 
     let mut rs = Vec::with_capacity(ciphertexts.len());
 
-    for _ in 0..perm.len() {
-     
-        let r = rs_temp.remove(0);
+    for _ in 0..length {
+        let r = rs_mutex.lock().unwrap().remove(0);
+        // let r = rs_temp.remove(0);
         rs.push(r.unwrap());
-
     }
     
     (e_primes, rs, perm)
@@ -370,7 +393,7 @@ pub fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &[E], group: &
 
     assert!(generators.len() == perm.len());
     
-    let mut rs: Vec<Option<E::Exp>> = vec![None;perm.len()];
+    /* let mut rs: Vec<Option<E::Exp>> = vec![None;perm.len()];
     let mut cs: Vec<Option<E>> = vec![None;perm.len()];
     
     for i in 0..perm.len() {
@@ -380,14 +403,30 @@ pub fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &[E], group: &
         
         rs[perm[i]] = Some(r);
         cs[perm[i]] = Some(c);
-    }
+    }*/
+
+    let mut rs: Vec<Option<E::Exp>> = vec![None;perm.len()];
+    let mut cs: Vec<Option<E>> = vec![None;perm.len()];
+    let mut rs_mutex = Mutex::new(rs);
+    let mut cs_mutex = Mutex::new(cs);
+
+    perm.iter().enumerate().for_each(|(i, p)| {
+        let r = group.rnd_exp(csprng);
+        let c = generators[i].mul(&group.generator().mod_pow(&r, &group.modulus()))
+            .modulo(&group.modulus());
+
+        rs_mutex.lock().unwrap()[*p] = Some(r);
+        cs_mutex.lock().unwrap()[*p] = Some(c);
+    });
 
     let mut ret1: Vec<E> = Vec::with_capacity(perm.len());
     let mut ret2: Vec<E::Exp> = Vec::with_capacity(perm.len());
     
     for _ in 0..perm.len() {
-        let c = cs.remove(0);
-        let r = rs.remove(0);
+        // let c = cs.remove(0);
+        // let r = rs.remove(0);
+        let c = cs_mutex.lock().unwrap().remove(0);
+        let r = rs_mutex.lock().unwrap().remove(0);
 
         ret1.push(c.unwrap());
         ret2.push(r.unwrap());
@@ -441,9 +480,6 @@ fn test_ristretto_shuffle() {
     let csprng = OsRng;
     let group = RistrettoGroup;
     let exp_hasher = &*group.exp_hasher();
-        
-    // let sk = PrivateKey::random(&group, csprng);
-    // let pk = PublicKey::from(&sk);
 
     let sk2 = group.gen_key(csprng);
     let pk2 = sk2.get_public_key();
@@ -494,8 +530,6 @@ fn test_rug_shuffle() {
     for _ in 0..shuffle_tests {
     
         let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(10);
-
-        let mut now = Instant::now();
         
         for _ in 0..n {
             let plaintext: Integer = group.encode(group.rnd_exp(csprng));
@@ -507,12 +541,30 @@ fn test_rug_shuffle() {
         
         let (e_primes, rs, perm) = gen_shuffle(&es, &pk2);
         
-        
         let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk2, &hs, exp_hasher);
-        
         
         let ok = check_proof(&proof, &es, &e_primes, &pk2, &hs, exp_hasher);
 
         assert!(ok == true);
     }
+}
+
+use rayon::prelude::*;
+
+#[test]
+fn test_rayon() {
+    let num: Vec<i32> = (0..10).collect();
+    let s = num.par_iter()
+         .map(|&i| i * i)
+         .sum::<i32>();
+
+    assert_eq!(s, 285);
+    let mut xs = vec![1; 10];
+    /*(0..10).into_par_iter().for_each(|x| {
+        xs[x as usize] = x;
+    });*/
+    (0..10).into_par_iter().map(|x| {
+        x
+    });
+    
 }

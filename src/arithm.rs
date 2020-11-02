@@ -1,6 +1,9 @@
+use std::marker::Send;
+use std::marker::Sync;
+
 use crate::hashing::{HashBytes};
 
-pub trait Element: HashBytes + Clone {
+pub trait Element: HashBytes + Clone + Send + Sync {
     type Exp: Exponent;
     type Plaintext;
     
@@ -11,7 +14,7 @@ pub trait Element: HashBytes + Clone {
     fn eq(&self, other: &Self) -> bool;
 }
 
-pub trait Exponent: Clone {
+pub trait Exponent: Clone + Send + Sync {
     fn add(&self, other: &Self) -> Self;
     fn sub(&self, other: &Self) -> Self;
     fn neg(&self) -> Self;

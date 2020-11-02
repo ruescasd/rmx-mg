@@ -1,11 +1,12 @@
 use rand_core::{CryptoRng, RngCore};
+use std::marker::Send;
+use std::marker::Sync;
 
 use crate::arithm::*;
 use crate::hashing::*;
 use crate::elgamal::*;
 
-
-pub trait Group<E: Element, T: RngCore + CryptoRng> {
+pub trait Group<E: Element, T: RngCore + CryptoRng>: Send + Sync {
     
     fn generator(&self) -> E;
     fn rnd(&self, rng: T) -> E;

@@ -1,5 +1,7 @@
 use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
+use std::marker::Send;
+use std::marker::Sync;
 
 use crate::arithm::*;
 use crate::group::*;
@@ -10,7 +12,7 @@ pub struct Ciphertext<E: Element> {
     pub b: E
 }
 
-pub trait PrivateK<E: Element, T: RngCore + CryptoRng> {
+pub trait PrivateK<E: Element, T: RngCore + CryptoRng>: Send + Sync {
     fn decrypt(&self, c: &Ciphertext<E>) -> E {
         let modulus = &self.group().modulus();
         
@@ -40,7 +42,7 @@ pub trait PrivateK<E: Element, T: RngCore + CryptoRng> {
     fn get_public_key(&self) -> Box<dyn PublicK<E, T>>;
 }
 
-pub trait PublicK<E: Element, T: RngCore + CryptoRng> {
+pub trait PublicK<E: Element, T: RngCore + CryptoRng>: Send + Sync {
     fn encrypt(&self, plaintext: E, rng: T) -> Ciphertext<E> {
         let group = self.group();
         let randomness = group.rnd_exp(rng);
