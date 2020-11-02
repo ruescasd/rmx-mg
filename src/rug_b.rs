@@ -11,55 +11,6 @@ use crate::elgamal::*;
 use crate::group::*;
 use crate::dist::*;
 
-#[derive(Serialize, Deserialize)]
-pub struct PublicKeyRug {
-    pub value: Integer,
-    pub group: RugGroup
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PrivateKeyRug {
-    pub value: Integer,
-    pub group: RugGroup
-}
-
-impl PrivateKeyRug {
-    pub fn get_public_key_conc(&self) -> PublicKeyRug { 
-        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
-        
-        PublicKeyRug {
-            value: value,
-            group: self.group.clone()
-        }
-    }
-}
-
-impl PrivateK<Integer, OsRng> for PrivateKeyRug {
-    fn value(&self) -> &Integer {
-        &self.value
-    }
-    fn group(&self) -> &dyn Group<Integer, OsRng> {
-        &self.group
-    }
-    fn get_public_key(&self) -> Box<dyn PublicK<Integer, OsRng>> {
-        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
-        
-        Box::new(PublicKeyRug{
-            value: value,
-            group: self.group.clone()
-        })
-    }
-}
-
-impl PublicK<Integer, OsRng> for PublicKeyRug {
-    fn value(&self) -> &Integer {
-        &self.value
-    }
-    fn group(&self) -> &dyn Group<Integer, OsRng> {
-        &self.group
-    }
-}
-
 impl Element for Integer {
     type Exp = Integer;
     type Plaintext = Integer;
@@ -85,6 +36,9 @@ impl Element for Integer {
     }
     fn eq(&self, other: &Integer) -> bool {
         self == other
+    }
+    fn mul_identity() -> Integer {
+        Integer::from(1)
     }
 }
 
@@ -224,6 +178,54 @@ impl Group<Integer, OsRng> for RugGroup {
     
 }
 
+#[derive(Serialize, Deserialize)]
+pub struct PublicKeyRug {
+    pub value: Integer,
+    pub group: RugGroup
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PrivateKeyRug {
+    pub value: Integer,
+    pub group: RugGroup
+}
+
+impl PrivateKeyRug {
+    pub fn get_public_key_conc(&self) -> PublicKeyRug { 
+        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
+        
+        PublicKeyRug {
+            value: value,
+            group: self.group.clone()
+        }
+    }
+}
+
+impl PrivateK<Integer, OsRng> for PrivateKeyRug {
+    fn value(&self) -> &Integer {
+        &self.value
+    }
+    fn group(&self) -> &dyn Group<Integer, OsRng> {
+        &self.group
+    }
+    fn get_public_key(&self) -> Box<dyn PublicK<Integer, OsRng>> {
+        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
+        
+        Box::new(PublicKeyRug{
+            value: value,
+            group: self.group.clone()
+        })
+    }
+}
+
+impl PublicK<Integer, OsRng> for PublicKeyRug {
+    fn value(&self) -> &Integer {
+        &self.value
+    }
+    fn group(&self) -> &dyn Group<Integer, OsRng> {
+        &self.group
+    }
+}
 
 #[test]
 #[should_panic]

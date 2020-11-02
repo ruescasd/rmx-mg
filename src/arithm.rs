@@ -12,6 +12,8 @@ pub trait Element: HashBytes + Clone + Send + Sync {
     fn mod_pow(&self, exp: &Self::Exp, modulus: &Self) -> Self;
     fn modulo(&self, modulus: &Self) -> Self;
     fn eq(&self, other: &Self) -> bool;
+
+    fn mul_identity() -> Self;
 }
 
 pub trait Exponent: Clone + Send + Sync {

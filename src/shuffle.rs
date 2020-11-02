@@ -67,6 +67,9 @@ pub fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<
     assert!(N == perm.len());
     assert!(N == h_generators.len());
 
+    let gmod = &group.modulus();
+    let xmod = &group.exp_modulus();
+
     let (cs, rs) = gen_commitments(&perm, h_generators, group);
     let us = hashing::shuffle_proof_us(&es, &e_primes, &cs, hasher, N);
     
@@ -77,63 +80,80 @@ pub fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<
     
     let (c_hats, r_hats) = gen_commitment_chain(h_initial, &u_primes, group);
     
+    let mut vs = vec![E::Exp::mul_identity();N];
+    for i in (0..N - 1).rev() {
+        vs[i] = u_primes[i+1].mul(&vs[i+1]).modulo(xmod);
+    }
+
     let mut r_bar = E::Exp::add_identity();
-    for i in 0..rs.len() {
+    let mut r_hat: E::Exp = E::Exp::add_identity();
+    let mut r_tilde: E::Exp = E::Exp::add_identity();
+    let mut r_prime: E::Exp = E::Exp::add_identity();
+    
+    for i in 0..N {
         r_bar = r_bar.add(&rs[i]);
-    }
-    r_bar = r_bar.modulo(&group.exp_modulus());
-    
-    let mut vs = vec![E::Exp::mul_identity();perm.len()];
-    for i in (0..(perm.len() - 1)).rev() {
-        vs[i] = u_primes[i+1].mul(&vs[i+1]).modulo(&group.exp_modulus());
-    }
-    
-    let mut r_hat: E::Exp = r_hats[0].mul(&vs[0]);
-    for i in 1..r_hats.len() {
         r_hat = r_hat.add(&r_hats[i].mul(&vs[i]));
-    }
-    r_hat = r_hat.modulo(&group.exp_modulus());
-    
-    let mut r_tilde: E::Exp = rs[0].mul(&us[0]);
-    for i in 1..rs.len() {
         r_tilde = r_tilde.add(&rs[i].mul(&us[i]));
-    }
-    r_tilde = r_tilde.modulo(&group.exp_modulus());
-    
-    let mut r_prime: E::Exp = r_primes[0].mul(&us[0]);
-    for i in 1..r_primes.len() {
         r_prime = r_prime.add(&r_primes[i].mul(&us[i]));
     }
-    r_prime = r_prime.modulo(&group.exp_modulus());
+    
+    /*let mut r_hat: E::Exp = r_hats[0].mul(&vs[0]);
+    let mut r_tilde: E::Exp = rs[0].mul(&us[0]);
+    let mut r_prime: E::Exp = r_primes[0].mul(&us[0]);
+    for i in 1..N {
+        r_hat = r_hat.add(&r_hats[i].mul(&vs[i]));
+        r_tilde = r_tilde.add(&rs[i].mul(&us[i]));
+        r_prime = r_prime.add(&r_primes[i].mul(&us[i]));
+    }*/ 
+    
+    r_bar = r_bar.modulo(xmod);
+    r_hat = r_hat.modulo(xmod);
+    r_tilde = r_tilde.modulo(xmod);
+    r_prime = r_prime.modulo(xmod);
     
     let omegas = vec![group.rnd_exp(csprng);4];
     let omega_hats = vec![group.rnd_exp(csprng);N];
     let omega_primes = vec![group.rnd_exp(csprng);N];
 
-    let t1 = group.generator().mod_pow(&omegas[0], &group.modulus());
-    let t2 = group.generator().mod_pow(&omegas[1], &group.modulus());
+    let t1 = group.generator().mod_pow(&omegas[0], gmod);
+    let t2 = group.generator().mod_pow(&omegas[1], gmod);
 
-    let mut t3_temp = h_generators[0].mod_pow(&omega_primes[0], &group.modulus());
-    let mut t4_1_temp = e_primes[0].a.mod_pow(&omega_primes[0], &group.modulus());
-    let mut t4_2_temp = e_primes[0].b.mod_pow(&omega_primes[0], &group.modulus());
+    let mut t3_temp = E::mul_identity();
+    let mut t4_1_temp = E::mul_identity();
+    let mut t4_2_temp = E::mul_identity();
         
-    for i in 1..N {
-        t3_temp = t3_temp.mul(&h_generators[i].mod_pow(&omega_primes[i], &group.modulus()))
+    let values: Vec<(E, E, E)> = (0..N).into_par_iter().map(|i| {
+        (
+        h_generators[i].mod_pow(&omega_primes[i], gmod),
+        e_primes[i].a.mod_pow(&omega_primes[i], gmod),
+        e_primes[i].b.mod_pow(&omega_primes[i], gmod)
+        )
+    }).collect();
+    
+    for i in 0..N {
+        /* t3_temp = t3_temp.mul(&h_generators[i].mod_pow(&omega_primes[i], &group.modulus()))
             .modulo(&group.modulus());
         t4_1_temp = t4_1_temp.mul(&e_primes[i].a.mod_pow(&omega_primes[i], &group.modulus()))
             .modulo(&group.modulus());
         t4_2_temp = t4_2_temp.mul(&e_primes[i].b.mod_pow(&omega_primes[i], &group.modulus()))
-            .modulo(&group.modulus());
+            .modulo(&group.modulus());*/
+        t3_temp = t3_temp.mul(&values[i].0)
+            .modulo(gmod);
+        t4_1_temp = t4_1_temp.mul(&values[i].1)
+            .modulo(gmod);
+        t4_2_temp = t4_2_temp.mul(&values[i].2)
+            .modulo(gmod);
+        
     }
     
-    let t3 = (group.generator().mod_pow(&omegas[2], &group.modulus())).mul(&t3_temp)
-        .modulo(&group.modulus());
-    let t4_1 = (pk.value().mod_pow(&omegas[3].neg(), &group.modulus())).mul(&t4_1_temp)
-        .modulo(&group.modulus());
-    let t4_2 = (group.generator().mod_pow(&omegas[3].neg(), &group.modulus())).mul(&t4_2_temp)
-        .modulo(&group.modulus());
+    let t3 = (group.generator().mod_pow(&omegas[2], gmod)).mul(&t3_temp)
+        .modulo(gmod);
+    let t4_1 = (pk.value().mod_pow(&omegas[3].neg(), gmod)).mul(&t4_1_temp)
+        .modulo(gmod);
+    let t4_2 = (group.generator().mod_pow(&omegas[3].neg(), gmod)).mul(&t4_2_temp)
+        .modulo(gmod);
 
-    let mut t_hats: Vec<E> = Vec::with_capacity(N);
+    /* let mut t_hats: Vec<E> = Vec::with_capacity(N);
     for i in 0..c_hats.len() {
         let previous_c = if i == 0 {
             h_initial 
@@ -141,12 +161,26 @@ pub fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<
             &c_hats[i-1]
         };
         
-        let next = (group.generator().mod_pow(&omega_hats[i], &group.modulus()))
-                .mul(&previous_c.mod_pow(&omega_primes[i], &group.modulus()))
-                .modulo(&group.modulus());
+        let next = (group.generator().mod_pow(&omega_hats[i], gmod))
+                .mul(&previous_c.mod_pow(&omega_primes[i], gmod))
+                .modulo(gmod);
         
         t_hats.push(next);
-    }
+    }*/
+
+    let t_hats = (0..c_hats.len()).into_par_iter().map(|i| {
+        let previous_c = if i == 0 {
+            h_initial 
+        } else {
+            &c_hats[i-1]
+        };
+        
+        let next = (group.generator().mod_pow(&omega_hats[i], gmod))
+                .mul(&previous_c.mod_pow(&omega_primes[i], gmod))
+                .modulo(gmod);
+        
+        next
+    }).collect();
  
     let y = YChallengeInput {
         es: es,
@@ -167,17 +201,17 @@ pub fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<
 
     let c: E::Exp = hashing::shuffle_proof_challenge(&y, &t, hasher);
  
-    let s1 = omegas[0].add(&c.mul(&r_bar)).modulo(&group.exp_modulus());
-    let s2 = omegas[1].add(&c.mul(&r_hat)).modulo(&group.exp_modulus());
-    let s3 = omegas[2].add(&c.mul(&r_tilde)).modulo(&group.exp_modulus());
-    let s4 = omegas[3].add(&c.mul(&r_prime)).modulo(&group.exp_modulus());
+    let s1 = omegas[0].add(&c.mul(&r_bar)).modulo(xmod);
+    let s2 = omegas[1].add(&c.mul(&r_hat)).modulo(xmod);
+    let s3 = omegas[2].add(&c.mul(&r_tilde)).modulo(xmod);
+    let s4 = omegas[3].add(&c.mul(&r_prime)).modulo(xmod);
 
     let mut s_hats: Vec<E::Exp> = Vec::with_capacity(N);
     let mut s_primes: Vec<E::Exp> = Vec::with_capacity(N);
     
     for i in 0..N {
-        s_hats.push(omega_hats[i].add(&c.mul(&r_hats[i])).modulo(&group.exp_modulus()));
-        s_primes.push(omega_primes[i].add(&c.mul(&u_primes[i])).modulo(&group.exp_modulus()));
+        s_hats.push(omega_hats[i].add(&c.mul(&r_hats[i])).modulo(xmod));
+        s_primes.push(omega_primes[i].add(&c.mul(&u_primes[i])).modulo(xmod));
     }
 
     let s = Responses {
@@ -211,44 +245,90 @@ pub fn check_proof<E: Element>(proof: &Proof<E, E::Exp>, es: &Vec<Ciphertext<E>>
     assert!(N == e_primes.len());
     assert!(N == h_generators.len());
 
+    let gmod = &group.modulus();
+    let xmod = &group.exp_modulus();
+
     let us: Vec<E::Exp> = hashing::shuffle_proof_us(es, e_primes, &proof.cs, hasher, N);
     
-    let mut c_bar_num: E = proof.cs[0].clone();
+    /* let mut c_bar_num: E = proof.cs[0].clone();
     let mut c_bar_den: E = h_generators[0].clone();
     let mut u: E::Exp = us[0].clone();
-    let mut c_tilde: E = proof.cs[0].mod_pow(&us[0], &group.modulus());
-    let mut a_prime: E = es[0].a.mod_pow(&us[0], &group.modulus());
-    let mut b_prime: E = es[0].b.mod_pow(&us[0], &group.modulus());
+    let mut c_tilde: E = proof.cs[0].mod_pow(&us[0],gmod);
+    let mut a_prime: E = es[0].a.mod_pow(&us[0], gmod);
+    let mut b_prime: E = es[0].b.mod_pow(&us[0], gmod);
     
-    let mut t_tilde3_temp: E = h_generators[0].mod_pow(&proof.s.s_primes[0], &group.modulus());
-    let mut t_tilde41_temp: E = e_primes[0].a.mod_pow(&proof.s.s_primes[0], &group.modulus());
-    let mut t_tilde42_temp: E = e_primes[0].b.mod_pow(&proof.s.s_primes[0], &group.modulus());
+    let mut t_tilde3_temp: E = h_generators[0].mod_pow(&proof.s.s_primes[0], gmod);
+    let mut t_tilde41_temp: E = e_primes[0].a.mod_pow(&proof.s.s_primes[0], gmod);
+    let mut t_tilde42_temp: E = e_primes[0].b.mod_pow(&proof.s.s_primes[0], gmod);*/
      
+    let mut c_bar_num: E = E::mul_identity();
+    let mut c_bar_den: E = E::mul_identity();
+    let mut u: E::Exp = E::Exp::mul_identity();
+    let mut c_tilde: E = E::mul_identity();
+    let mut a_prime: E = E::mul_identity();
+    let mut b_prime: E = E::mul_identity();
     
-    for i in 1..N {
-        c_bar_num = c_bar_num.mul(&proof.cs[i]).modulo(&group.modulus());
-        c_bar_den = c_bar_den.mul(&h_generators[i]).modulo(&group.modulus());
-        u = u.mul(&us[i]).modulo(&group.exp_modulus());
-        c_tilde = c_tilde.mul(&proof.cs[i].mod_pow(&us[i], &group.modulus()))
-            .modulo(&group.modulus());
-        a_prime = a_prime.mul(&es[i].a.mod_pow(&us[i], &group.modulus()))
-            .modulo(&group.modulus());
-        b_prime = b_prime.mul(&es[i].b.mod_pow(&us[i], &group.modulus()))
-            .modulo(&group.modulus());
-        t_tilde3_temp = t_tilde3_temp.mul(&h_generators[i].mod_pow(&proof.s.s_primes[i], &group.modulus()))
-            .modulo(&group.modulus());
-        t_tilde41_temp = t_tilde41_temp.mul(&e_primes[i].a.mod_pow(&proof.s.s_primes[i], &group.modulus()))
-            .modulo(&group.modulus());
-        t_tilde42_temp = t_tilde42_temp.mul(&e_primes[i].b.mod_pow(&proof.s.s_primes[i], &group.modulus()))
-            .modulo(&group.modulus());
+    let mut t_tilde3_temp: E = E::mul_identity();
+    let mut t_tilde41_temp: E = E::mul_identity();
+    let mut t_tilde42_temp: E = E::mul_identity();
+
+    let values: Vec<(E, E, E, E, E, E)> =
+    (0..N).into_par_iter().map(|i| {
+        (
+        proof.cs[i].mod_pow(&us[i], gmod),
+        es[i].a.mod_pow(&us[i], gmod),
+        es[i].b.mod_pow(&us[i], gmod),
+        h_generators[i].mod_pow(&proof.s.s_primes[i], gmod),
+        e_primes[i].a.mod_pow(&proof.s.s_primes[i], gmod),
+        e_primes[i].b.mod_pow(&proof.s.s_primes[i], gmod)
+        )
+    }).collect();
+
+    for i in 0..N {
+        c_bar_num = c_bar_num.mul(&proof.cs[i]).modulo(gmod);
+        c_bar_den = c_bar_den.mul(&h_generators[i]).modulo(gmod);
+        u = u.mul(&us[i]).modulo(xmod);
+        
+        c_tilde = c_tilde.mul(&values[i].0)
+            .modulo(gmod);
+        a_prime = a_prime.mul(&&values[i].1)
+            .modulo(gmod);
+        b_prime = b_prime.mul(&&values[i].2)
+            .modulo(gmod);
+        t_tilde3_temp = t_tilde3_temp.mul(&values[i].3)
+            .modulo(gmod);
+        t_tilde41_temp = t_tilde41_temp.mul(&values[i].4)
+            .modulo(gmod);
+        t_tilde42_temp = t_tilde42_temp.mul(&values[i].5)
+            .modulo(gmod);
         
     }
-
-    let c_bar = c_bar_num.div(&c_bar_den, &group.modulus())
-        .modulo(&group.modulus());
     
-    let c_hat = proof.c_hats[N - 1].div(&h_initial.mod_pow(&u, &group.modulus()), &group.modulus())
-        .modulo(&group.modulus());
+    /*for i in 0..N {
+        c_bar_num = c_bar_num.mul(&proof.cs[i]).modulo(gmod);
+        c_bar_den = c_bar_den.mul(&h_generators[i]).modulo(gmod);
+        u = u.mul(&us[i]).modulo(xmod);
+        
+        c_tilde = c_tilde.mul(&proof.cs[i].mod_pow(&us[i], gmod))
+            .modulo(gmod);
+        a_prime = a_prime.mul(&es[i].a.mod_pow(&us[i], gmod))
+            .modulo(gmod);
+        b_prime = b_prime.mul(&es[i].b.mod_pow(&us[i], gmod))
+            .modulo(gmod);
+        t_tilde3_temp = t_tilde3_temp.mul(&h_generators[i].mod_pow(&proof.s.s_primes[i], gmod))
+            .modulo(gmod);
+        t_tilde41_temp = t_tilde41_temp.mul(&e_primes[i].a.mod_pow(&proof.s.s_primes[i], gmod))
+            .modulo(gmod);
+        t_tilde42_temp = t_tilde42_temp.mul(&e_primes[i].b.mod_pow(&proof.s.s_primes[i], gmod))
+            .modulo(gmod);
+        
+    }*/
+
+    let c_bar = c_bar_num.div(&c_bar_den, gmod)
+        .modulo(gmod);
+    
+    let c_hat = proof.c_hats[N - 1].div(&h_initial.mod_pow(&u, gmod), gmod)
+        .modulo(gmod);
         
     let y = YChallengeInput {
         es: es,
@@ -260,43 +340,59 @@ pub fn check_proof<E: Element>(proof: &Proof<E, E::Exp>, es: &Vec<Ciphertext<E>>
 
     let c = hashing::shuffle_proof_challenge(&y, &proof.t, hasher);
     
-    let t_prime1 = (c_bar.mod_pow(&c.neg(), &group.modulus()))
-        .mul(&group.generator().mod_pow(&proof.s.s1, &group.modulus()))
-        .modulo(&group.modulus());
+    let t_prime1 = (c_bar.mod_pow(&c.neg(), gmod))
+        .mul(&group.generator().mod_pow(&proof.s.s1, gmod))
+        .modulo(gmod);
     
-    let t_prime2 = (c_hat.mod_pow(&c.neg(), &group.modulus()))
-        .mul(&group.generator().mod_pow(&proof.s.s2, &group.modulus()))
-        .modulo(&group.modulus());
+    let t_prime2 = (c_hat.mod_pow(&c.neg(), gmod))
+        .mul(&group.generator().mod_pow(&proof.s.s2, gmod))
+        .modulo(gmod);
     
-    let t_prime3 = (c_tilde.mod_pow(&c.neg(), &group.modulus()))
-        .mul(&group.generator().mod_pow(&proof.s.s3, &group.modulus()))
+    let t_prime3 = (c_tilde.mod_pow(&c.neg(), gmod))
+        .mul(&group.generator().mod_pow(&proof.s.s3, gmod))
         .mul(&t_tilde3_temp)
-        .modulo(&group.modulus());
+        .modulo(gmod);
     
-    let t_prime41 = (a_prime.mod_pow(&c.neg(), &group.modulus()))
-        .mul(&pk.value().mod_pow(&proof.s.s4.neg(), &group.modulus()))
+    let t_prime41 = (a_prime.mod_pow(&c.neg(), gmod))
+        .mul(&pk.value().mod_pow(&proof.s.s4.neg(), gmod))
         .mul(&t_tilde41_temp)
-        .modulo(&group.modulus());
+        .modulo(gmod);
 
-    let t_prime42 = (b_prime.mod_pow(&c.neg(), &group.modulus()))
-        .mul(&group.generator().mod_pow(&proof.s.s4.neg(), &group.modulus()))
+    let t_prime42 = (b_prime.mod_pow(&c.neg(), gmod))
+        .mul(&group.generator().mod_pow(&proof.s.s4.neg(), gmod))
         .mul(&t_tilde42_temp)
-        .modulo(&group.modulus());
+        .modulo(gmod);
     
-    let mut t_hat_primes = Vec::with_capacity(N);
+    /* let mut t_hat_primes = Vec::with_capacity(N);
     for i in 0..N {
         let c_term = if i == 0 {
             h_initial
         } else {
             &proof.c_hats[i - 1]
         };
-        let next = (proof.c_hats[i].mod_pow(&c.neg(), &group.modulus())) 
-            .mul(&group.generator().mod_pow(&proof.s.s_hats[i], &group.modulus()))
-            .mul(&c_term.mod_pow(&proof.s.s_primes[i], &group.modulus()))
-            .modulo(&group.modulus());
+        let next = (proof.c_hats[i].mod_pow(&c.neg(), gmod)) 
+            .mul(&group.generator().mod_pow(&proof.s.s_hats[i], gmod))
+            .mul(&c_term.mod_pow(&proof.s.s_primes[i], gmod))
+            .modulo(gmod);
         
         t_hat_primes.push(next);
-    }
+    }*/ 
+
+    let t_hat_primes: Vec<E> = (0..N).into_par_iter().map(|i| {
+        let c_term = if i == 0 {
+            h_initial 
+        } else {
+            &proof.c_hats[i - 1]
+        };
+        
+        let next = (proof.c_hats[i].mod_pow(&c.neg(), gmod)) 
+            .mul(&group.generator().mod_pow(&proof.s.s_hats[i], gmod))
+            .mul(&c_term.mod_pow(&proof.s.s_primes[i], gmod))
+            .modulo(gmod);
+        
+        next
+    }).collect();
+
 
     let mut checks = Vec::with_capacity(5 + N);
     checks.push(proof.t.t1.eq(&t_prime1));
@@ -357,7 +453,7 @@ pub fn gen_shuffle<E: Element>(ciphertexts: &Vec<Ciphertext<E>>, pk: &dyn Public
         rs_temp[perm[i]] = Some(r);
     }*/
     
-    let e_primes = perm.iter().enumerate().map(|(i, p)| {
+    let e_primes = perm.par_iter().enumerate().map(|(i, p)| {
         let c = &ciphertexts[*p];
 
         let r = group.rnd_exp(csprng);
@@ -410,7 +506,7 @@ pub fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &[E], group: &
     let mut rs_mutex = Mutex::new(rs);
     let mut cs_mutex = Mutex::new(cs);
 
-    perm.iter().enumerate().for_each(|(i, p)| {
+    perm.par_iter().enumerate().for_each(|(i, p)| {
         let r = group.rnd_exp(csprng);
         let c = generators[i].mul(&group.generator().mod_pow(&r, &group.modulus()))
             .modulo(&group.modulus());
@@ -438,9 +534,33 @@ pub fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &[E], group: &
 pub fn gen_commitment_chain<E: Element>(initial: &E, us: &Vec<&E::Exp>, group: &dyn Group<E, OsRng>)  -> (Vec<E>, Vec<E::Exp>) {
     let csprng = OsRng;
     let mut cs: Vec<E> = Vec::with_capacity(us.len());
-    let mut rs: Vec<E::Exp> = Vec::with_capacity(us.len());
+    // let mut rs: Vec<E::Exp> = Vec::with_capacity(us.len());
+    
+    let (firsts, rs): (Vec<E>, Vec<E::Exp>) = (0..us.len()).into_par_iter().map(|i| {
+        let r = group.rnd_exp(csprng);
+        let first = group.generator().mod_pow(&r, &group.modulus())
+            .modulo(&group.modulus());
+
+        (first, r)
+    }).unzip();
+    
     
     for i in 0..us.len() {
+        let c_temp = if i == 0 {
+            initial
+        } else {
+            &cs[i-1]
+        };
+        
+        let second = c_temp.mod_pow(&us[i], &group.modulus()).
+            modulo(&group.modulus());
+        let c = firsts[i].mul(&second).modulo(&group.modulus());
+
+        cs.push(c);
+        // rs.push(r);
+    }
+
+    /* for i in 0..us.len() {
         let r = group.rnd_exp(csprng);
         let c_temp = if i == 0 {
             initial
@@ -456,7 +576,7 @@ pub fn gen_commitment_chain<E: Element>(initial: &E, us: &Vec<&E::Exp>, group: &
 
         cs.push(c);
         rs.push(r);
-    }
+    }*/
 
     (cs, rs)
 }

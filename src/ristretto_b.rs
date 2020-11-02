@@ -4,62 +4,13 @@ use serde::{Deserialize, Serialize};
 use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
 use curve25519_dalek::scalar::Scalar;
 use curve25519_dalek::constants::{RISTRETTO_BASEPOINT_POINT};
+use curve25519_dalek::traits::Identity;
 
 use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
 use crate::dist::*;
 use crate::hashing::{HashTo, RistrettoHasher};
-
-#[derive(Serialize, Deserialize)]
-pub struct PublicKeyRistretto {
-    pub value: RistrettoPoint,
-    pub group: RistrettoGroup
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PrivateKeyRistretto {
-    pub value: Scalar,
-    pub group: RistrettoGroup
-}
-
-impl PrivateKeyRistretto {
-    pub fn get_public_key_conc(&self) -> PublicKeyRistretto { 
-        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
-        
-        PublicKeyRistretto {
-            value: value,
-            group: self.group.clone()
-        }
-    }
-}
-
-impl PrivateK<RistrettoPoint, OsRng> for PrivateKeyRistretto {
-
-    fn value(&self) -> &Scalar {
-        &self.value
-    }
-    fn group(&self) -> &dyn Group<RistrettoPoint, OsRng> {
-        &self.group
-    }
-    fn get_public_key(&self) -> Box<dyn PublicK<RistrettoPoint, OsRng>> {
-        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
-        
-        Box::new(PublicKeyRistretto{
-            value: value,
-            group: self.group.clone()
-        })
-    }
-}
-
-impl PublicK<RistrettoPoint, OsRng> for PublicKeyRistretto {
-    fn value(&self) -> &RistrettoPoint {
-        &self.value
-    }
-    fn group(&self) -> &dyn Group<RistrettoPoint, OsRng> {
-        &self.group
-    }
-}
 
 impl Element for RistrettoPoint {
     type Exp = Scalar;
@@ -79,6 +30,9 @@ impl Element for RistrettoPoint {
     }
     fn eq(&self, other: &RistrettoPoint) -> bool {
         self == other
+    }
+    fn mul_identity() -> RistrettoPoint {
+        RistrettoPoint::identity()
     }
 }
 
@@ -216,6 +170,56 @@ impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
         Box::new(RistrettoHasher)
     }
     
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PublicKeyRistretto {
+    pub value: RistrettoPoint,
+    pub group: RistrettoGroup
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PrivateKeyRistretto {
+    pub value: Scalar,
+    pub group: RistrettoGroup
+}
+
+impl PrivateKeyRistretto {
+    pub fn get_public_key_conc(&self) -> PublicKeyRistretto { 
+        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
+        
+        PublicKeyRistretto {
+            value: value,
+            group: self.group.clone()
+        }
+    }
+}
+
+impl PrivateK<RistrettoPoint, OsRng> for PrivateKeyRistretto {
+
+    fn value(&self) -> &Scalar {
+        &self.value
+    }
+    fn group(&self) -> &dyn Group<RistrettoPoint, OsRng> {
+        &self.group
+    }
+    fn get_public_key(&self) -> Box<dyn PublicK<RistrettoPoint, OsRng>> {
+        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
+        
+        Box::new(PublicKeyRistretto{
+            value: value,
+            group: self.group.clone()
+        })
+    }
+}
+
+impl PublicK<RistrettoPoint, OsRng> for PublicKeyRistretto {
+    fn value(&self) -> &RistrettoPoint {
+        &self.value
+    }
+    fn group(&self) -> &dyn Group<RistrettoPoint, OsRng> {
+        &self.group
+    }
 }
 
 use std::convert::TryInto;
@@ -418,4 +422,11 @@ fn test_ristretto_distributed() {
     let d = km1.joint_dec(decs, c);
     let recovered = String::from_utf8(group.decode(d).to_vec());
     assert_eq!(text, recovered.unwrap());
+}
+
+#[test]
+fn test_identity() {
+    let mut csprng = OsRng;
+    let x = RistrettoPoint::random(&mut csprng);
+    assert_eq!(x + RistrettoPoint::identity(), x);
 }

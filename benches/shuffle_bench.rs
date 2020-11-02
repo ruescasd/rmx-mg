@@ -62,6 +62,7 @@ fn shuffle_f(n: usize) -> bool {
         
     let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, exp_hasher);
 
+    assert_eq!(ok, true);
     ok
 }
 
