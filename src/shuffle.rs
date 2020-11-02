@@ -2,6 +2,7 @@ use rand::Rng;
 use rand_core::{OsRng};
 use rug::Integer;
 use serde::{Deserialize, Serialize};
+use rayon::prelude::*;
 
 use crate::arithm::*;
 use crate::group::*;
@@ -97,15 +98,6 @@ pub fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<
         r_prime = r_prime.add(&r_primes[i].mul(&us[i]));
     }
     
-    /*let mut r_hat: E::Exp = r_hats[0].mul(&vs[0]);
-    let mut r_tilde: E::Exp = rs[0].mul(&us[0]);
-    let mut r_prime: E::Exp = r_primes[0].mul(&us[0]);
-    for i in 1..N {
-        r_hat = r_hat.add(&r_hats[i].mul(&vs[i]));
-        r_tilde = r_tilde.add(&rs[i].mul(&us[i]));
-        r_prime = r_prime.add(&r_primes[i].mul(&us[i]));
-    }*/ 
-    
     r_bar = r_bar.modulo(xmod);
     r_hat = r_hat.modulo(xmod);
     r_tilde = r_tilde.modulo(xmod);
@@ -131,19 +123,12 @@ pub fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<
     }).collect();
     
     for i in 0..N {
-        /* t3_temp = t3_temp.mul(&h_generators[i].mod_pow(&omega_primes[i], &group.modulus()))
-            .modulo(&group.modulus());
-        t4_1_temp = t4_1_temp.mul(&e_primes[i].a.mod_pow(&omega_primes[i], &group.modulus()))
-            .modulo(&group.modulus());
-        t4_2_temp = t4_2_temp.mul(&e_primes[i].b.mod_pow(&omega_primes[i], &group.modulus()))
-            .modulo(&group.modulus());*/
         t3_temp = t3_temp.mul(&values[i].0)
             .modulo(gmod);
         t4_1_temp = t4_1_temp.mul(&values[i].1)
             .modulo(gmod);
         t4_2_temp = t4_2_temp.mul(&values[i].2)
             .modulo(gmod);
-        
     }
     
     let t3 = (group.generator().mod_pow(&omegas[2], gmod)).mul(&t3_temp)
@@ -152,21 +137,6 @@ pub fn gen_proof<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<
         .modulo(gmod);
     let t4_2 = (group.generator().mod_pow(&omegas[3].neg(), gmod)).mul(&t4_2_temp)
         .modulo(gmod);
-
-    /* let mut t_hats: Vec<E> = Vec::with_capacity(N);
-    for i in 0..c_hats.len() {
-        let previous_c = if i == 0 {
-            h_initial 
-        } else {
-            &c_hats[i-1]
-        };
-        
-        let next = (group.generator().mod_pow(&omega_hats[i], gmod))
-                .mul(&previous_c.mod_pow(&omega_primes[i], gmod))
-                .modulo(gmod);
-        
-        t_hats.push(next);
-    }*/
 
     let t_hats = (0..c_hats.len()).into_par_iter().map(|i| {
         let previous_c = if i == 0 {
@@ -249,17 +219,6 @@ pub fn check_proof<E: Element>(proof: &Proof<E, E::Exp>, es: &Vec<Ciphertext<E>>
     let xmod = &group.exp_modulus();
 
     let us: Vec<E::Exp> = hashing::shuffle_proof_us(es, e_primes, &proof.cs, hasher, N);
-    
-    /* let mut c_bar_num: E = proof.cs[0].clone();
-    let mut c_bar_den: E = h_generators[0].clone();
-    let mut u: E::Exp = us[0].clone();
-    let mut c_tilde: E = proof.cs[0].mod_pow(&us[0],gmod);
-    let mut a_prime: E = es[0].a.mod_pow(&us[0], gmod);
-    let mut b_prime: E = es[0].b.mod_pow(&us[0], gmod);
-    
-    let mut t_tilde3_temp: E = h_generators[0].mod_pow(&proof.s.s_primes[0], gmod);
-    let mut t_tilde41_temp: E = e_primes[0].a.mod_pow(&proof.s.s_primes[0], gmod);
-    let mut t_tilde42_temp: E = e_primes[0].b.mod_pow(&proof.s.s_primes[0], gmod);*/
      
     let mut c_bar_num: E = E::mul_identity();
     let mut c_bar_den: E = E::mul_identity();
@@ -304,26 +263,6 @@ pub fn check_proof<E: Element>(proof: &Proof<E, E::Exp>, es: &Vec<Ciphertext<E>>
         
     }
     
-    /*for i in 0..N {
-        c_bar_num = c_bar_num.mul(&proof.cs[i]).modulo(gmod);
-        c_bar_den = c_bar_den.mul(&h_generators[i]).modulo(gmod);
-        u = u.mul(&us[i]).modulo(xmod);
-        
-        c_tilde = c_tilde.mul(&proof.cs[i].mod_pow(&us[i], gmod))
-            .modulo(gmod);
-        a_prime = a_prime.mul(&es[i].a.mod_pow(&us[i], gmod))
-            .modulo(gmod);
-        b_prime = b_prime.mul(&es[i].b.mod_pow(&us[i], gmod))
-            .modulo(gmod);
-        t_tilde3_temp = t_tilde3_temp.mul(&h_generators[i].mod_pow(&proof.s.s_primes[i], gmod))
-            .modulo(gmod);
-        t_tilde41_temp = t_tilde41_temp.mul(&e_primes[i].a.mod_pow(&proof.s.s_primes[i], gmod))
-            .modulo(gmod);
-        t_tilde42_temp = t_tilde42_temp.mul(&e_primes[i].b.mod_pow(&proof.s.s_primes[i], gmod))
-            .modulo(gmod);
-        
-    }*/
-
     let c_bar = c_bar_num.div(&c_bar_den, gmod)
         .modulo(gmod);
     
@@ -362,21 +301,6 @@ pub fn check_proof<E: Element>(proof: &Proof<E, E::Exp>, es: &Vec<Ciphertext<E>>
         .mul(&group.generator().mod_pow(&proof.s.s4.neg(), gmod))
         .mul(&t_tilde42_temp)
         .modulo(gmod);
-    
-    /* let mut t_hat_primes = Vec::with_capacity(N);
-    for i in 0..N {
-        let c_term = if i == 0 {
-            h_initial
-        } else {
-            &proof.c_hats[i - 1]
-        };
-        let next = (proof.c_hats[i].mod_pow(&c.neg(), gmod)) 
-            .mul(&group.generator().mod_pow(&proof.s.s_hats[i], gmod))
-            .mul(&c_term.mod_pow(&proof.s.s_primes[i], gmod))
-            .modulo(gmod);
-        
-        t_hat_primes.push(next);
-    }*/ 
 
     let t_hat_primes: Vec<E> = (0..N).into_par_iter().map(|i| {
         let c_term = if i == 0 {
@@ -429,29 +353,10 @@ pub fn gen_shuffle<E: Element>(ciphertexts: &Vec<Ciphertext<E>>, pk: &dyn Public
     let csprng = OsRng;
     let perm: Vec<usize> = gen_permutation(ciphertexts.len());
 
-    // let mut e_primes = Vec::with_capacity(ciphertexts.len());
     let mut rs_temp: Vec<Option<E::Exp>> = vec![None;ciphertexts.len()];
     let rs_mutex = Mutex::new(rs_temp);
     let group = pk.group();
     let length = perm.len();
-
-    /*for i in 0..perm.len() {
-        let c = &ciphertexts[perm[i]];
-
-        let r = group.rnd_exp(csprng);
-        
-        let a = c.a.mul(&pk.value().mod_pow(&r, &group.modulus()))
-            .modulo(&group.modulus());
-        let b = c.b.mul(&group.generator().mod_pow(&r, &group.modulus()))
-            .modulo(&group.modulus());
-        
-        let c_ = Ciphertext {
-            a: a, 
-            b: b
-        };
-        e_primes.push(c_);
-        rs_temp[perm[i]] = Some(r);
-    }*/
     
     let e_primes = perm.par_iter().enumerate().map(|(i, p)| {
         let c = &ciphertexts[*p];
@@ -467,7 +372,6 @@ pub fn gen_shuffle<E: Element>(ciphertexts: &Vec<Ciphertext<E>>, pk: &dyn Public
             a: a, 
             b: b
         };
-        // (c_, Some(r))
         rs_mutex.lock().unwrap()[*p] = Some(r);
         c_
     }).collect();
@@ -477,7 +381,6 @@ pub fn gen_shuffle<E: Element>(ciphertexts: &Vec<Ciphertext<E>>, pk: &dyn Public
 
     for _ in 0..length {
         let r = rs_mutex.lock().unwrap().remove(0);
-        // let r = rs_temp.remove(0);
         rs.push(r.unwrap());
     }
     
@@ -488,18 +391,6 @@ pub fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &[E], group: &
     let csprng = OsRng;
 
     assert!(generators.len() == perm.len());
-    
-    /* let mut rs: Vec<Option<E::Exp>> = vec![None;perm.len()];
-    let mut cs: Vec<Option<E>> = vec![None;perm.len()];
-    
-    for i in 0..perm.len() {
-        let r = group.rnd_exp(csprng);
-        let c = generators[i].mul(&group.generator().mod_pow(&r, &group.modulus()))
-            .modulo(&group.modulus());
-        
-        rs[perm[i]] = Some(r);
-        cs[perm[i]] = Some(c);
-    }*/
 
     let mut rs: Vec<Option<E::Exp>> = vec![None;perm.len()];
     let mut cs: Vec<Option<E>> = vec![None;perm.len()];
@@ -519,8 +410,6 @@ pub fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &[E], group: &
     let mut ret2: Vec<E::Exp> = Vec::with_capacity(perm.len());
     
     for _ in 0..perm.len() {
-        // let c = cs.remove(0);
-        // let r = rs.remove(0);
         let c = cs_mutex.lock().unwrap().remove(0);
         let r = rs_mutex.lock().unwrap().remove(0);
 
@@ -534,7 +423,6 @@ pub fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &[E], group: &
 pub fn gen_commitment_chain<E: Element>(initial: &E, us: &Vec<&E::Exp>, group: &dyn Group<E, OsRng>)  -> (Vec<E>, Vec<E::Exp>) {
     let csprng = OsRng;
     let mut cs: Vec<E> = Vec::with_capacity(us.len());
-    // let mut rs: Vec<E::Exp> = Vec::with_capacity(us.len());
     
     let (firsts, rs): (Vec<E>, Vec<E::Exp>) = (0..us.len()).into_par_iter().map(|i| {
         let r = group.rnd_exp(csprng);
@@ -557,26 +445,7 @@ pub fn gen_commitment_chain<E: Element>(initial: &E, us: &Vec<&E::Exp>, group: &
         let c = firsts[i].mul(&second).modulo(&group.modulus());
 
         cs.push(c);
-        // rs.push(r);
     }
-
-    /* for i in 0..us.len() {
-        let r = group.rnd_exp(csprng);
-        let c_temp = if i == 0 {
-            initial
-        } else {
-            &cs[i-1]
-        };
-        
-        let first = group.generator().mod_pow(&r, &group.modulus())
-            .modulo(&group.modulus());
-        let second = c_temp.mod_pow(&us[i], &group.modulus()).
-            modulo(&group.modulus());
-        let c = first.mul(&second).modulo(&group.modulus());
-
-        cs.push(c);
-        rs.push(r);
-    }*/
 
     (cs, rs)
 }
@@ -631,16 +500,6 @@ fn test_rug_shuffle() {
     let exp_hasher = &*group.exp_hasher();
     let csprng = OsRng;
         
-    // let sk = PrivateKey::random(&group, csprng);
-    // let pk = PublicKey::from(&sk);
-
-    // let sk2 = group.gen_key(csprng);
-    // let pk2 = sk2.get_public_key();
-
-    /* let sk2 = PrivateKeyRug {
-        value: group.rnd_exp(csprng),
-        group: group.clone()
-    };*/
     let sk2 = group.gen_key_conc(csprng);
     let pk2 = sk2.get_public_key_conc();
 
@@ -658,33 +517,10 @@ fn test_rug_shuffle() {
         }
         
         let hs = generators(es.len() + 1, &group);
-        
         let (e_primes, rs, perm) = gen_shuffle(&es, &pk2);
-        
         let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk2, &hs, exp_hasher);
-        
         let ok = check_proof(&proof, &es, &e_primes, &pk2, &hs, exp_hasher);
 
         assert!(ok == true);
     }
-}
-
-use rayon::prelude::*;
-
-#[test]
-fn test_rayon() {
-    let num: Vec<i32> = (0..10).collect();
-    let s = num.par_iter()
-         .map(|&i| i * i)
-         .sum::<i32>();
-
-    assert_eq!(s, 285);
-    let mut xs = vec![1; 10];
-    /*(0..10).into_par_iter().for_each(|x| {
-        xs[x as usize] = x;
-    });*/
-    (0..10).into_par_iter().map(|x| {
-        x
-    });
-    
 }

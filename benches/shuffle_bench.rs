@@ -13,7 +13,7 @@ use rmxmg::hashing;
 use rmxmg::hashing::{HashBytes, HashTo};
 use rmxmg::shuffle::*;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, SamplingMode, BenchmarkId};
+use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, BenchmarkId};
 
 fn shuffle_rug(n: usize) -> bool {
     let group = RugGroup::default();
