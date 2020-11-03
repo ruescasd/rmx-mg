@@ -390,8 +390,8 @@ fn test_ristretto_distributed() {
     let csprng = OsRng;
     let group = RistrettoGroup;
     
-    let km1 = Keym::gen(&group, OsRng);
-    let km2 = Keym::gen(&group, OsRng);
+    let km1 = Keymaker::gen(&group, OsRng);
+    let km2 = Keymaker::gen(&group, OsRng);
     let (pk1, proof1) = km1.share(csprng);
     let (pk2, proof2) = km2.share(csprng);
     

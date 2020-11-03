@@ -4,16 +4,16 @@ use crate::arithm::*;
 use crate::group::*;
 use crate::elgamal::*;
 
-pub struct Keym<E: Element, T: RngCore + CryptoRng> {
+pub struct Keymaker<E: Element, T: RngCore + CryptoRng> {
     sk: Box<dyn PrivateK<E, T>>,
     pk: Box<dyn PublicK<E, T>>
 }
 
-impl<E: Element, T: RngCore + CryptoRng> Keym<E, T> {
-    pub fn gen(group: &dyn Group<E, T>, rng: T) -> Keym<E, T> {
+impl<E: Element, T: RngCore + CryptoRng> Keymaker<E, T> {
+    pub fn gen(group: &dyn Group<E, T>, rng: T) -> Keymaker<E, T> {
         let sk = group.gen_key(rng);
         let pk = sk.get_public_key();
-        Keym {
+        Keymaker {
             sk: sk,
             pk: pk
         }
