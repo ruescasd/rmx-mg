@@ -9,7 +9,7 @@ use crate::hashing::{HashTo, RugHasher};
 use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
-use crate::dist::*;
+use crate::keymaker::*;
 
 impl Element for Integer {
     type Exp = Integer;

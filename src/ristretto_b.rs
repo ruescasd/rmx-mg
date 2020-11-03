@@ -9,7 +9,7 @@ use curve25519_dalek::traits::Identity;
 use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
-use crate::dist::*;
+use crate::keymaker::*;
 use crate::hashing::{HashTo, RistrettoHasher};
 
 impl Element for RistrettoPoint {

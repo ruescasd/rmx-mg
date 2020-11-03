@@ -11,7 +11,7 @@ use rmxmg::ristretto_b::*;
 use rmxmg::rug_b::*;
 use rmxmg::hashing;
 use rmxmg::hashing::{HashBytes, HashTo};
-use rmxmg::shuffle::*;
+use rmxmg::shuffler::*;
 
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, BenchmarkId};
 

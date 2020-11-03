@@ -10,7 +10,7 @@ use std::marker::Sync;
 
 use crate::arithm::*;
 use crate::elgamal::*;
-use crate::shuffle::{YChallengeInput, TValues};
+use crate::shuffler::{YChallengeInput, TValues};
 
 pub trait HashBytes {
     fn get_bytes(&self) -> Vec<u8>;
