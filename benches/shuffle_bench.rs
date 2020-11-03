@@ -40,10 +40,6 @@ fn shuffle_rug(n: usize) -> bool {
     let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
     let ok = shuffler.check_proof(&proof, &es, &e_primes);
 
-    /* let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
-    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, exp_hasher);        
-    let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, exp_hasher);*/
-
     assert_eq!(ok, true);
     ok
 }
@@ -72,10 +68,6 @@ fn shuffle_ristretto(n: usize) -> bool {
     let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
     let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
     let ok = shuffler.check_proof(&proof, &es, &e_primes);
-    
-    /* let (e_primes, rs, perm) = gen_shuffle(&es, &*pk2);
-    let proof = gen_proof(&es, &e_primes, &rs, &perm, &*pk2, &hs, exp_hasher);
-    let ok = check_proof(&proof, &es, &e_primes, &*pk2, &hs, exp_hasher);*/
 
     assert!(ok == true);
 
