@@ -29,8 +29,13 @@ fn test_rug_serde() {
     }
     
     let hs = generators(es.len() + 1, &group);
-    let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
-    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, exp_hasher);
+    let shuffler = Shuffler {
+        pk: &pk,
+        generators: &hs,
+        hasher: exp_hasher
+    };
+    let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
+    let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
     
     let _group_b = bincode::serialize(&group).unwrap();
     let _sk_b = bincode::serialize(&sk).unwrap();
@@ -39,7 +44,7 @@ fn test_rug_serde() {
     let e_primes_b = bincode::serialize(&e_primes).unwrap();
     let proof_b = bincode::serialize(&proof).unwrap();
     
-    let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, exp_hasher);
+    let ok = shuffler.check_proof(&proof, &es, &e_primes);
 
     assert!(ok == true);
 
@@ -48,7 +53,12 @@ fn test_rug_serde() {
     let e_primes_d: Vec<Ciphertext<Integer>> = bincode::deserialize(&e_primes_b).unwrap();
     let proof_d: Proof<Integer, Integer> = bincode::deserialize(&proof_b).unwrap();
 
-    let ok_d = check_proof(&proof_d, &es_d, &e_primes_d, &pk_d, &hs, exp_hasher);
+    let shuffler_d = Shuffler {
+        pk: &pk_d,
+        generators: &hs,
+        hasher: exp_hasher
+    };
+    let ok_d = shuffler_d.check_proof(&proof_d, &es_d, &e_primes_d);
 
     assert!(ok_d == true);
 }
@@ -73,8 +83,13 @@ fn test_ristretto_serde() {
     }
     
     let hs = generators(es.len() + 1, &group);
-    let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
-    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, exp_hasher);
+    let shuffler = Shuffler {
+        pk: &pk,
+        generators: &hs,
+        hasher: exp_hasher
+    };
+    let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
+    let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
     
     let _group_b = bincode::serialize(&group).unwrap();
     let _sk_b = bincode::serialize(&sk).unwrap();
@@ -83,7 +98,7 @@ fn test_ristretto_serde() {
     let e_primes_b = bincode::serialize(&e_primes).unwrap();
     let proof_b = bincode::serialize(&proof).unwrap();
     
-    let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, exp_hasher);
+    let ok = shuffler.check_proof(&proof, &es, &e_primes);
 
     assert!(ok == true);
 
@@ -92,6 +107,11 @@ fn test_ristretto_serde() {
     let e_primes_d: Vec<Ciphertext<RistrettoPoint>> = bincode::deserialize(&e_primes_b).unwrap();
     let proof_d: Proof<RistrettoPoint, Scalar> = bincode::deserialize(&proof_b).unwrap();
 
-    let ok_d = check_proof(&proof_d, &es_d, &e_primes_d, &pk_d, &hs, exp_hasher);
+    let shuffler_d = Shuffler {
+        pk: &pk_d,
+        generators: &hs,
+        hasher: exp_hasher
+    };
+    let ok_d = shuffler_d.check_proof(&proof_d, &es_d, &e_primes_d);
     assert!(ok_d == true);
 }

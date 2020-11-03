@@ -5,6 +5,8 @@ use rug::{
     Integer,
     integer::Order
 };
+use std::marker::Send;
+use std::marker::Sync;
 
 use crate::arithm::*;
 use crate::elgamal::*;
@@ -14,7 +16,7 @@ pub trait HashBytes {
     fn get_bytes(&self) -> Vec<u8>;
 }
 
-pub trait HashTo<T> {
+pub trait HashTo<T>: Send + Sync {
     fn hash_to(&self, bytes: &[u8]) -> T;
 }
 

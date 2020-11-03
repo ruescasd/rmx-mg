@@ -31,12 +31,18 @@ fn shuffle_rug(n: usize) -> bool {
         es.push(c);
     }
     let hs = generators(es.len() + 1, &group);
-        
-    let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
+    let shuffler = Shuffler {
+        pk: &pk,
+        generators: &hs,
+        hasher: exp_hasher
+    };
+    let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
+    let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
+    let ok = shuffler.check_proof(&proof, &es, &e_primes);
 
-    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, exp_hasher);
-        
-    let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, exp_hasher);
+    /* let (e_primes, rs, perm) = gen_shuffle(&es, &pk);
+    let proof = gen_proof(&es, &e_primes, &rs, &perm, &pk, &hs, exp_hasher);        
+    let ok = check_proof(&proof, &es, &e_primes, &pk, &hs, exp_hasher);*/
 
     assert_eq!(ok, true);
     ok
@@ -47,21 +53,29 @@ fn shuffle_ristretto(n: usize) -> bool {
     let group = RistrettoGroup;
     let exp_hasher = &*group.exp_hasher();
 
-    let sk2 = group.gen_key(csprng);
-    let pk2 = sk2.get_public_key();
+    let sk = group.gen_key_conc(csprng);
+    let pk = sk.get_public_key_conc();
 
     let mut es = Vec::with_capacity(10);
 
     for _ in 0..n {
         let plaintext = group.rnd(csprng);
-        let c = pk2.encrypt(plaintext, csprng);
+        let c = pk.encrypt(plaintext, csprng);
         es.push(c);
     }
-
     let hs = generators(es.len() + 1, &group);
-    let (e_primes, rs, perm) = gen_shuffle(&es, &*pk2);
+    let shuffler = Shuffler {
+        pk: &pk,
+        generators: &hs,
+        hasher: exp_hasher
+    };
+    let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
+    let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
+    let ok = shuffler.check_proof(&proof, &es, &e_primes);
+    
+    /* let (e_primes, rs, perm) = gen_shuffle(&es, &*pk2);
     let proof = gen_proof(&es, &e_primes, &rs, &perm, &*pk2, &hs, exp_hasher);
-    let ok = check_proof(&proof, &es, &e_primes, &*pk2, &hs, exp_hasher);
+    let ok = check_proof(&proof, &es, &e_primes, &*pk2, &hs, exp_hasher);*/
 
     assert!(ok == true);
 
