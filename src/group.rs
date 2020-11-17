@@ -1,6 +1,5 @@
 use rand_core::{CryptoRng, RngCore};
-use std::marker::Send;
-use std::marker::Sync;
+use std::marker::{Send, Sync};
 
 use crate::arithm::*;
 use crate::hashing::*;

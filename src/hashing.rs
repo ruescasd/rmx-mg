@@ -5,8 +5,7 @@ use rug::{
     Integer,
     integer::Order
 };
-use std::marker::Send;
-use std::marker::Sync;
+use std::marker::{Send, Sync};
 
 use crate::arithm::*;
 use crate::elgamal::*;
