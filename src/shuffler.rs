@@ -1,6 +1,5 @@
 use rand::Rng;
 use rand_core::{OsRng};
-use rug::Integer;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use rayon::prelude::*;
@@ -8,8 +7,6 @@ use rayon::prelude::*;
 use crate::arithm::*;
 use crate::group::*;
 use crate::elgamal::*;
-use crate::ristretto_b::*;
-use crate::rug_b::*;
 use crate::hashing;
 use crate::hashing::{HashBytes, HashTo};
 
@@ -64,12 +61,12 @@ impl<'a, E: Element> Shuffler<'a, E> {
         let csprng = OsRng;
         let perm: Vec<usize> = gen_permutation(ciphertexts.len());
     
-        let mut rs_temp: Vec<Option<E::Exp>> = vec![None;ciphertexts.len()];
+        let rs_temp: Vec<Option<E::Exp>> = vec![None;ciphertexts.len()];
         let rs_mutex = Mutex::new(rs_temp);
         let group = self.pk.group();
         let length = perm.len();
         
-        let e_primes = perm.par_iter().enumerate().map(|(i, p)| {
+        let e_primes = perm.par_iter().enumerate().map(|(_, p)| {
             let c = &ciphertexts[*p];
     
             let r = group.rnd_exp(csprng);
@@ -401,10 +398,10 @@ fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &[E], group: &dyn 
 
     assert!(generators.len() == perm.len());
 
-    let mut rs: Vec<Option<E::Exp>> = vec![None;perm.len()];
-    let mut cs: Vec<Option<E>> = vec![None;perm.len()];
-    let mut rs_mutex = Mutex::new(rs);
-    let mut cs_mutex = Mutex::new(cs);
+    let rs: Vec<Option<E::Exp>> = vec![None;perm.len()];
+    let cs: Vec<Option<E>> = vec![None;perm.len()];
+    let rs_mutex = Mutex::new(rs);
+    let cs_mutex = Mutex::new(cs);
 
     perm.par_iter().enumerate().for_each(|(i, p)| {
         let r = group.rnd_exp(csprng);
@@ -433,7 +430,7 @@ fn gen_commitment_chain<E: Element>(initial: &E, us: &Vec<&E::Exp>, group: &dyn 
     let csprng = OsRng;
     let mut cs: Vec<E> = Vec::with_capacity(us.len());
     
-    let (firsts, rs): (Vec<E>, Vec<E::Exp>) = (0..us.len()).into_par_iter().map(|i| {
+    let (firsts, rs): (Vec<E>, Vec<E::Exp>) = (0..us.len()).into_par_iter().map(|_| {
         let r = group.rnd_exp(csprng);
         let first = group.generator().mod_pow(&r, &group.modulus())
             .modulo(&group.modulus());
@@ -472,66 +469,78 @@ pub fn generators<E: Element>(size: usize, group: &dyn Group<E, OsRng>) -> Vec<E
     ret
 }
 
-#[test]
-fn test_ristretto_shuffle() {
+#[cfg(test)]
+mod tests {
+    use rand_core::{OsRng};
     
-    let csprng = OsRng;
-    let group = RistrettoGroup;
-    let exp_hasher = &*group.exp_hasher();
+    use crate::group::*;
+    use crate::elgamal::*;
+    use crate::rug_b::*;
+    use crate::ristretto_b::*;
+    use crate::shuffler::*;
+    use rug::Integer;
 
-    let sk = group.gen_key_conc(csprng);
-    let pk = sk.get_public_key_conc();
-    
-    let mut es = Vec::with_capacity(10);
-    let n = 100;
-
-    for _ in 0..n {
-        let plaintext = group.rnd(csprng);
-        let c = pk.encrypt(plaintext, csprng);
-        es.push(c);
-    }
-    let hs = generators(es.len() + 1, &group);
-    let shuffler = Shuffler {
-        pk: &pk,
-        generators: &hs,
-        hasher: exp_hasher
-    };
-
-    let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
-    let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
-    let ok = shuffler.check_proof(&proof, &es, &e_primes);
-
-    assert!(ok == true);
-}
-
-#[test]
-fn test_rug_shuffle() {
-
-    let group = RugGroup::default();
-    let exp_hasher = &*group.exp_hasher();
-    let csprng = OsRng;
+    #[test]
+    fn test_ristretto_shuffle() {
         
-    let sk = group.gen_key_conc(csprng);
-    let pk = sk.get_public_key_conc(); 
-    let n = 100;
- 
-    let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(10);
-    
-    for _ in 0..n {
-        let plaintext: Integer = group.encode(group.rnd_exp(csprng));
-        let c = pk.encrypt(plaintext, csprng);
-        es.push(c);
+        let csprng = OsRng;
+        let group = RistrettoGroup;
+        let exp_hasher = &*group.exp_hasher();
+
+        let sk = group.gen_key_conc(csprng);
+        let pk = sk.get_public_key_conc();
+        
+        let mut es = Vec::with_capacity(10);
+        let n = 100;
+
+        for _ in 0..n {
+            let plaintext = group.rnd(csprng);
+            let c = pk.encrypt(plaintext, csprng);
+            es.push(c);
+        }
+        let hs = generators(es.len() + 1, &group);
+        let shuffler = Shuffler {
+            pk: &pk,
+            generators: &hs,
+            hasher: exp_hasher
+        };
+
+        let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
+        let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
+        let ok = shuffler.check_proof(&proof, &es, &e_primes);
+
+        assert!(ok == true);
     }
-    let hs = generators(es.len() + 1, &group);
-    let shuffler = Shuffler {
-        pk: &pk,
-        generators: &hs,
-        hasher: exp_hasher
-    };   
 
-    let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
-    let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
-    let ok = shuffler.check_proof(&proof, &es, &e_primes);
+    #[test]
+    fn test_rug_shuffle() {
 
-    assert!(ok == true);
+        let group = RugGroup::default();
+        let exp_hasher = &*group.exp_hasher();
+        let csprng = OsRng;
+            
+        let sk = group.gen_key_conc(csprng);
+        let pk = sk.get_public_key_conc(); 
+        let n = 100;
+    
+        let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(10);
+        
+        for _ in 0..n {
+            let plaintext: Integer = group.encode(group.rnd_exp(csprng));
+            let c = pk.encrypt(plaintext, csprng);
+            es.push(c);
+        }
+        let hs = generators(es.len() + 1, &group);
+        let shuffler = Shuffler {
+            pk: &pk,
+            generators: &hs,
+            hasher: exp_hasher
+        };   
+
+        let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
+        let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
+        let ok = shuffler.check_proof(&proof, &es, &e_primes);
+
+        assert!(ok == true);
+    }
 }

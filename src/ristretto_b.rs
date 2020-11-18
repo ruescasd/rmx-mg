@@ -1,4 +1,4 @@
-use rand_core::{OsRng, RngCore};
+use rand_core::{OsRng};
 use serde::{Deserialize, Serialize};
 
 use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
@@ -9,7 +9,6 @@ use curve25519_dalek::traits::Identity;
 use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
-use crate::keymaker::*;
 use crate::hashing::{HashTo, RistrettoHasher};
 
 impl Element for RistrettoPoint {
@@ -298,135 +297,149 @@ fn test_ristretto_js_encoding() {
     assert_eq!(text, recovered_.unwrap());
 }
 
-extern crate textplots;
-use textplots::{utils, Chart, Plot, Shape};
+#[cfg(test)]
+mod tests {
+    extern crate textplots;
+    use textplots::{utils, Chart, Plot, Shape};
 
-#[test]
-fn test_ristretto_prob_encoding() {
-    let mut csprng = OsRng;
-    let mut bytes = [00u8; 16];
-    let group = RistrettoGroup;
+    use rand_core::{OsRng, RngCore};
 
-    let iterations = 10000;
-    println!("test_r_encoding: running {} encode iterations..", iterations);
+    use curve25519_dalek::ristretto::{RistrettoPoint};
+    use curve25519_dalek::traits::Identity;
 
-    let v: Vec<(f32, f32)> = (0..iterations).map(|i| {
-        csprng.fill_bytes(&mut bytes);
-        let fixed = to_u8_16(bytes.to_vec());
-    
-        (i as f32, group.encode_test(fixed) as f32)
-    }).collect();
+    use crate::arithm::*;
+    use crate::elgamal::*;
+    use crate::group::*;
+    use crate::keymaker::*;
+    use crate::ristretto_b::*;
 
-    let size: f32 = v.len() as f32;
-    let values: Vec<u32> = v.iter().map(|x| x.1 as u32).collect();
-    let sum: f32 = v.iter().map(|x| x.1).fold(0f32, |a, b| a + b);
-    let sum_f = sum as f32;
-    println!("test_r_encoding: average {}", sum_f / size);
-    println!("test_r_encoding: max is {}", values.iter().max().unwrap());
+    #[test]
+    fn test_ristretto_prob_encoding() {
+        let mut csprng = OsRng;
+        let mut bytes = [00u8; 16];
+        let group = RistrettoGroup;
 
-    let hist = utils::histogram(&v, 0.0, 30.0, 30);
-    Chart::new(380, 100, 0.0, 30.0)
-    .lineplot(&Shape::Bars(&hist))
-    .nice();
-}
+        let iterations = 10000;
+        println!("test_r_encoding: running {} encode iterations..", iterations);
 
-#[test]
-fn test_ristretto_schnorr() {
-    let csprng = OsRng;
-    let group = RistrettoGroup;
-    let g = group.generator();
-    let secret = group.rnd_exp(csprng);
-    let public = g.mod_pow(&secret, &group.modulus());
-    let schnorr = group.schnorr_prove(&secret, &public, &g, csprng);
-    let verified = group.schnorr_verify(&public, &g, &schnorr);
-    assert!(verified == true);
-    let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
-    let verified_false = group.schnorr_verify(&public_false, &g, &schnorr);
-    assert!(verified_false == false);
-}
+        let v: Vec<(f32, f32)> = (0..iterations).map(|i| {
+            csprng.fill_bytes(&mut bytes);
+            let fixed = to_u8_16(bytes.to_vec());
+        
+            (i as f32, group.encode_test(fixed) as f32)
+        }).collect();
 
-#[test]
-fn test_ristretto_chaumpedersen() {
-    let csprng = OsRng;
-    let group = RistrettoGroup;
-    let g1 = group.generator();
-    let g2 = group.rnd(csprng);
-    let secret = group.rnd_exp(csprng);
-    let public1 = g1.mod_pow(&secret, &group.modulus());
-    let public2 = g2.mod_pow(&secret, &group.modulus());
-    let proof = group.cp_prove(&secret, &public1, &public2, &g1, &g2, csprng);
-    let verified = group.cp_verify(&public1, &public2, &g1, &g2, &proof);
-    
-    assert!(verified == true);
-    let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
-    let verified_false = group.cp_verify(&public1, &public_false, &g1, &g2, &proof);
-    assert!(verified_false == false);
-}
+        let size: f32 = v.len() as f32;
+        let values: Vec<u32> = v.iter().map(|x| x.1 as u32).collect();
+        let sum: f32 = v.iter().map(|x| x.1).fold(0f32, |a, b| a + b);
+        let sum_f = sum as f32;
+        println!("test_r_encoding: average {}", sum_f / size);
+        println!("test_r_encoding: max is {}", values.iter().max().unwrap());
 
-#[test]
-fn test_ristretto_vdecryption() {
-    let csprng = OsRng;
-    let group = RistrettoGroup;
-    
-    let sk = group.gen_key_conc(csprng);
-    let pk = sk.get_public_key_conc();
-    
-    let text = "16 byte message!";
-    let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
-    
-    let c = pk.encrypt(plaintext, csprng);    
-    let (d, proof) = sk.decrypt_and_prove(&c, csprng);
+        let hist = utils::histogram(&v, 0.0, 30.0, 30);
+        Chart::new(380, 100, 0.0, 30.0)
+        .lineplot(&Shape::Bars(&hist))
+        .nice();
+    }
 
-    let dec_factor = c.a.div(&d, &group.modulus()).modulo(&group.modulus());
+    #[test]
+    fn test_ristretto_schnorr() {
+        let csprng = OsRng;
+        let group = RistrettoGroup;
+        let g = group.generator();
+        let secret = group.rnd_exp(csprng);
+        let public = g.mod_pow(&secret, &group.modulus());
+        let schnorr = group.schnorr_prove(&secret, &public, &g, csprng);
+        let verified = group.schnorr_verify(&public, &g, &schnorr);
+        assert!(verified == true);
+        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
+        let verified_false = group.schnorr_verify(&public_false, &g, &schnorr);
+        assert!(verified_false == false);
+    }
 
-    let verified = group.cp_verify(&pk.value(), &dec_factor, &group.generator(), &c.b, &proof);
-    let recovered = String::from_utf8(group.decode(d).to_vec());
-    assert!(verified == true);
-    assert_eq!(text, recovered.unwrap());
-}
+    #[test]
+    fn test_ristretto_chaumpedersen() {
+        let csprng = OsRng;
+        let group = RistrettoGroup;
+        let g1 = group.generator();
+        let g2 = group.rnd(csprng);
+        let secret = group.rnd_exp(csprng);
+        let public1 = g1.mod_pow(&secret, &group.modulus());
+        let public2 = g2.mod_pow(&secret, &group.modulus());
+        let proof = group.cp_prove(&secret, &public1, &public2, &g1, &g2, csprng);
+        let verified = group.cp_verify(&public1, &public2, &g1, &g2, &proof);
+        
+        assert!(verified == true);
+        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
+        let verified_false = group.cp_verify(&public1, &public_false, &g1, &g2, &proof);
+        assert!(verified_false == false);
+    }
 
-#[test]
-fn test_ristretto_distributed() {
-    let csprng = OsRng;
-    let group = RistrettoGroup;
-    
-    let km1 = Keymaker::gen(&group, OsRng);
-    let km2 = Keymaker::gen(&group, OsRng);
-    let (pk1, proof1) = km1.share(csprng);
-    let (pk2, proof2) = km2.share(csprng);
-    
-    let verified1 = group.schnorr_verify(&pk1.value(), &group.generator(), &proof1);
-    let verified2 = group.schnorr_verify(&pk2.value(), &group.generator(), &proof2);
-    assert!(verified1 == true);
-    assert!(verified2 == true);
-    
-    let text = "16 byte message!";
-    let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
-    
-    let pk2_value = &pk2.value().clone();
-    let other = vec![pk2];
-    
-    let pk_combined = km1.combine_pks(other);
-    let c = pk_combined.encrypt(plaintext, csprng);
-    
-    
-    let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
-    let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
-    
-    let verified1 = group.cp_verify(&pk1.value(), &dec_f1, &group.generator(), &c.b, &proof1);
-    let verified2 = group.cp_verify(pk2_value, &dec_f2, &group.generator(), &c.b, &proof2);
-    assert!(verified1 == true);
-    assert!(verified2 == true);
-    
-    let decs = vec![dec_f1, dec_f2];
-    let d = km1.joint_dec(decs, c);
-    let recovered = String::from_utf8(group.decode(d).to_vec());
-    assert_eq!(text, recovered.unwrap());
-}
+    #[test]
+    fn test_ristretto_vdecryption() {
+        let csprng = OsRng;
+        let group = RistrettoGroup;
+        
+        let sk = group.gen_key_conc(csprng);
+        let pk = sk.get_public_key_conc();
+        
+        let text = "16 byte message!";
+        let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
+        
+        let c = pk.encrypt(plaintext, csprng);    
+        let (d, proof) = sk.decrypt_and_prove(&c, csprng);
 
-#[test]
-fn test_identity() {
-    let mut csprng = OsRng;
-    let x = RistrettoPoint::random(&mut csprng);
-    assert_eq!(x + RistrettoPoint::identity(), x);
+        let dec_factor = c.a.div(&d, &group.modulus()).modulo(&group.modulus());
+
+        let verified = group.cp_verify(&pk.value(), &dec_factor, &group.generator(), &c.b, &proof);
+        let recovered = String::from_utf8(group.decode(d).to_vec());
+        assert!(verified == true);
+        assert_eq!(text, recovered.unwrap());
+    }
+
+    #[test]
+    fn test_ristretto_distributed() {
+        let csprng = OsRng;
+        let group = RistrettoGroup;
+        
+        let km1 = Keymaker::gen(&group, OsRng);
+        let km2 = Keymaker::gen(&group, OsRng);
+        let (pk1, proof1) = km1.share(csprng);
+        let (pk2, proof2) = km2.share(csprng);
+        
+        let verified1 = group.schnorr_verify(&pk1.value(), &group.generator(), &proof1);
+        let verified2 = group.schnorr_verify(&pk2.value(), &group.generator(), &proof2);
+        assert!(verified1 == true);
+        assert!(verified2 == true);
+        
+        let text = "16 byte message!";
+        let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
+        
+        let pk2_value = &pk2.value().clone();
+        let other = vec![pk2];
+        
+        let pk_combined = km1.combine_pks(other);
+        let c = pk_combined.encrypt(plaintext, csprng);
+        
+        
+        let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
+        let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
+        
+        let verified1 = group.cp_verify(&pk1.value(), &dec_f1, &group.generator(), &c.b, &proof1);
+        let verified2 = group.cp_verify(pk2_value, &dec_f2, &group.generator(), &c.b, &proof2);
+        assert!(verified1 == true);
+        assert!(verified2 == true);
+        
+        let decs = vec![dec_f1, dec_f2];
+        let d = km1.joint_dec(decs, c);
+        let recovered = String::from_utf8(group.decode(d).to_vec());
+        assert_eq!(text, recovered.unwrap());
+    }
+
+    #[test]
+    fn test_identity() {
+        let mut csprng = OsRng;
+        let x = RistrettoPoint::random(&mut csprng);
+        assert_eq!(x + RistrettoPoint::identity(), x);
+    }
 }

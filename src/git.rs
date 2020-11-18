@@ -1,4 +1,3 @@
-use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::fs;
 
@@ -55,9 +54,7 @@ impl GitBulletinBoard {
         for (target, source) in files {
             self.add(&repo, target, source)?;
         }
-        self.push(&repo);
-
-        Ok(())
+        self.push(&repo)
     }
 
     pub fn list(&self) -> Vec<String> {
@@ -75,7 +72,7 @@ impl GitBulletinBoard {
             Repository::open(&self.fs_path)
         }
         else {  
-            let mut co = CheckoutBuilder::new();
+            let co = CheckoutBuilder::new();
             let mut fo = FetchOptions::new();
             let cb = remote_callbacks(&self.ssh_key_path);
             fo.remote_callbacks(cb);    
@@ -91,7 +88,7 @@ impl GitBulletinBoard {
         let target_path = Path::new(target);
         let target_file = Path::new(&self.fs_path).join(target_path);
         if target_file.is_file() && target_file.exists() {
-            fs::remove_file(&target_file);
+            fs::remove_file(&target_file).unwrap();
         }
         fs::copy(source, &target_file).unwrap();
         // adding to repo index uses relative path: &target_path

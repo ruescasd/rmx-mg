@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 pub mod arithm;
 pub mod group;
 pub mod keymaker;

@@ -9,7 +9,6 @@ use crate::hashing::{HashTo, RugHasher};
 use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
-use crate::keymaker::*;
 
 impl Element for Integer {
     type Exp = Integer;
@@ -227,126 +226,132 @@ impl PublicK<Integer, OsRng> for PublicKeyRug {
     }
 }
 
-#[test]
-#[should_panic]
-fn test_encode_panic() {
-    
-    let rg = RugGroup::default();
-    rg.encode(rg.exp_modulus() - 1);
+#[cfg(test)]
+mod tests {
+    use rand_core::{OsRng};
+    use crate::rug_b::*;
+    use crate::keymaker::*;
+
+    #[test]
+    #[should_panic]
+    fn test_encode_panic() {
+        
+        let rg = RugGroup::default();
+        rg.encode(rg.exp_modulus() - 1);
+    }
+
+    #[test]
+    fn test_rug_elgamal() {
+        let csprng = OsRng;
+        let group = RugGroup::default();
+        
+        let sk = group.gen_key_conc(csprng);
+        let pk = sk.get_public_key_conc();
+
+        let plaintext = group.rnd_exp(csprng);
+        
+        let encoded = group.encode(plaintext.clone());
+        let c = pk.encrypt(encoded.clone(), csprng);
+        let d = group.decode(sk.decrypt(&c));
+        assert_eq!(d, plaintext);
+
+        let zero = Integer::from(0);
+        let encoded_zero = group.encode(zero.clone());
+        let c_zero = pk.encrypt(encoded_zero.clone(), csprng);
+        let d_zero = group.decode(sk.decrypt(&c_zero));
+        assert_eq!(d_zero, zero);
+    }
+
+    #[test]
+    fn test_rug_schnorr() {
+        let csprng = OsRng;
+        let group = RugGroup::default();
+        let g = group.generator();
+        let secret = group.rnd_exp(csprng);
+        let public = g.mod_pow(&secret, &group.modulus());
+        let schnorr = group.schnorr_prove(&secret, &public, &g, csprng);
+        let verified = group.schnorr_verify(&public, &g, &schnorr);
+        assert!(verified == true);
+        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
+        let verified_false = group.schnorr_verify(&public_false, &g, &schnorr);
+        assert!(verified_false == false);
+    }
+
+    #[test]
+    fn test_rug_chaumpedersen() {
+        let csprng = OsRng;
+        let group = RugGroup::default();
+        let g1 = group.generator();
+        let g2 = group.rnd(csprng);
+        let secret = group.rnd_exp(csprng);
+        let public1 = g1.mod_pow(&secret, &group.modulus());
+        let public2 = g2.mod_pow(&secret, &group.modulus());
+        let proof = group.cp_prove(&secret, &public1, &public2, &g1, &g2, csprng);
+        let verified = group.cp_verify(&public1, &public2, &g1, &g2, &proof);
+        
+        assert!(verified == true);
+        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
+        let verified_false = group.cp_verify(&public1, &public_false, &g1, &g2, &proof);
+        assert!(verified_false == false);
+    }
+
+    #[test]
+    fn test_rug_vdecryption() {
+        let csprng = OsRng;
+        let group = RugGroup::default();
+        
+        let sk = group.gen_key_conc(csprng);
+        let pk = sk.get_public_key_conc();
+
+        let plaintext = group.rnd_exp(csprng);
+        
+        let encoded = group.encode(plaintext.clone());
+        let c = pk.encrypt(encoded.clone(), csprng);
+        let (d, proof) = sk.decrypt_and_prove(&c, csprng);
+
+        let dec_factor =  Element::modulo(&c.a.div(&d, &group.modulus()), &group.modulus());
+        let verified = group.cp_verify(&pk.value(), &dec_factor, &group.generator(), &c.b, &proof);
+        
+        assert!(verified == true);
+        assert_eq!(group.decode(d), plaintext);
+    }
+
+    #[test]
+    fn test_rug_distributed() {
+        let csprng = OsRng;
+        let group = RugGroup::default();
+        
+        let km1 = Keymaker::gen(&group, OsRng);
+        let km2 = Keymaker::gen(&group, OsRng);
+        let (pk1, proof1) = km1.share(csprng);
+        let (pk2, proof2) = km2.share(csprng);
+        
+        let verified1 = group.schnorr_verify(&pk1.value(), &group.generator(), &proof1);
+        let verified2 = group.schnorr_verify(&pk2.value(), &group.generator(), &proof2);
+        assert!(verified1 == true);
+        assert!(verified2 == true);
+        
+        let plaintext = group.rnd_exp(csprng);
+        
+        let encoded = group.encode(plaintext.clone());
+        
+        let pk2_value = &pk2.value().clone();
+        let other = vec![pk2];
+        
+        let pk_combined = km1.combine_pks(other);
+        let c = pk_combined.encrypt(encoded.clone(), csprng);
+        
+        let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
+        let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
+        
+        let verified1 = group.cp_verify(&pk1.value(), &dec_f1, &group.generator(), &c.b, &proof1);
+        let verified2 = group.cp_verify(pk2_value, &dec_f2, &group.generator(), &c.b, &proof2);
+        assert!(verified1 == true);
+        assert!(verified2 == true);
+        
+        let decs = vec![dec_f1, dec_f2];
+        let d = km1.joint_dec(decs, c);
+        
+        assert_eq!(group.decode(d), plaintext);
+    }
 }
-
-#[test]
-fn test_rug_elgamal() {
-    let csprng = OsRng;
-    let group = RugGroup::default();
-    
-    let sk = group.gen_key_conc(csprng);
-    let pk = sk.get_public_key_conc();
-
-    let plaintext = group.rnd_exp(csprng);
-    
-    let encoded = group.encode(plaintext.clone());
-    let c = pk.encrypt(encoded.clone(), csprng);
-    let d = group.decode(sk.decrypt(&c));
-    assert_eq!(d, plaintext);
-
-    let zero = Integer::from(0);
-    let encoded_zero = group.encode(zero.clone());
-    let c_zero = pk.encrypt(encoded_zero.clone(), csprng);
-    let d_zero = group.decode(sk.decrypt(&c_zero));
-    assert_eq!(d_zero, zero);
-}
-
-#[test]
-fn test_rug_schnorr() {
-    let csprng = OsRng;
-    let group = RugGroup::default();
-    let g = group.generator();
-    let secret = group.rnd_exp(csprng);
-    let public = g.mod_pow(&secret, &group.modulus());
-    let schnorr = group.schnorr_prove(&secret, &public, &g, csprng);
-    let verified = group.schnorr_verify(&public, &g, &schnorr);
-    assert!(verified == true);
-    let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
-    let verified_false = group.schnorr_verify(&public_false, &g, &schnorr);
-    assert!(verified_false == false);
-}
-
-#[test]
-fn test_rug_chaumpedersen() {
-    let csprng = OsRng;
-    let group = RugGroup::default();
-    let g1 = group.generator();
-    let g2 = group.rnd(csprng);
-    let secret = group.rnd_exp(csprng);
-    let public1 = g1.mod_pow(&secret, &group.modulus());
-    let public2 = g2.mod_pow(&secret, &group.modulus());
-    let proof = group.cp_prove(&secret, &public1, &public2, &g1, &g2, csprng);
-    let verified = group.cp_verify(&public1, &public2, &g1, &g2, &proof);
-    
-    assert!(verified == true);
-    let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
-    let verified_false = group.cp_verify(&public1, &public_false, &g1, &g2, &proof);
-    assert!(verified_false == false);
-}
-
-#[test]
-fn test_rug_vdecryption() {
-    let csprng = OsRng;
-    let group = RugGroup::default();
-    
-    let sk = group.gen_key_conc(csprng);
-    let pk = sk.get_public_key_conc();
-
-    let plaintext = group.rnd_exp(csprng);
-    
-    let encoded = group.encode(plaintext.clone());
-    let c = pk.encrypt(encoded.clone(), csprng);
-    let (d, proof) = sk.decrypt_and_prove(&c, csprng);
-
-    let dec_factor =  Element::modulo(&c.a.div(&d, &group.modulus()), &group.modulus());
-    let verified = group.cp_verify(&pk.value(), &dec_factor, &group.generator(), &c.b, &proof);
-    
-    assert!(verified == true);
-    assert_eq!(group.decode(d), plaintext);
-}
-
-#[test]
-fn test_rug_distributed() {
-    let csprng = OsRng;
-    let group = RugGroup::default();
-    
-    let km1 = Keymaker::gen(&group, OsRng);
-    let km2 = Keymaker::gen(&group, OsRng);
-    let (pk1, proof1) = km1.share(csprng);
-    let (pk2, proof2) = km2.share(csprng);
-    
-    let verified1 = group.schnorr_verify(&pk1.value(), &group.generator(), &proof1);
-    let verified2 = group.schnorr_verify(&pk2.value(), &group.generator(), &proof2);
-    assert!(verified1 == true);
-    assert!(verified2 == true);
-    
-    let plaintext = group.rnd_exp(csprng);
-    
-    let encoded = group.encode(plaintext.clone());
-    
-    let pk2_value = &pk2.value().clone();
-    let other = vec![pk2];
-    
-    let pk_combined = km1.combine_pks(other);
-    let c = pk_combined.encrypt(encoded.clone(), csprng);
-    
-    let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
-    let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
-    
-    let verified1 = group.cp_verify(&pk1.value(), &dec_f1, &group.generator(), &c.b, &proof1);
-    let verified2 = group.cp_verify(pk2_value, &dec_f2, &group.generator(), &c.b, &proof2);
-    assert!(verified1 == true);
-    assert!(verified2 == true);
-    
-    let decs = vec![dec_f1, dec_f2];
-    let d = km1.joint_dec(decs, c);
-    
-    assert_eq!(group.decode(d), plaintext);
-}
-
