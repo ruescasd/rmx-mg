@@ -1,9 +1,10 @@
-use git2::build::{CheckoutBuilder, RepoBuilder};
-use git2::*;
-use std::cell::RefCell;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::fs;
+
+use git2::build::{CheckoutBuilder, RepoBuilder};
+use git2::*;
+use walkdir::{DirEntry, WalkDir};
 
 use serde::{Deserialize, Serialize};
 
@@ -16,22 +17,6 @@ struct GitBulletinBoard {
 
 impl GitBulletinBoard {
     
-    fn open_or_clone(&self) -> Result<Repository, Error> {    
-        if Path::new(&self.fs_path).exists() {
-            Repository::open(&self.fs_path)
-        }
-        else {  
-            let mut co = CheckoutBuilder::new();
-            let mut fo = FetchOptions::new();
-            let cb = remote_callbacks(&self.ssh_key_path);
-            fo.remote_callbacks(cb);    
-            RepoBuilder::new()
-                .fetch_options(fo)
-                .with_checkout(co)
-                .clone(&self.url, Path::new(&self.fs_path))
-        }
-    }
-
     pub fn refresh(&self) -> Result<(), git2::Error> {
         let repo = self.open_or_clone()?;
         let mut remote = repo.find_remote("origin").unwrap();
@@ -73,6 +58,32 @@ impl GitBulletinBoard {
         self.push(&repo);
 
         Ok(())
+    }
+
+    pub fn list(&self) -> Vec<String> {
+        let walker = WalkDir::new(&self.fs_path).into_iter();
+        let files: Vec<String> = walker
+            .filter_entry(|e| !is_hidden(e))
+            .map(|e| e.unwrap().path().to_str().unwrap().to_string())
+            .collect();
+
+        files
+    }
+
+    fn open_or_clone(&self) -> Result<Repository, Error> {    
+        if Path::new(&self.fs_path).exists() {
+            Repository::open(&self.fs_path)
+        }
+        else {  
+            let mut co = CheckoutBuilder::new();
+            let mut fo = FetchOptions::new();
+            let cb = remote_callbacks(&self.ssh_key_path);
+            fo.remote_callbacks(cb);    
+            RepoBuilder::new()
+                .fetch_options(fo)
+                .with_checkout(co)
+                .clone(&self.url, Path::new(&self.fs_path))
+        }
     }
 
     fn add(&self, repo: &Repository, target: &str, source: &Path) -> Result<Oid, git2::Error> {
@@ -151,10 +162,7 @@ fn add_and_commit(repo: &Repository, path: &Path, message: &str) -> Result<Oid, 
                 message,
                 &tree,
                 &[&parent_commit])
-    // let file_path = Path::new(repo_root.as_str()).join(relative_path);
 }
-
-
 
 fn remote_callbacks<'a>(ssh_path: &'a str) -> RemoteCallbacks<'a> {
     let mut cb = RemoteCallbacks::new();
@@ -173,6 +181,13 @@ fn remote_callbacks<'a>(ssh_path: &'a str) -> RemoteCallbacks<'a> {
     });
 
     cb
+}
+
+fn is_hidden(entry: &DirEntry) -> bool {
+    entry.file_name()
+         .to_str()
+         .map(|s| s.starts_with("."))
+         .unwrap_or(false)
 }
 
 fn read_config() -> GitBulletinBoard {

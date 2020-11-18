@@ -10,3 +10,4 @@ pub mod shuffler;
 pub mod signature;
 pub mod git;
 pub mod bb;
+pub mod protocol;

@@ -115,3 +115,7 @@ fn test_ristretto_serde() {
     let ok_d = shuffler_d.check_proof(&proof_d, &es_d, &e_primes_d);
     assert!(ok_d == true);
 }
+
+#[test]
+fn test_signature_serde() {
+}
