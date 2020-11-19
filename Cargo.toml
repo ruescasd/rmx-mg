@@ -20,6 +20,7 @@ rayon = "1.5"
 crepe = "0.1.2"
 git2 = "0.13.12"
 walkdir = "2.3.1"
+tempfile = "3.1.0"
 textplots = "0.5.3"
 
 [dev-dependencies]

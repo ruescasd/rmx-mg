@@ -3,6 +3,7 @@ use std::fs;
 
 use git2::build::{CheckoutBuilder, RepoBuilder};
 use git2::*;
+use tempfile::NamedTempFile;
 use walkdir::{DirEntry, WalkDir};
 
 use serde::{Deserialize, Serialize};
@@ -51,15 +52,25 @@ impl GitBulletinBoard {
     pub fn post(&self, files: Vec<(&str, &Path)>, message: &str) -> Result<(), git2::Error> {
         let repo = self.open_or_clone()?;
         self.reset(&repo)?;
-        self.add_many(&repo, files, message)?;
+        self.add_commit_many(&repo, files, message)?;
         self.push(&repo)
     }
 
     pub fn list(&self) -> Vec<String> {
-        let walker = WalkDir::new(&self.fs_path).into_iter();
-        let files: Vec<String> = walker
+        let walker = WalkDir::new(&self.fs_path).min_depth(1).into_iter();
+        let entries: Vec<DirEntry> = walker
             .filter_entry(|e| !is_hidden(e))
-            .map(|e| e.unwrap().path().to_str().unwrap().to_string())
+            .map(|e| e.unwrap())
+            .collect();
+         
+        // filter directories and make relative
+        let files = entries.into_iter()
+            .filter(|e| !e.file_type().is_dir())
+            .map(|e| {
+                e.path()
+                    .strip_prefix(&self.fs_path).unwrap()
+                    .to_str().unwrap().to_string()
+            })
             .collect();
 
         files
@@ -81,32 +92,34 @@ impl GitBulletinBoard {
         }
     }
 
-    fn add_many(&self, repo: &Repository, files: Vec<(&str, &Path)>, message: &str) -> Result<Oid, git2::Error> {
+    fn add_to_working_copy(&self, target: &str, source: &Path) -> PathBuf {
+        let target_path = Path::new(target);
+        let target_file = Path::new(&self.fs_path).join(target_path);
+        if target_file.is_file() && target_file.exists() {
+            fs::remove_file(&target_file).unwrap();
+        }
+        let tmp_file = NamedTempFile::new().unwrap();
+        let tmp_file_path = tmp_file.path();
+        fs::copy(source, tmp_file_path).unwrap();
+        fs::rename(tmp_file_path, &target_file).unwrap();
+
+        target_path.to_path_buf()
+    }
+    
+    fn add_commit_many(&self, repo: &Repository, files: Vec<(&str, &Path)>, message: &str) -> Result<Oid, git2::Error> {
         let mut paths = vec![];
         for (target, source) in files {
-            let target_path = Path::new(target);
-            let target_file = Path::new(&self.fs_path).join(target_path);
-            if target_file.is_file() && target_file.exists() {
-                fs::remove_file(&target_file).unwrap();
-            }
-            fs::copy(source, &target_file).unwrap();
+            let target_path = self.add_to_working_copy(target, source);
             paths.push(target_path);
         }
         // adding to repo index uses relative path
         add_and_commit(&repo, paths, message)
     }
     
-    fn add(&self, repo: &Repository, target: &str, source: &Path) -> Result<Oid, git2::Error> {
-        
-        let target_path = Path::new(target);
-        let target_file = Path::new(&self.fs_path).join(target_path);
-        if target_file.is_file() && target_file.exists() {
-            fs::remove_file(&target_file).unwrap();
-        }
-        fs::copy(source, &target_file).unwrap();
+    fn add_commit(&self, repo: &Repository, target: &str, source: &Path, message: &str) -> Result<Oid, git2::Error> {
+        let target_path = self.add_to_working_copy(target, source);
         // adding to repo index uses relative path: &target_path
-        add_and_commit(&repo, [target_path].to_vec(), 
-            target_file.to_str().unwrap_or("default commit message"))
+        add_and_commit(&repo, [target_path].to_vec(), message)
     }
 
     // resets the working copy to match that of the remote
@@ -159,10 +172,10 @@ fn fast_forward(
     Ok(())
 }
 
-fn add_and_commit(repo: &Repository, paths: Vec<&Path>, message: &str) -> Result<Oid, git2::Error> {
+fn add_and_commit(repo: &Repository, paths: Vec<PathBuf>, message: &str) -> Result<Oid, git2::Error> {
     let mut index = repo.index()?;
     for p in paths {
-        index.add_path(p)?;
+        index.add_path(&p)?;
     }
     
     let oid = index.write_tree()?;
@@ -212,26 +225,34 @@ fn read_config() -> GitBulletinBoard {
     g
 }
 
-/*use serial_test::serial;
+#[cfg(test)]
+mod tests {
+    use serial_test::serial;
+    use std::fs;
+    use std::path::{Path};
+    use crate::git::*;
 
-#[test]
-#[serial]
-fn test_clone_or_open() {
     
-    let g = read_config();
-    fs::remove_dir_all(&g.fs_path);
-    let repo = g.clone_or_open().unwrap();
-    
-    let dir = Path::new(&g.fs_path);
-    assert!(dir.exists() && dir.is_dir());
+    #[test]
+    #[serial]
+    fn test_open_or_clone() {
+        
+        let g = read_config();
+        fs::remove_dir_all(&g.fs_path).unwrap();
+        g.open_or_clone().unwrap();
+        
+        let dir = Path::new(&g.fs_path);
+        assert!(dir.exists() && dir.is_dir());
+    }
+
+    #[test]
+    #[serial]
+    fn test_list() {
+        
+        let g = read_config();
+        fs::remove_dir_all(&g.fs_path).unwrap();
+        g.open_or_clone().unwrap();
+        let files = g.list();
+    }
+
 }
-
-#[test]
-#[serial]
-fn test_pull() {
-    let g = read_config();
-    fs::remove_dir_all(&g.fs_path);
-    let repo = g.clone_or_open().unwrap();
-    g.pull(&repo, false);
-}*/
-
