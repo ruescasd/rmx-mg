@@ -48,12 +48,10 @@ impl GitBulletinBoard {
         }
     }
 
-    pub fn post(&self, files: Vec<(&str, &Path)>) -> Result<(), git2::Error> {
+    pub fn post(&self, files: Vec<(&str, &Path)>, message: &str) -> Result<(), git2::Error> {
         let repo = self.open_or_clone()?;
         self.reset(&repo)?;
-        for (target, source) in files {
-            self.add(&repo, target, source)?;
-        }
+        self.add_many(&repo, files, message)?;
         self.push(&repo)
     }
 
@@ -83,6 +81,21 @@ impl GitBulletinBoard {
         }
     }
 
+    fn add_many(&self, repo: &Repository, files: Vec<(&str, &Path)>, message: &str) -> Result<Oid, git2::Error> {
+        let mut paths = vec![];
+        for (target, source) in files {
+            let target_path = Path::new(target);
+            let target_file = Path::new(&self.fs_path).join(target_path);
+            if target_file.is_file() && target_file.exists() {
+                fs::remove_file(&target_file).unwrap();
+            }
+            fs::copy(source, &target_file).unwrap();
+            paths.push(target_path);
+        }
+        // adding to repo index uses relative path
+        add_and_commit(&repo, paths, message)
+    }
+    
     fn add(&self, repo: &Repository, target: &str, source: &Path) -> Result<Oid, git2::Error> {
         
         let target_path = Path::new(target);
@@ -92,7 +105,7 @@ impl GitBulletinBoard {
         }
         fs::copy(source, &target_file).unwrap();
         // adding to repo index uses relative path: &target_path
-        add_and_commit(&repo, &target_path, 
+        add_and_commit(&repo, [target_path].to_vec(), 
             target_file.to_str().unwrap_or("default commit message"))
     }
 
@@ -146,9 +159,12 @@ fn fast_forward(
     Ok(())
 }
 
-fn add_and_commit(repo: &Repository, path: &Path, message: &str) -> Result<Oid, git2::Error> {
+fn add_and_commit(repo: &Repository, paths: Vec<&Path>, message: &str) -> Result<Oid, git2::Error> {
     let mut index = repo.index()?;
-    index.add_path(path)?;
+    for p in paths {
+        index.add_path(p)?;
+    }
+    
     let oid = index.write_tree()?;
     let signature = Signature::now("rmx", "rmx@foo.bar")?;
     let parent_commit = find_last_commit(&repo)?;
