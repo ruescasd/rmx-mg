@@ -90,12 +90,10 @@ impl RistrettoGroup {
         panic!("Failed to encode {:?}", plaintext);
     }
 
-    pub fn gen_key_conc(&self, rng: OsRng) -> PrivateKeyRistretto {
-        PrivateKeyRistretto {
-            value: self.rnd_exp(rng), 
-            group: self.clone()
-        }
-    }
+    /* pub fn gen_key_conc(&self, rng: OsRng) -> PrivateKeyRistretto {
+        let secret = self.rnd_exp(rng);
+        PrivateKey::from(secret, &self.clone())
+    }*/
 }
 
 impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
@@ -152,73 +150,18 @@ impl Group<RistrettoPoint, OsRng> for RistrettoGroup {
         let slice = &compressed.as_bytes()[12..28];
         to_u8_16(slice.to_vec())
     }
-    fn gen_key(&self, rng: OsRng) -> Box<dyn PrivateK<RistrettoPoint, OsRng>> {
-        Box::new(PrivateKeyRistretto {
-            value: self.rnd_exp(rng), 
-            group: self.clone()
-        })
+    fn gen_key(&self, rng: OsRng) -> PrivateKey<RistrettoPoint, Self, OsRng> {
+        let secret = self.rnd_exp(rng);
+        PrivateKey::from(&secret, self)
     }
-    fn pk_from_value(&self, value: RistrettoPoint) -> Box<dyn PublicK<RistrettoPoint, OsRng>> {
-        Box::new(PublicKeyRistretto {
-            value: value,
-            group: self.clone()
-        })
+    fn pk_from_value(&self, value: RistrettoPoint) -> PublicKey<RistrettoPoint, Self, OsRng> {
+        PublicKey::from(&value, &self.clone())
     }
 
     fn exp_hasher(&self) -> Box<dyn HashTo<Scalar>> {
         Box::new(RistrettoHasher)
     }
     
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PublicKeyRistretto {
-    pub value: RistrettoPoint,
-    pub group: RistrettoGroup
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PrivateKeyRistretto {
-    pub value: Scalar,
-    pub group: RistrettoGroup
-}
-
-impl PrivateKeyRistretto {
-    pub fn get_public_key_conc(&self) -> PublicKeyRistretto { 
-        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
-        
-        PublicKeyRistretto {
-            value: value,
-            group: self.group.clone()
-        }
-    }
-}
-
-impl PrivateK<RistrettoPoint, OsRng> for PrivateKeyRistretto {
-
-    fn value(&self) -> &Scalar {
-        &self.value
-    }
-    fn group(&self) -> &dyn Group<RistrettoPoint, OsRng> {
-        &self.group
-    }
-    fn get_public_key(&self) -> Box<dyn PublicK<RistrettoPoint, OsRng>> {
-        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
-        
-        Box::new(PublicKeyRistretto{
-            value: value,
-            group: self.group.clone()
-        })
-    }
-}
-
-impl PublicK<RistrettoPoint, OsRng> for PublicKeyRistretto {
-    fn value(&self) -> &RistrettoPoint {
-        &self.value
-    }
-    fn group(&self) -> &dyn Group<RistrettoPoint, OsRng> {
-        &self.group
-    }
 }
 
 use std::convert::TryInto;
@@ -237,8 +180,8 @@ fn test_ristretto_elgamal() {
     let csprng = OsRng;
     let group = RistrettoGroup;
     
-    let sk = group.gen_key_conc(csprng);
-    let pk = sk.get_public_key_conc();
+    let sk = group.gen_key(csprng);
+    let pk = PublicKey::from(&sk.public_value, &group);
     
     let text = "16 byte message!";
     let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
@@ -282,10 +225,14 @@ fn test_ristretto_js_encoding() {
         183, 193,  36, 180, 82, 206,  98,  41
     ];
 
-    let sk_ = PrivateKeyRistretto {
+    /* let sk_ = PrivateKeyRistretto {
         value: Scalar::from_bytes_mod_order(skb), 
         group: rg
-    };
+    };*/
+    let sk_ = PrivateKey::from(
+        &Scalar::from_bytes_mod_order(skb), 
+        &rg
+    );
     let c_ = Ciphertext {
         a: CompressedRistretto(a).decompress().unwrap(),
         b: CompressedRistretto(b).decompress().unwrap()
@@ -308,7 +255,6 @@ mod tests {
     use curve25519_dalek::traits::Identity;
 
     use crate::arithm::*;
-    use crate::elgamal::*;
     use crate::group::*;
     use crate::keymaker::*;
     use crate::ristretto_b::*;
@@ -381,8 +327,8 @@ mod tests {
         let csprng = OsRng;
         let group = RistrettoGroup;
         
-        let sk = group.gen_key_conc(csprng);
-        let pk = sk.get_public_key_conc();
+        let sk = group.gen_key(csprng);
+        let pk = PublicKey::from(&sk.public_value, &group);
         
         let text = "16 byte message!";
         let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
@@ -392,10 +338,10 @@ mod tests {
 
         let dec_factor = c.a.div(&d, &group.modulus()).modulo(&group.modulus());
 
-        let verified = group.cp_verify(&pk.value(), &dec_factor, &group.generator(), &c.b, &proof);
+        let verified = group.cp_verify(&pk.value, &dec_factor, &group.generator(), &c.b, &proof);
         let recovered = String::from_utf8(group.decode(d).to_vec());
         assert!(verified == true);
-        assert_eq!(text, recovered.unwrap());
+        assert_eq!(recovered.unwrap(), text);
     }
 
     #[test]
@@ -408,15 +354,15 @@ mod tests {
         let (pk1, proof1) = km1.share(csprng);
         let (pk2, proof2) = km2.share(csprng);
         
-        let verified1 = group.schnorr_verify(&pk1.value(), &group.generator(), &proof1);
-        let verified2 = group.schnorr_verify(&pk2.value(), &group.generator(), &proof2);
+        let verified1 = group.schnorr_verify(&pk1.value, &group.generator(), &proof1);
+        let verified2 = group.schnorr_verify(&pk2.value, &group.generator(), &proof2);
         assert!(verified1 == true);
         assert!(verified2 == true);
         
         let text = "16 byte message!";
         let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
         
-        let pk2_value = &pk2.value().clone();
+        let pk2_value = &pk2.value.clone();
         let other = vec![pk2];
         
         let pk_combined = km1.combine_pks(other);
@@ -426,7 +372,7 @@ mod tests {
         let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
         let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
         
-        let verified1 = group.cp_verify(&pk1.value(), &dec_f1, &group.generator(), &c.b, &proof1);
+        let verified1 = group.cp_verify(&pk1.value, &dec_f1, &group.generator(), &c.b, &proof1);
         let verified2 = group.cp_verify(pk2_value, &dec_f2, &group.generator(), &c.b, &proof2);
         assert!(verified1 == true);
         assert!(verified2 == true);
@@ -434,7 +380,66 @@ mod tests {
         let decs = vec![dec_f1, dec_f2];
         let d = km1.joint_dec(decs, c);
         let recovered = String::from_utf8(group.decode(d).to_vec());
-        assert_eq!(text, recovered.unwrap());
+        assert_eq!(recovered.unwrap(), text);
+    }
+
+    
+    #[test]
+    fn test_rug_distributed_serde() {
+        let csprng = OsRng;
+        let group = RistrettoGroup;
+        
+        let km1 = Keymaker::gen(&group, OsRng);
+        let km2 = Keymaker::gen(&group, OsRng);
+        let (pk1, proof1) = km1.share(csprng);
+        let (pk2, proof2) = km2.share(csprng);
+
+        let pk1_b = bincode::serialize(&pk1).unwrap();
+        let pk2_b = bincode::serialize(&pk2).unwrap();
+        let proof1_b = bincode::serialize(&proof1).unwrap();
+        let proof2_b = bincode::serialize(&proof2).unwrap();
+
+        let pk1_d: PublicKey<RistrettoPoint, RistrettoGroup, OsRng> = bincode::deserialize(&pk1_b).unwrap();
+        let pk2_d: PublicKey<RistrettoPoint, RistrettoGroup, OsRng> = bincode::deserialize(&pk2_b).unwrap();
+        let proof1_d: Schnorr<RistrettoPoint> = bincode::deserialize(&proof1_b).unwrap();
+        let proof2_d: Schnorr<RistrettoPoint> = bincode::deserialize(&proof2_b).unwrap();
+        
+        let verified1 = group.schnorr_verify(&pk1_d.value, &group.generator(), &proof1_d);
+        let verified2 = group.schnorr_verify(&pk2_d.value, &group.generator(), &proof2_d);
+        assert!(verified1 == true);
+        assert!(verified2 == true);
+        
+        let text = "16 byte message!";
+        let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
+        
+        let pk2_value = &pk2_d.value.clone();
+        let other = vec![pk2];
+        
+        let pk_combined = km1.combine_pks(other);
+        let c = pk_combined.encrypt(plaintext, csprng);
+        
+        let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
+        let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
+
+        let dec_f1_b = bincode::serialize(&dec_f1).unwrap();
+        let dec_f2_b = bincode::serialize(&dec_f2).unwrap();
+        let proof1_b = bincode::serialize(&proof1).unwrap();
+        let proof2_b = bincode::serialize(&proof2).unwrap();
+
+        let dec_f1_d: RistrettoPoint = bincode::deserialize(&dec_f1_b).unwrap();
+        let dec_f2_d: RistrettoPoint = bincode::deserialize(&dec_f2_b).unwrap();
+        let proof1_d: ChaumPedersen<RistrettoPoint> = bincode::deserialize(&proof1_b).unwrap();
+        let proof2_d: ChaumPedersen<RistrettoPoint> = bincode::deserialize(&proof2_b).unwrap();
+        
+        let verified1 = group.cp_verify(&pk1_d.value, &dec_f1_d, &group.generator(), &c.b, &proof1_d);
+        let verified2 = group.cp_verify(pk2_value, &dec_f2_d, &group.generator(), &c.b, &proof2_d);
+        assert!(verified1 == true);
+        assert!(verified2 == true);
+        
+        let decs = vec![dec_f1_d, dec_f2_d];
+        let d = km1.joint_dec(decs, c);
+        let recovered = String::from_utf8(group.decode(d).to_vec());
+        assert_eq!(recovered.unwrap(), text);
     }
 
     #[test]
@@ -445,13 +450,13 @@ mod tests {
     }
 
     #[test]
-    fn test_ristretto_serde() {
+    fn test_ristretto_shuffle_serde() {
         let csprng = OsRng;
         let group = RistrettoGroup;
         let exp_hasher = &*group.exp_hasher();
         
-        let sk = group.gen_key_conc(csprng);
-        let pk = sk.get_public_key_conc();
+        let sk = group.gen_key(csprng);
+        let pk = PublicKey::from(&sk.public_value, &group);
 
         let mut es: Vec<Ciphertext<RistrettoPoint>> = Vec::with_capacity(10);
         
@@ -462,11 +467,12 @@ mod tests {
             es.push(c);
         }
         
-        let hs = generators(es.len() + 1, &group);
+        let hs = generators(es.len() + 1, &group, csprng);
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,
-            hasher: exp_hasher
+            hasher: exp_hasher,
+            rng: csprng
         };
         let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
         let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
@@ -482,7 +488,7 @@ mod tests {
 
         assert!(ok == true);
 
-        let pk_d: PublicKeyRistretto = bincode::deserialize(&pk_b).unwrap();
+        let pk_d: PublicKey<RistrettoPoint, RistrettoGroup, OsRng> = bincode::deserialize(&pk_b).unwrap();
         let es_d: Vec<Ciphertext<RistrettoPoint>> = bincode::deserialize(&es_b).unwrap();
         let e_primes_d: Vec<Ciphertext<RistrettoPoint>> = bincode::deserialize(&e_primes_b).unwrap();
         let proof_d: Proof<RistrettoPoint, Scalar> = bincode::deserialize(&proof_b).unwrap();
@@ -490,7 +496,8 @@ mod tests {
         let shuffler_d = Shuffler {
             pk: &pk_d,
             generators: &hs,
-            hasher: exp_hasher
+            hasher: exp_hasher,
+            rng: csprng
         };
         let ok_d = shuffler_d.check_proof(&proof_d, &es_d, &e_primes_d);
         assert!(ok_d == true);

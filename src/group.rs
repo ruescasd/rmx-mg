@@ -5,15 +5,15 @@ use crate::arithm::*;
 use crate::hashing::*;
 use crate::elgamal::*;
 
-pub trait Group<E: Element, T: RngCore + CryptoRng>: Send + Sync {
+pub trait Group<E: Element, T: RngCore + CryptoRng>: Send + Sync + Sized + Clone {
     
     fn generator(&self) -> E;
     fn rnd(&self, rng: T) -> E;
     fn modulus(&self) -> E;
     fn rnd_exp(&self, rng: T) -> E::Exp;
     fn exp_modulus(&self) -> E::Exp;
-    fn gen_key(&self, rng: T) -> Box<dyn PrivateK<E, T>>;
-    fn pk_from_value(&self, value: E) -> Box<dyn PublicK<E, T>>;
+    fn gen_key(&self, rng: T) -> PrivateKey<E, Self, T>;
+    fn pk_from_value(&self, value: E) -> PublicKey<E, Self, T>;
     fn encode(&self, plaintext: E::Plaintext) -> E;
     fn decode(&self, ciphertext: E) -> E::Plaintext;
     fn exp_hasher(&self) -> Box<dyn HashTo<E::Exp>>;

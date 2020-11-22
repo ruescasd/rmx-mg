@@ -110,12 +110,10 @@ impl RugGroup {
         }
     }
 
-    pub fn gen_key_conc(&self, rng: OsRng) -> PrivateKeyRug {
-        PrivateKeyRug {
-            value: self.rnd_exp(rng), 
-            group: self.clone()
-        }
-    }
+    /*pub fn gen_key_conc(&self, rng: OsRng) -> PrivateKeyRug {
+        let secret = self.rnd_exp(rng);
+        PrivateKey::from(secret, &self.clone())
+    }*/
 }
 
 impl Group<Integer, OsRng> for RugGroup {
@@ -158,72 +156,22 @@ impl Group<Integer, OsRng> for RugGroup {
             plaintext - 1
         }
     }
-    fn gen_key(&self, rng: OsRng) -> Box<dyn PrivateK<Integer, OsRng>> {
-        Box::new(PrivateKeyRug {
-            value: self.rnd_exp(rng), 
-            group: self.clone()
-        })
+    fn gen_key(&self, rng: OsRng) -> PrivateKey<Integer, Self, OsRng> {
+        let secret = self.rnd_exp(rng);
+        PrivateKey::from(&secret, self)
     }
-    fn pk_from_value(&self, value: Integer) -> Box<dyn PublicK<Integer, OsRng>> {
-        Box::new(PublicKeyRug {
+    fn pk_from_value(&self, value: Integer) -> PublicKey<Integer, Self, OsRng> {
+        PublicKey {
             value: value,
-            group: self.clone()
-        })
+            group: self.clone(),
+            phantom: std::marker::PhantomData
+        }
     }
     
     fn exp_hasher(&self) -> Box<dyn HashTo<Integer>> {
         Box::new(RugHasher(self.modulus_exp.clone()))
     }
     
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PublicKeyRug {
-    pub value: Integer,
-    pub group: RugGroup
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct PrivateKeyRug {
-    pub value: Integer,
-    pub group: RugGroup
-}
-
-impl PrivateKeyRug {
-    pub fn get_public_key_conc(&self) -> PublicKeyRug { 
-        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
-        
-        PublicKeyRug {
-            value: value,
-            group: self.group.clone()
-        }
-    }
-}
-
-impl PrivateK<Integer, OsRng> for PrivateKeyRug {
-    fn value(&self) -> &Integer {
-        &self.value
-    }
-    fn group(&self) -> &dyn Group<Integer, OsRng> {
-        &self.group
-    }
-    fn get_public_key(&self) -> Box<dyn PublicK<Integer, OsRng>> {
-        let value = self.group.generator().mod_pow(&self.value, &self.group.modulus());
-        
-        Box::new(PublicKeyRug{
-            value: value,
-            group: self.group.clone()
-        })
-    }
-}
-
-impl PublicK<Integer, OsRng> for PublicKeyRug {
-    fn value(&self) -> &Integer {
-        &self.value
-    }
-    fn group(&self) -> &dyn Group<Integer, OsRng> {
-        &self.group
-    }
 }
 
 #[cfg(test)]
@@ -246,8 +194,8 @@ mod tests {
         let csprng = OsRng;
         let group = RugGroup::default();
         
-        let sk = group.gen_key_conc(csprng);
-        let pk = sk.get_public_key_conc();
+        let sk = group.gen_key(csprng);
+        let pk = PublicKey::from(&sk.public_value, &group);
 
         let plaintext = group.rnd_exp(csprng);
         
@@ -301,8 +249,8 @@ mod tests {
         let csprng = OsRng;
         let group = RugGroup::default();
         
-        let sk = group.gen_key_conc(csprng);
-        let pk = sk.get_public_key_conc();
+        let sk = group.gen_key(csprng);
+        let pk = PublicKey::from(&sk.public_value, &group);
 
         let plaintext = group.rnd_exp(csprng);
         
@@ -311,7 +259,7 @@ mod tests {
         let (d, proof) = sk.decrypt_and_prove(&c, csprng);
 
         let dec_factor =  Element::modulo(&c.a.div(&d, &group.modulus()), &group.modulus());
-        let verified = group.cp_verify(&pk.value(), &dec_factor, &group.generator(), &c.b, &proof);
+        let verified = group.cp_verify(&pk.value, &dec_factor, &group.generator(), &c.b, &proof);
         
         assert!(verified == true);
         assert_eq!(group.decode(d), plaintext);
@@ -327,8 +275,8 @@ mod tests {
         let (pk1, proof1) = km1.share(csprng);
         let (pk2, proof2) = km2.share(csprng);
         
-        let verified1 = group.schnorr_verify(&pk1.value(), &group.generator(), &proof1);
-        let verified2 = group.schnorr_verify(&pk2.value(), &group.generator(), &proof2);
+        let verified1 = group.schnorr_verify(&pk1.value, &group.generator(), &proof1);
+        let verified2 = group.schnorr_verify(&pk2.value, &group.generator(), &proof2);
         assert!(verified1 == true);
         assert!(verified2 == true);
         
@@ -336,7 +284,7 @@ mod tests {
         
         let encoded = group.encode(plaintext.clone());
         
-        let pk2_value = &pk2.value().clone();
+        let pk2_value = &pk2.value.clone();
         let other = vec![pk2];
         
         let pk_combined = km1.combine_pks(other);
@@ -345,7 +293,7 @@ mod tests {
         let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
         let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
         
-        let verified1 = group.cp_verify(&pk1.value(), &dec_f1, &group.generator(), &c.b, &proof1);
+        let verified1 = group.cp_verify(&pk1.value, &dec_f1, &group.generator(), &c.b, &proof1);
         let verified2 = group.cp_verify(pk2_value, &dec_f2, &group.generator(), &c.b, &proof2);
         assert!(verified1 == true);
         assert!(verified2 == true);
@@ -357,13 +305,72 @@ mod tests {
     }
 
     #[test]
-    fn test_rug_serde() {
+    fn test_rug_distributed_serde() {
+        let csprng = OsRng;
+        let group = RugGroup::default();
+        
+        let km1 = Keymaker::gen(&group, OsRng);
+        let km2 = Keymaker::gen(&group, OsRng);
+        let (pk1, proof1) = km1.share(csprng);
+        let (pk2, proof2) = km2.share(csprng);
+
+        let pk1_b = bincode::serialize(&pk1).unwrap();
+        let pk2_b = bincode::serialize(&pk2).unwrap();
+        let proof1_b = bincode::serialize(&proof1).unwrap();
+        let proof2_b = bincode::serialize(&proof2).unwrap();
+
+        let pk1_d: PublicKey<Integer, RugGroup, OsRng> = bincode::deserialize(&pk1_b).unwrap();
+        let pk2_d: PublicKey<Integer, RugGroup, OsRng> = bincode::deserialize(&pk2_b).unwrap();
+        let proof1_d: Schnorr<Integer> = bincode::deserialize(&proof1_b).unwrap();
+        let proof2_d: Schnorr<Integer> = bincode::deserialize(&proof2_b).unwrap();
+        
+        let verified1 = group.schnorr_verify(&pk1_d.value, &group.generator(), &proof1_d);
+        let verified2 = group.schnorr_verify(&pk2_d.value, &group.generator(), &proof2_d);
+        assert!(verified1 == true);
+        assert!(verified2 == true);
+        
+        let plaintext = group.rnd_exp(csprng);
+        
+        let encoded = group.encode(plaintext.clone());
+        
+        let pk2_value = &pk2_d.value.clone();
+        let other = vec![pk2];
+        
+        let pk_combined = km1.combine_pks(other);
+        let c = pk_combined.encrypt(encoded.clone(), csprng);
+        
+        let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
+        let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
+
+        let dec_f1_b = bincode::serialize(&dec_f1).unwrap();
+        let dec_f2_b = bincode::serialize(&dec_f2).unwrap();
+        let proof1_b = bincode::serialize(&proof1).unwrap();
+        let proof2_b = bincode::serialize(&proof2).unwrap();
+
+        let dec_f1_d: Integer = bincode::deserialize(&dec_f1_b).unwrap();
+        let dec_f2_d: Integer = bincode::deserialize(&dec_f2_b).unwrap();
+        let proof1_d: ChaumPedersen<Integer> = bincode::deserialize(&proof1_b).unwrap();
+        let proof2_d: ChaumPedersen<Integer> = bincode::deserialize(&proof2_b).unwrap();
+        
+        let verified1 = group.cp_verify(&pk1_d.value, &dec_f1_d, &group.generator(), &c.b, &proof1_d);
+        let verified2 = group.cp_verify(pk2_value, &dec_f2_d, &group.generator(), &c.b, &proof2_d);
+        assert!(verified1 == true);
+        assert!(verified2 == true);
+        
+        let decs = vec![dec_f1_d, dec_f2_d];
+        let d = km1.joint_dec(decs, c);
+        
+        assert_eq!(group.decode(d), plaintext);
+    }
+
+    #[test]
+    fn test_rug_shuffle_serde() {
         let csprng = OsRng;
         let group = RugGroup::default();
         let exp_hasher = &*group.exp_hasher();
         
-        let sk = group.gen_key_conc(csprng);
-        let pk = sk.get_public_key_conc();
+        let sk = group.gen_key(csprng);
+        let pk = PublicKey::from(&sk.public_value, &group);
 
         let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(10);
         
@@ -373,11 +380,12 @@ mod tests {
             es.push(c);
         }
         
-        let hs = generators(es.len() + 1, &group);
+        let hs = generators(es.len() + 1, &group, csprng);
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,
-            hasher: exp_hasher
+            hasher: exp_hasher,
+            rng: csprng
         };
         let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
         let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
@@ -393,7 +401,7 @@ mod tests {
 
         assert!(ok == true);
 
-        let pk_d: PublicKeyRug = bincode::deserialize(&pk_b).unwrap();
+        let pk_d: PublicKey<Integer, RugGroup, OsRng> = bincode::deserialize(&pk_b).unwrap();
         let es_d: Vec<Ciphertext<Integer>> = bincode::deserialize(&es_b).unwrap();
         let e_primes_d: Vec<Ciphertext<Integer>> = bincode::deserialize(&e_primes_b).unwrap();
         let proof_d: Proof<Integer, Integer> = bincode::deserialize(&proof_b).unwrap();
@@ -401,7 +409,8 @@ mod tests {
         let shuffler_d = Shuffler {
             pk: &pk_d,
             generators: &hs,
-            hasher: exp_hasher
+            hasher: exp_hasher,
+            rng: csprng
         };
         let ok_d = shuffler_d.check_proof(&proof_d, &es_d, &e_primes_d);
 

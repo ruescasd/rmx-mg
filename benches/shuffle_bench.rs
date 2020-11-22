@@ -20,8 +20,8 @@ fn shuffle_rug(n: usize) -> bool {
     let exp_hasher = &*group.exp_hasher();
     let csprng = OsRng;
         
-    let sk = group.gen_key_conc(csprng);
-    let pk = sk.get_public_key_conc();
+    let sk = group.gen_key(csprng);
+    let pk = PublicKey::from(sk.public_value, &group);
     
     let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(n);
 
@@ -30,7 +30,7 @@ fn shuffle_rug(n: usize) -> bool {
         let c = pk.encrypt(plaintext, csprng);
         es.push(c);
     }
-    let hs = generators(es.len() + 1, &group);
+    let hs = generators(es.len() + 1, &group, csprng);
     let shuffler = Shuffler {
         pk: &pk,
         generators: &hs,
@@ -49,8 +49,8 @@ fn shuffle_ristretto(n: usize) -> bool {
     let group = RistrettoGroup;
     let exp_hasher = &*group.exp_hasher();
 
-    let sk = group.gen_key_conc(csprng);
-    let pk = sk.get_public_key_conc();
+    let sk = group.gen_key(csprng);
+    let pk = PublicKey::from(sk.public_value, &group);
 
     let mut es = Vec::with_capacity(10);
 
@@ -59,7 +59,7 @@ fn shuffle_ristretto(n: usize) -> bool {
         let c = pk.encrypt(plaintext, csprng);
         es.push(c);
     }
-    let hs = generators(es.len() + 1, &group);
+    let hs = generators(es.len() + 1, &group, csprng);
     let shuffler = Shuffler {
         pk: &pk,
         generators: &hs,

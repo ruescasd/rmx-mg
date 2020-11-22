@@ -1,5 +1,6 @@
 use rand::Rng;
-use rand_core::{OsRng};
+use rand_core::OsRng;
+use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use rayon::prelude::*;
@@ -10,12 +11,12 @@ use crate::elgamal::*;
 use crate::hashing;
 use crate::hashing::{HashBytes, HashTo};
 
-pub struct YChallengeInput<'a, E: Element + HashBytes> {
+pub struct YChallengeInput<'a, E: Element + HashBytes, G: Group<E, T>, T: RngCore + CryptoRng> {
     pub es: &'a Vec<Ciphertext<E>>,
     pub e_primes: &'a Vec<Ciphertext<E>>,
     pub cs: &'a Vec<E>,
     pub c_hats: &'a Vec<E>,
-    pub pk: &'a dyn PublicK<E, OsRng>
+    pub pk: &'a PublicKey<E, G, T>
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -38,7 +39,7 @@ pub struct Responses<X: Exponent> {
     s_primes: Vec<X>
 }
 
-// FIXME cannot get type safety and serde to work at once, so we're using standalone exponents here
+// FIXME cannot get type safety and serde to work, so we're using standalone exponents here
 // type safety is maintained in gen/check proof signatures
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Proof<E: Element + HashBytes, X: Exponent> {
@@ -48,30 +49,31 @@ pub struct Proof<E: Element + HashBytes, X: Exponent> {
     c_hats: Vec<E>
 }
 
-pub struct Shuffler<'a, E: Element> {
-    pub pk: &'a dyn PublicK<E, OsRng>,
+pub struct Shuffler<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng> {
+    pub pk: &'a PublicKey<E, G, T>,
     pub generators: &'a Vec<E>,
     pub hasher: &'a dyn HashTo<E::Exp>,
+    pub rng: T
 }
 
-impl<'a, E: Element> Shuffler<'a, E> {
+impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuffler<'a, E, G, T> {
     
     pub fn gen_shuffle(&self, ciphertexts: &Vec<Ciphertext<E>>) -> (Vec<Ciphertext<E>>, Vec<E::Exp>, Vec<usize>) {
         
-        let csprng = OsRng;
+        // let csprng = OsRng;
         let perm: Vec<usize> = gen_permutation(ciphertexts.len());
     
         let rs_temp: Vec<Option<E::Exp>> = vec![None;ciphertexts.len()];
         let rs_mutex = Mutex::new(rs_temp);
-        let group = self.pk.group();
+        let group = &self.pk.group;
         let length = perm.len();
         
         let e_primes = perm.par_iter().enumerate().map(|(_, p)| {
             let c = &ciphertexts[*p];
     
-            let r = group.rnd_exp(csprng);
+            let r = group.rnd_exp(self.rng);
             
-            let a = c.a.mul(&self.pk.value().mod_pow(&r, &group.modulus()))
+            let a = c.a.mul(&self.pk.value.mod_pow(&r, &group.modulus()))
                 .modulo(&group.modulus());
             let b = c.b.mul(&group.generator().mod_pow(&r, &group.modulus()))
                 .modulo(&group.modulus());
@@ -98,9 +100,7 @@ impl<'a, E: Element> Shuffler<'a, E> {
     pub fn gen_proof(&self, es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
         r_primes: &Vec<E::Exp>, perm: &Vec<usize>, ) -> Proof<E, E::Exp> {
     
-        let csprng = OsRng;
-        
-        let group = self.pk.group();
+        let group = &self.pk.group;
         
         #[allow(non_snake_case)]
         let N = es.len();
@@ -116,7 +116,7 @@ impl<'a, E: Element> Shuffler<'a, E> {
         let gmod = &group.modulus();
         let xmod = &group.exp_modulus();
     
-        let (cs, rs) = gen_commitments(&perm, h_generators, group);
+        let (cs, rs) = self.gen_commitments(&perm, h_generators, &group);
         let us = hashing::shuffle_proof_us(&es, &e_primes, &cs, self.hasher, N);
         
         let mut u_primes: Vec<&E::Exp> = Vec::with_capacity(N);
@@ -124,7 +124,7 @@ impl<'a, E: Element> Shuffler<'a, E> {
             u_primes.push(&us[i]);
         }
         
-        let (c_hats, r_hats) = gen_commitment_chain(h_initial, &u_primes, group);
+        let (c_hats, r_hats) = self.gen_commitment_chain(h_initial, &u_primes, &group);
         
         let mut vs = vec![E::Exp::mul_identity();N];
         for i in (0..N - 1).rev() {
@@ -148,9 +148,9 @@ impl<'a, E: Element> Shuffler<'a, E> {
         r_tilde = r_tilde.modulo(xmod);
         r_prime = r_prime.modulo(xmod);
         
-        let omegas = vec![group.rnd_exp(csprng);4];
-        let omega_hats = vec![group.rnd_exp(csprng);N];
-        let omega_primes = vec![group.rnd_exp(csprng);N];
+        let omegas = vec![group.rnd_exp(self.rng);4];
+        let omega_hats = vec![group.rnd_exp(self.rng);N];
+        let omega_primes = vec![group.rnd_exp(self.rng);N];
     
         let t1 = group.generator().mod_pow(&omegas[0], gmod);
         let t2 = group.generator().mod_pow(&omegas[1], gmod);
@@ -178,7 +178,7 @@ impl<'a, E: Element> Shuffler<'a, E> {
         
         let t3 = (group.generator().mod_pow(&omegas[2], gmod)).mul(&t3_temp)
             .modulo(gmod);
-        let t4_1 = (self.pk.value().mod_pow(&omegas[3].neg(), gmod)).mul(&t4_1_temp)
+        let t4_1 = (self.pk.value.mod_pow(&omegas[3].neg(), gmod)).mul(&t4_1_temp)
             .modulo(gmod);
         let t4_2 = (group.generator().mod_pow(&omegas[3].neg(), gmod)).mul(&t4_2_temp)
             .modulo(gmod);
@@ -249,7 +249,7 @@ impl<'a, E: Element> Shuffler<'a, E> {
     pub fn check_proof(&self, proof: &Proof<E, E::Exp>, es: &Vec<Ciphertext<E>>, 
         e_primes: &Vec<Ciphertext<E>>) -> bool {
         
-        let group = self.pk.group();
+        let group = &self.pk.group;
         
         #[allow(non_snake_case)]
         let N = es.len();
@@ -338,7 +338,7 @@ impl<'a, E: Element> Shuffler<'a, E> {
             .modulo(gmod);
         
         let t_prime41 = (a_prime.mod_pow(&c.neg(), gmod))
-            .mul(&self.pk.value().mod_pow(&proof.s.s4.neg(), gmod))
+            .mul(&self.pk.value.mod_pow(&proof.s.s4.neg(), gmod))
             .mul(&t_tilde41_temp)
             .modulo(gmod);
     
@@ -375,11 +375,91 @@ impl<'a, E: Element> Shuffler<'a, E> {
         
         !checks.contains(&false)
     }
+
+    fn gen_commitments
+        (&self, perm: &Vec<usize>, generators: &[E], group: &G)  -> (Vec<E>, Vec<E::Exp>) {
+        
+
+        assert!(generators.len() == perm.len());
+
+        let rs: Vec<Option<E::Exp>> = vec![None;perm.len()];
+        let cs: Vec<Option<E>> = vec![None;perm.len()];
+        let rs_mutex = Mutex::new(rs);
+        let cs_mutex = Mutex::new(cs);
+
+        perm.par_iter().enumerate().for_each(|(i, p)| {
+            let r = group.rnd_exp(self.rng);
+            let c = generators[i].mul(&group.generator().mod_pow(&r, &group.modulus()))
+                .modulo(&group.modulus());
+
+            rs_mutex.lock().unwrap()[*p] = Some(r);
+            cs_mutex.lock().unwrap()[*p] = Some(c);
+        });
+
+        let mut ret1: Vec<E> = Vec::with_capacity(perm.len());
+        let mut ret2: Vec<E::Exp> = Vec::with_capacity(perm.len());
+        
+        for _ in 0..perm.len() {
+            let c = cs_mutex.lock().unwrap().remove(0);
+            let r = rs_mutex.lock().unwrap().remove(0);
+
+            ret1.push(c.unwrap());
+            ret2.push(r.unwrap());
+        }
+
+        (ret1, ret2)
+    }
+
+    fn gen_commitment_chain
+        (&self, initial: &E, us: &Vec<&E::Exp>, group: &G)  -> (Vec<E>, Vec<E::Exp>) {
+        
+        let mut cs: Vec<E> = Vec::with_capacity(us.len());
+        
+        let (firsts, rs): (Vec<E>, Vec<E::Exp>) = (0..us.len()).into_par_iter().map(|_| {
+            let r = group.rnd_exp(self.rng);
+            let first = group.generator().mod_pow(&r, &group.modulus())
+                .modulo(&group.modulus());
+
+            (first, r)
+        }).unzip();
+        
+        
+        for i in 0..us.len() {
+            let c_temp = if i == 0 {
+                initial
+            } else {
+                &cs[i-1]
+            };
+            
+            let second = c_temp.mod_pow(&us[i], &group.modulus()).
+                modulo(&group.modulus());
+            let c = firsts[i].mul(&second).modulo(&group.modulus());
+
+            cs.push(c);
+        }
+
+        (cs, rs)
+    }
+}
+
+// FIXME not kosher
+pub fn generators<E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Copy>
+    (size: usize, group: &G, rng: T) -> Vec<E> {
+
+    let mut ret: Vec<E> = Vec::with_capacity(size);
+    
+    for _ in 0..size {
+        let g = group.rnd(rng);
+        ret.push(g);
+    }
+
+    ret
 }
 
 fn gen_permutation(size: usize) -> Vec<usize> {
     let mut ret = Vec::with_capacity(size);
-    let mut rng = rand::thread_rng();
+    // let mut rng = rand::thread_rng();
+    let mut rng = OsRng;
 
     let mut ordered: Vec<usize> = (0..size).collect();
 
@@ -393,88 +473,13 @@ fn gen_permutation(size: usize) -> Vec<usize> {
     return ret;
 }
 
-fn gen_commitments<E: Element>(perm: &Vec<usize>, generators: &[E], group: &dyn Group<E, OsRng>)  -> (Vec<E>, Vec<E::Exp>) {
-    let csprng = OsRng;
 
-    assert!(generators.len() == perm.len());
-
-    let rs: Vec<Option<E::Exp>> = vec![None;perm.len()];
-    let cs: Vec<Option<E>> = vec![None;perm.len()];
-    let rs_mutex = Mutex::new(rs);
-    let cs_mutex = Mutex::new(cs);
-
-    perm.par_iter().enumerate().for_each(|(i, p)| {
-        let r = group.rnd_exp(csprng);
-        let c = generators[i].mul(&group.generator().mod_pow(&r, &group.modulus()))
-            .modulo(&group.modulus());
-
-        rs_mutex.lock().unwrap()[*p] = Some(r);
-        cs_mutex.lock().unwrap()[*p] = Some(c);
-    });
-
-    let mut ret1: Vec<E> = Vec::with_capacity(perm.len());
-    let mut ret2: Vec<E::Exp> = Vec::with_capacity(perm.len());
-    
-    for _ in 0..perm.len() {
-        let c = cs_mutex.lock().unwrap().remove(0);
-        let r = rs_mutex.lock().unwrap().remove(0);
-
-        ret1.push(c.unwrap());
-        ret2.push(r.unwrap());
-    }
-
-    (ret1, ret2)
-}
-
-fn gen_commitment_chain<E: Element>(initial: &E, us: &Vec<&E::Exp>, group: &dyn Group<E, OsRng>)  -> (Vec<E>, Vec<E::Exp>) {
-    let csprng = OsRng;
-    let mut cs: Vec<E> = Vec::with_capacity(us.len());
-    
-    let (firsts, rs): (Vec<E>, Vec<E::Exp>) = (0..us.len()).into_par_iter().map(|_| {
-        let r = group.rnd_exp(csprng);
-        let first = group.generator().mod_pow(&r, &group.modulus())
-            .modulo(&group.modulus());
-
-        (first, r)
-    }).unzip();
-    
-    
-    for i in 0..us.len() {
-        let c_temp = if i == 0 {
-            initial
-        } else {
-            &cs[i-1]
-        };
-        
-        let second = c_temp.mod_pow(&us[i], &group.modulus()).
-            modulo(&group.modulus());
-        let c = firsts[i].mul(&second).modulo(&group.modulus());
-
-        cs.push(c);
-    }
-
-    (cs, rs)
-}
-
-// FIXME not kosher
-pub fn generators<E: Element>(size: usize, group: &dyn Group<E, OsRng>) -> Vec<E> {
-    let csprng = OsRng;
-    let mut ret: Vec<E> = Vec::with_capacity(size);
-    
-    for _ in 0..size {
-        let g = group.rnd(csprng);
-        ret.push(g);
-    }
-
-    ret
-}
 
 #[cfg(test)]
 mod tests {
     use rand_core::{OsRng};
     
     use crate::group::*;
-    use crate::elgamal::*;
     use crate::rug_b::*;
     use crate::ristretto_b::*;
     use crate::shuffler::*;
@@ -487,8 +492,8 @@ mod tests {
         let group = RistrettoGroup;
         let exp_hasher = &*group.exp_hasher();
 
-        let sk = group.gen_key_conc(csprng);
-        let pk = sk.get_public_key_conc();
+        let sk = group.gen_key(csprng);
+        let pk = PublicKey::from(&sk.public_value, &group);
         
         let mut es = Vec::with_capacity(10);
         let n = 100;
@@ -498,11 +503,12 @@ mod tests {
             let c = pk.encrypt(plaintext, csprng);
             es.push(c);
         }
-        let hs = generators(es.len() + 1, &group);
+        let hs = generators(es.len() + 1, &group, csprng);
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,
-            hasher: exp_hasher
+            hasher: exp_hasher,
+            rng: csprng
         };
 
         let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
@@ -519,8 +525,8 @@ mod tests {
         let exp_hasher = &*group.exp_hasher();
         let csprng = OsRng;
             
-        let sk = group.gen_key_conc(csprng);
-        let pk = sk.get_public_key_conc(); 
+        let sk = group.gen_key(csprng);
+        let pk = PublicKey::from(&sk.public_value, &group);
         let n = 100;
     
         let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(10);
@@ -530,11 +536,12 @@ mod tests {
             let c = pk.encrypt(plaintext, csprng);
             es.push(c);
         }
-        let hs = generators(es.len() + 1, &group);
+        let hs = generators(es.len() + 1, &group, csprng);
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,
-            hasher: exp_hasher
+            hasher: exp_hasher,
+            rng: csprng
         };   
 
         let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);

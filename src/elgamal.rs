@@ -1,7 +1,5 @@
 use rand_core::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
-use std::marker::Send;
-use std::marker::Sync;
 
 use crate::arithm::*;
 use crate::group::*;
@@ -12,46 +10,72 @@ pub struct Ciphertext<E: Element> {
     pub b: E
 }
 
-pub trait PrivateK<E: Element, T: RngCore + CryptoRng>: Send + Sync {
-    fn decrypt(&self, c: &Ciphertext<E>) -> E {
-        let modulus = &self.group().modulus();
+#[derive(Serialize, Deserialize)]
+pub struct PublicKey<E: Element, G: Group<E, T>, T: RngCore + CryptoRng> {
+    pub value: E,
+    pub group: G,
+    pub phantom: std::marker::PhantomData<T>
+}
+
+impl<E: Element, G: Group<E, T>, T: RngCore + CryptoRng> PublicKey<E, G, T> {
+    pub fn encrypt(&self, plaintext: E, rng: T) -> Ciphertext<E> {
         
-        c.a.div(&c.b.mod_pow(&self.value(), modulus), modulus)
+        let randomness = self.group.rnd_exp(rng);
+        Ciphertext {
+            a: plaintext.mul(&self.value.mod_pow(&randomness, &self.group.modulus()))
+                .modulo(&self.group.modulus()),
+            b: self.group.generator().mod_pow(&randomness, &self.group.modulus())
+        }
+    }
+    pub fn from(pk_value: &E, group: &G) -> PublicKey<E, G, T> {
+        PublicKey {
+            value: pk_value.clone(),
+            group: group.clone(),
+            phantom: std::marker::PhantomData
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PrivateKey<E: Element, G: Group<E, T>, T: RngCore + CryptoRng, > {
+    pub value: E::Exp,
+    pub public_value: E,
+    pub group: G,
+    phantom: std::marker::PhantomData<T>
+}
+
+impl<E: Element, G: Group<E, T>, T: RngCore + CryptoRng> PrivateKey<E, G, T> {
+    pub fn decrypt(&self, c: &Ciphertext<E>) -> E {
+        let modulus = &self.group.modulus();
+        
+        c.a.div(&c.b.mod_pow(&self.value, modulus), modulus)
             .modulo(modulus)
     }
-    fn decrypt_and_prove(&self, c: &Ciphertext<E>, rng: T) -> (E, ChaumPedersen<E>) {
-        let modulus = &self.group().modulus();
-        let pk = self.get_public_key().value().clone();
-        let group = self.group();
-        let dec_factor = &c.b.mod_pow(&self.value(), modulus);
+    pub fn decrypt_and_prove(&self, c: &Ciphertext<E>, rng: T) -> (E, ChaumPedersen<E>) {
+        let modulus = &self.group.modulus();
+        
+        let dec_factor = &c.b.mod_pow(&self.value, modulus);
 
-        let proof = group.cp_prove(self.value(), &pk, dec_factor, &group.generator(), &c.b, rng);
+        let proof = self.group.cp_prove(&self.value, &self.public_value, 
+            dec_factor, &self.group.generator(), &c.b, rng);
         
         let decrypted = c.a.div(dec_factor, modulus)
             .modulo(modulus);
 
         (decrypted, proof)
     }
-    fn decryption_factor(&self, c: &Ciphertext<E>) -> E {
-        let modulus = &self.group().modulus();
+    pub fn decryption_factor(&self, c: &Ciphertext<E>) -> E {
+        let modulus = &self.group.modulus();
 
-        c.b.mod_pow(&self.value(), modulus)
+        c.b.mod_pow(&self.value, modulus)
     }
-    fn value(&self) -> &E::Exp;
-    fn group(&self) -> &dyn Group<E, T>;
-    fn get_public_key(&self) -> Box<dyn PublicK<E, T>>;
-}
-
-pub trait PublicK<E: Element, T: RngCore + CryptoRng>: Send + Sync {
-    fn encrypt(&self, plaintext: E, rng: T) -> Ciphertext<E> {
-        let group = self.group();
-        let randomness = group.rnd_exp(rng);
-        Ciphertext {
-            a: plaintext.mul(&self.value().mod_pow(&randomness, &group.modulus()))
-                .modulo(&group.modulus()),
-            b: group.generator().mod_pow(&randomness, &group.modulus())
+    pub fn from(secret: &E::Exp, group: &G) -> PrivateKey<E, G, T> {
+        let public_value = group.generator().mod_pow(&secret, &group.modulus());
+        PrivateKey {
+            value: secret.clone(),
+            group: group.clone(),
+            public_value: public_value,
+            phantom: std::marker::PhantomData
         }
     }
-    fn value(&self) -> &E;
-    fn group(&self) -> &dyn Group<E, T>;
 }

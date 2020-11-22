@@ -5,10 +5,12 @@ use rug::{
     Integer,
     integer::Order
 };
+use rand_core::{CryptoRng, RngCore};
 use std::marker::{Send, Sync};
 
 use crate::arithm::*;
 use crate::elgamal::*;
+use crate::group::*;
 use crate::shuffler::{YChallengeInput, TValues};
 
 pub trait HashBytes {
@@ -108,14 +110,14 @@ pub fn shuffle_proof_us<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciph
     ret
 }
 
-pub fn shuffle_proof_challenge<E: Element>(y: &YChallengeInput<E>, 
+pub fn shuffle_proof_challenge<E: Element, T: RngCore + CryptoRng, G: Group<E, T>>(y: &YChallengeInput<E, G, T>, 
     t: &TValues<E>, exp_hasher: &dyn HashTo<E::Exp>) -> E::Exp {
 
     let mut bytes = concat_bytes(&y.es);
     bytes.extend(concat_bytes(&y.e_primes));
     bytes.extend(concat_bytes(&y.cs));
     bytes.extend(concat_bytes(&y.c_hats));
-    bytes.extend(y.pk.value().get_bytes());
+    bytes.extend(y.pk.value.get_bytes());
     
     bytes.extend(t.t1.get_bytes());
     bytes.extend(t.t2.get_bytes());
