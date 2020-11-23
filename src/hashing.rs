@@ -5,7 +5,6 @@ use rug::{
     Integer,
     integer::Order
 };
-use rand_core::{CryptoRng, RngCore};
 use std::marker::{Send, Sync};
 
 use crate::arithm::*;
@@ -110,7 +109,7 @@ pub fn shuffle_proof_us<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciph
     ret
 }
 
-pub fn shuffle_proof_challenge<E: Element, T: RngCore + CryptoRng, G: Group<E, T>>(y: &YChallengeInput<E, G, T>, 
+pub fn shuffle_proof_challenge<E: Element, G: Group<E>>(y: &YChallengeInput<E, G>, 
     t: &TValues<E>, exp_hasher: &dyn HashTo<E::Exp>) -> E::Exp {
 
     let mut bytes = concat_bytes(&y.es);

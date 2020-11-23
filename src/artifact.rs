@@ -1,7 +1,11 @@
-use ed25519_dalek::PublicKey;
+use ed25519_dalek::PublicKey as SignaturePublicKey;
 use rug::Integer;
 use serde::{Deserialize, Serialize};
 
+use crate::arithm::*;
+use crate::elgamal::*;
+use crate::group::*;
+use crate::shuffler::*;
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 struct Config {
@@ -10,8 +14,18 @@ struct Config {
     modulus: Option<Integer>,
     modulus_exp: Option<Integer>,
     contests: u32, 
-    ballotbox: PublicKey, 
-    trustees: Vec<PublicKey>
+    ballotbox: SignaturePublicKey, 
+    trustees: Vec<SignaturePublicKey>
+}
+
+struct Keyshare<E: Element, G: Group<E>> {
+    share: PublicKey<E, G>,
+    proof: Schnorr<E>
+}
+
+struct Mix<E: Element> {
+    mixed_ballots: Vec<Ciphertext<E>>,
+    proof: ShuffleProof<E, E::Exp>
 }
 
 #[cfg(test)]

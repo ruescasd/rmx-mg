@@ -1,8 +1,6 @@
-use rand::Rng;
-use rand_core::OsRng;
-use rand_core::{CryptoRng, RngCore};
-use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
+use rand::Rng as rand_rng;
+use serde::{Deserialize, Serialize};
 use rayon::prelude::*;
 
 use crate::arithm::*;
@@ -10,13 +8,16 @@ use crate::group::*;
 use crate::elgamal::*;
 use crate::hashing;
 use crate::hashing::{HashBytes, HashTo};
+use crate::rng::Rng;
 
-pub struct YChallengeInput<'a, E: Element + HashBytes, G: Group<E, T>, T: RngCore + CryptoRng> {
+// type ParRng = RngCore + CryptoRng + Sync + Send;
+
+pub struct YChallengeInput<'a, E: Element + HashBytes, G: Group<E>> {
     pub es: &'a Vec<Ciphertext<E>>,
     pub e_primes: &'a Vec<Ciphertext<E>>,
     pub cs: &'a Vec<E>,
     pub c_hats: &'a Vec<E>,
-    pub pk: &'a PublicKey<E, G, T>
+    pub pk: &'a PublicKey<E, G>
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -42,26 +43,25 @@ pub struct Responses<X: Exponent> {
 // FIXME cannot get type safety and serde to work, so we're using standalone exponents here
 // type safety is maintained in gen/check proof signatures
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Proof<E: Element + HashBytes, X: Exponent> {
+pub struct ShuffleProof<E: Element + HashBytes, X: Exponent> {
     t: TValues<E>,
     s: Responses<X>,
     cs: Vec<E>,
     c_hats: Vec<E>
 }
 
-pub struct Shuffler<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng> {
-    pub pk: &'a PublicKey<E, G, T>,
+pub struct Shuffler<'a, E: Element, G: Group<E>> {
+    pub pk: &'a PublicKey<E, G>,
     pub generators: &'a Vec<E>,
     pub hasher: &'a dyn HashTo<E::Exp>,
-    pub rng: T
 }
 
-impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuffler<'a, E, G, T> {
+impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
     
-    pub fn gen_shuffle(&self, ciphertexts: &Vec<Ciphertext<E>>) -> (Vec<Ciphertext<E>>, Vec<E::Exp>, Vec<usize>) {
+    pub fn gen_shuffle<T: Rng + Copy>
+    (&self, ciphertexts: &Vec<Ciphertext<E>>, rng: T) -> (Vec<Ciphertext<E>>, Vec<E::Exp>, Vec<usize>) {
         
-        // let csprng = OsRng;
-        let perm: Vec<usize> = gen_permutation(ciphertexts.len());
+        let perm: Vec<usize> = gen_permutation(ciphertexts.len(), rng);
     
         let rs_temp: Vec<Option<E::Exp>> = vec![None;ciphertexts.len()];
         let rs_mutex = Mutex::new(rs_temp);
@@ -71,7 +71,7 @@ impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuff
         let e_primes = perm.par_iter().enumerate().map(|(_, p)| {
             let c = &ciphertexts[*p];
     
-            let r = group.rnd_exp(self.rng);
+            let r = group.rnd_exp(rng);
             
             let a = c.a.mul(&self.pk.value.mod_pow(&r, &group.modulus()))
                 .modulo(&group.modulus());
@@ -97,8 +97,9 @@ impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuff
         (e_primes, rs, perm)
     }
     
-    pub fn gen_proof(&self, es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
-        r_primes: &Vec<E::Exp>, perm: &Vec<usize>, ) -> Proof<E, E::Exp> {
+    pub fn gen_proof<T: Rng + Copy>
+        (&self, es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
+        r_primes: &Vec<E::Exp>, perm: &Vec<usize>, rng: T) -> ShuffleProof<E, E::Exp> {
     
         let group = &self.pk.group;
         
@@ -116,7 +117,7 @@ impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuff
         let gmod = &group.modulus();
         let xmod = &group.exp_modulus();
     
-        let (cs, rs) = self.gen_commitments(&perm, h_generators, &group);
+        let (cs, rs) = self.gen_commitments(&perm, h_generators, &group, rng);
         let us = hashing::shuffle_proof_us(&es, &e_primes, &cs, self.hasher, N);
         
         let mut u_primes: Vec<&E::Exp> = Vec::with_capacity(N);
@@ -124,7 +125,7 @@ impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuff
             u_primes.push(&us[i]);
         }
         
-        let (c_hats, r_hats) = self.gen_commitment_chain(h_initial, &u_primes, &group);
+        let (c_hats, r_hats) = self.gen_commitment_chain(h_initial, &u_primes, &group, rng);
         
         let mut vs = vec![E::Exp::mul_identity();N];
         for i in (0..N - 1).rev() {
@@ -148,9 +149,9 @@ impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuff
         r_tilde = r_tilde.modulo(xmod);
         r_prime = r_prime.modulo(xmod);
         
-        let omegas = vec![group.rnd_exp(self.rng);4];
-        let omega_hats = vec![group.rnd_exp(self.rng);N];
-        let omega_primes = vec![group.rnd_exp(self.rng);N];
+        let omegas = vec![group.rnd_exp(rng);4];
+        let omega_hats = vec![group.rnd_exp(rng);N];
+        let omega_primes = vec![group.rnd_exp(rng);N];
     
         let t1 = group.generator().mod_pow(&omegas[0], gmod);
         let t2 = group.generator().mod_pow(&omegas[1], gmod);
@@ -238,7 +239,7 @@ impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuff
             s_primes
         };
     
-        Proof {
+        ShuffleProof {
             t,
             s,
             cs,
@@ -246,7 +247,7 @@ impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuff
         }
     }
 
-    pub fn check_proof(&self, proof: &Proof<E, E::Exp>, es: &Vec<Ciphertext<E>>, 
+    pub fn check_proof(&self, proof: &ShuffleProof<E, E::Exp>, es: &Vec<Ciphertext<E>>, 
         e_primes: &Vec<Ciphertext<E>>) -> bool {
         
         let group = &self.pk.group;
@@ -376,8 +377,8 @@ impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuff
         !checks.contains(&false)
     }
 
-    fn gen_commitments
-        (&self, perm: &Vec<usize>, generators: &[E], group: &G)  -> (Vec<E>, Vec<E::Exp>) {
+    fn gen_commitments<T: Rng + Copy>
+        (&self, perm: &Vec<usize>, generators: &[E], group: &G, rng: T)  -> (Vec<E>, Vec<E::Exp>) {
         
 
         assert!(generators.len() == perm.len());
@@ -388,7 +389,7 @@ impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuff
         let cs_mutex = Mutex::new(cs);
 
         perm.par_iter().enumerate().for_each(|(i, p)| {
-            let r = group.rnd_exp(self.rng);
+            let r = group.rnd_exp(rng);
             let c = generators[i].mul(&group.generator().mod_pow(&r, &group.modulus()))
                 .modulo(&group.modulus());
 
@@ -410,13 +411,13 @@ impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuff
         (ret1, ret2)
     }
 
-    fn gen_commitment_chain
-        (&self, initial: &E, us: &Vec<&E::Exp>, group: &G)  -> (Vec<E>, Vec<E::Exp>) {
+    fn gen_commitment_chain<T: Rng + Copy>
+        (&self, initial: &E, us: &Vec<&E::Exp>, group: &G, rng: T)  -> (Vec<E>, Vec<E::Exp>) {
         
         let mut cs: Vec<E> = Vec::with_capacity(us.len());
         
         let (firsts, rs): (Vec<E>, Vec<E::Exp>) = (0..us.len()).into_par_iter().map(|_| {
-            let r = group.rnd_exp(self.rng);
+            let r = group.rnd_exp(rng);
             let first = group.generator().mod_pow(&r, &group.modulus())
                 .modulo(&group.modulus());
 
@@ -443,7 +444,7 @@ impl<'a, E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Sync + Copy> Shuff
 }
 
 // FIXME not kosher
-pub fn generators<E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Copy>
+pub fn generators<E: Element, G: Group<E>, T: Rng + Copy>
     (size: usize, group: &G, rng: T) -> Vec<E> {
 
     let mut ret: Vec<E> = Vec::with_capacity(size);
@@ -456,10 +457,10 @@ pub fn generators<E: Element, G: Group<E, T>, T: RngCore + CryptoRng + Copy>
     ret
 }
 
-fn gen_permutation(size: usize) -> Vec<usize> {
+fn gen_permutation<T: Rng>(size: usize, mut rng: T) -> Vec<usize> {
     let mut ret = Vec::with_capacity(size);
     // let mut rng = rand::thread_rng();
-    let mut rng = OsRng;
+    // let mut rng = OsRng;
 
     let mut ordered: Vec<usize> = (0..size).collect();
 
@@ -507,12 +508,11 @@ mod tests {
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,
-            hasher: exp_hasher,
-            rng: csprng
+            hasher: exp_hasher
         };
 
-        let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
-        let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
+        let (e_primes, rs, perm) = shuffler.gen_shuffle(&es, csprng);
+        let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm, csprng);
         let ok = shuffler.check_proof(&proof, &es, &e_primes);
 
         assert!(ok == true);
@@ -540,12 +540,11 @@ mod tests {
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,
-            hasher: exp_hasher,
-            rng: csprng
+            hasher: exp_hasher
         };   
 
-        let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
-        let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
+        let (e_primes, rs, perm) = shuffler.gen_shuffle(&es, csprng);
+        let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm, csprng);
         let ok = shuffler.check_proof(&proof, &es, &e_primes);
 
         assert!(ok == true);

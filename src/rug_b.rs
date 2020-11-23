@@ -1,4 +1,3 @@
-use rand_core::{OsRng, RngCore};
 use rug::{
     rand::{RandGen, RandState},
     Integer,
@@ -9,6 +8,7 @@ use crate::hashing::{HashTo, RugHasher};
 use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
+use crate::rng::Rng;
 
 impl Element for Integer {
     type Exp = Integer;
@@ -75,9 +75,9 @@ impl Exponent for Integer {
     }
 }
 
-struct OsRandgen(OsRng);
+struct OsRandgen<T: Rng>(T);
 
-impl RandGen for OsRandgen {
+impl<T: Rng> RandGen for OsRandgen<T> {
     fn gen(&mut self) -> u32 {
         return self.0.next_u32();
     }
@@ -116,12 +116,12 @@ impl RugGroup {
     }*/
 }
 
-impl Group<Integer, OsRng> for RugGroup {
+impl Group<Integer> for RugGroup {
     fn generator(&self) -> Integer {
         self.generator.clone()
     }
-    fn rnd(&self, _rng: OsRng) -> Integer {
-        let mut gen: OsRandgen  = OsRandgen(_rng);
+    fn rnd<T: Rng>(&self, _rng: T) -> Integer {
+        let mut gen  = OsRandgen(_rng);
         let mut state = RandState::new_custom(&mut gen);
         
         self.encode(self.modulus_exp.clone().random_below(&mut state))
@@ -129,8 +129,8 @@ impl Group<Integer, OsRng> for RugGroup {
     fn modulus(&self) -> Integer {
         self.modulus.clone()
     }
-    fn rnd_exp(&self, _rng: OsRng) -> Integer {
-        let mut gen: OsRandgen  = OsRandgen(_rng);
+    fn rnd_exp<T: Rng>(&self, _rng: T) -> Integer {
+        let mut gen = OsRandgen(_rng);
         let mut state = RandState::new_custom(&mut gen);
         
         self.modulus_exp.clone().random_below(&mut state)
@@ -156,15 +156,14 @@ impl Group<Integer, OsRng> for RugGroup {
             plaintext - 1
         }
     }
-    fn gen_key(&self, rng: OsRng) -> PrivateKey<Integer, Self, OsRng> {
+    fn gen_key<T: Rng>(&self, rng: T) -> PrivateKey<Integer, Self> {
         let secret = self.rnd_exp(rng);
         PrivateKey::from(&secret, self)
     }
-    fn pk_from_value(&self, value: Integer) -> PublicKey<Integer, Self, OsRng> {
+    fn pk_from_value(&self, value: Integer) -> PublicKey<Integer, Self> {
         PublicKey {
             value: value,
-            group: self.clone(),
-            phantom: std::marker::PhantomData
+            group: self.clone()
         }
     }
     
@@ -319,8 +318,8 @@ mod tests {
         let proof1_b = bincode::serialize(&proof1).unwrap();
         let proof2_b = bincode::serialize(&proof2).unwrap();
 
-        let pk1_d: PublicKey<Integer, RugGroup, OsRng> = bincode::deserialize(&pk1_b).unwrap();
-        let pk2_d: PublicKey<Integer, RugGroup, OsRng> = bincode::deserialize(&pk2_b).unwrap();
+        let pk1_d: PublicKey<Integer, RugGroup> = bincode::deserialize(&pk1_b).unwrap();
+        let pk2_d: PublicKey<Integer, RugGroup> = bincode::deserialize(&pk2_b).unwrap();
         let proof1_d: Schnorr<Integer> = bincode::deserialize(&proof1_b).unwrap();
         let proof2_d: Schnorr<Integer> = bincode::deserialize(&proof2_b).unwrap();
         
@@ -384,11 +383,10 @@ mod tests {
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,
-            hasher: exp_hasher,
-            rng: csprng
+            hasher: exp_hasher
         };
-        let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
-        let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
+        let (e_primes, rs, perm) = shuffler.gen_shuffle(&es, csprng);
+        let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm, csprng);
         
         let _group_b = bincode::serialize(&group).unwrap();
         let _sk_b = bincode::serialize(&sk).unwrap();
@@ -401,16 +399,15 @@ mod tests {
 
         assert!(ok == true);
 
-        let pk_d: PublicKey<Integer, RugGroup, OsRng> = bincode::deserialize(&pk_b).unwrap();
+        let pk_d: PublicKey<Integer, RugGroup> = bincode::deserialize(&pk_b).unwrap();
         let es_d: Vec<Ciphertext<Integer>> = bincode::deserialize(&es_b).unwrap();
         let e_primes_d: Vec<Ciphertext<Integer>> = bincode::deserialize(&e_primes_b).unwrap();
-        let proof_d: Proof<Integer, Integer> = bincode::deserialize(&proof_b).unwrap();
+        let proof_d: ShuffleProof<Integer, Integer> = bincode::deserialize(&proof_b).unwrap();
 
         let shuffler_d = Shuffler {
             pk: &pk_d,
             generators: &hs,
-            hasher: exp_hasher,
-            rng: csprng
+            hasher: exp_hasher
         };
         let ok_d = shuffler_d.check_proof(&proof_d, &es_d, &e_primes_d);
 

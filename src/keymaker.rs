@@ -1,17 +1,16 @@
-use rand_core::{CryptoRng, RngCore};
-
 use crate::arithm::*;
 use crate::group::*;
 use crate::elgamal::*;
+use crate::rng::Rng;
 
-pub struct Keymaker<E: Element, G: Group<E, T>, T: RngCore + CryptoRng> {
-    sk: PrivateKey<E, G, T>,
-    pk: PublicKey<E, G, T>
+pub struct Keymaker<E: Element, G: Group<E>> {
+    sk: PrivateKey<E, G>,
+    pk: PublicKey<E, G>
 }
 
-impl<E: Element, T: RngCore + CryptoRng, G: Group<E, T>> Keymaker<E, G, T> {
+impl<E: Element, G: Group<E>> Keymaker<E, G> {
     
-    pub fn gen(group: &G, rng: T) -> Keymaker<E, G, T> {
+    pub fn gen<T: Rng>(group: &G, rng: T) -> Keymaker<E, G> {
         let sk = group.gen_key(rng);
         let pk = PublicKey::from(&sk.public_value.clone(), group);
         
@@ -21,7 +20,7 @@ impl<E: Element, T: RngCore + CryptoRng, G: Group<E, T>> Keymaker<E, G, T> {
         }
     }
     
-    pub fn share(&self, rng: T) -> (PublicKey<E, G, T>, Schnorr<E>) {
+    pub fn share<T: Rng>(&self, rng: T) -> (PublicKey<E, G>, Schnorr<E>) {
         let group = &self.sk.group;
         let pk = group.pk_from_value(self.pk.value.clone());
 
@@ -31,7 +30,7 @@ impl<E: Element, T: RngCore + CryptoRng, G: Group<E, T>> Keymaker<E, G, T> {
 
     }
     
-    pub fn decryption_factor(&self, c: &Ciphertext<E>, rng: T) -> (E, ChaumPedersen<E>) {
+    pub fn decryption_factor<T: Rng>(&self, c: &Ciphertext<E>, rng: T) -> (E, ChaumPedersen<E>) {
         let group = &self.sk.group;
         let dec_factor = self.sk.decryption_factor(c);
 
@@ -42,7 +41,7 @@ impl<E: Element, T: RngCore + CryptoRng, G: Group<E, T>> Keymaker<E, G, T> {
         (dec_factor, proof)
     }
 
-    pub fn combine_pks(&self, other: Vec<PublicKey<E, G, T>>) -> PublicKey<E, G, T> {
+    pub fn combine_pks(&self, other: Vec<PublicKey<E, G>>) -> PublicKey<E, G> {
         let group = &self.sk.group;
 
         let mut acc: E = self.pk.value.clone();

@@ -12,3 +12,4 @@ pub mod git;
 pub mod bb;
 pub mod protocol;
 pub mod artifact;
+mod rng;
