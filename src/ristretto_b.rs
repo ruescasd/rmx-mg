@@ -191,6 +191,7 @@ mod tests {
     use crate::keymaker::*;
     use crate::ristretto_b::*;
     use crate::shuffler::*;
+    use crate::artifact::*;
 
     #[test]
     fn test_ristretto_elgamal() {
@@ -476,29 +477,32 @@ mod tests {
         };
         let (e_primes, rs, perm) = shuffler.gen_shuffle(&es, csprng);
         let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm, csprng);
+        let ok = shuffler.check_proof(&proof, &es, &e_primes);
+
+        let mix = Mix{
+            mixed_ballots: e_primes,
+            proof: proof
+        };
         
         let _group_b = bincode::serialize(&group).unwrap();
         let _sk_b = bincode::serialize(&sk).unwrap();
         let pk_b = bincode::serialize(&pk).unwrap();
         let es_b = bincode::serialize(&es).unwrap();
-        let e_primes_b = bincode::serialize(&e_primes).unwrap();
-        let proof_b = bincode::serialize(&proof).unwrap();
-        
-        let ok = shuffler.check_proof(&proof, &es, &e_primes);
+        let mix_b = bincode::serialize(&mix).unwrap();        
 
         assert!(ok == true);
 
         let pk_d: PublicKey<RistrettoPoint, RistrettoGroup> = bincode::deserialize(&pk_b).unwrap();
         let es_d: Vec<Ciphertext<RistrettoPoint>> = bincode::deserialize(&es_b).unwrap();
-        let e_primes_d: Vec<Ciphertext<RistrettoPoint>> = bincode::deserialize(&e_primes_b).unwrap();
-        let proof_d: ShuffleProof<RistrettoPoint, Scalar> = bincode::deserialize(&proof_b).unwrap();
-
+        let mix_d: Mix<RistrettoPoint> = bincode::deserialize(&mix_b).unwrap();
+        
         let shuffler_d = Shuffler {
             pk: &pk_d,
             generators: &hs,
             hasher: exp_hasher
         };
-        let ok_d = shuffler_d.check_proof(&proof_d, &es_d, &e_primes_d);
+        let ok_d = shuffler.check_proof(&mix_d.proof, &es_d, &mix_d.mixed_ballots);
+        
         assert!(ok_d == true);
     }
 }

@@ -92,3 +92,16 @@ pub struct ChaumPedersen<E: Element> {
     challenge: E::Exp,
     response: E::Exp
 }
+
+/*
+#[derive(Serialize, Deserialize)]
+pub struct Test1<E: Element> {
+    challenge: E::Exp
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Test<E: Element> {
+    commitment1: E,
+    commitment2: E,
+    challenge: Vec<Test1<E>>
+}*/

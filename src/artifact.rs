@@ -8,24 +8,32 @@ use crate::group::*;
 use crate::shuffler::*;
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
-struct Config {
-    id: [u8; 16],
-    generator: Option<Integer>,
-    modulus: Option<Integer>,
-    modulus_exp: Option<Integer>,
-    contests: u32, 
-    ballotbox: SignaturePublicKey, 
-    trustees: Vec<SignaturePublicKey>
+pub struct Config {
+    pub id: [u8; 16],
+    pub generator: Option<Integer>,
+    pub modulus: Option<Integer>,
+    pub modulus_exp: Option<Integer>,
+    pub contests: u32, 
+    pub ballotbox: SignaturePublicKey, 
+    pub trustees: Vec<SignaturePublicKey>
 }
 
-struct Keyshare<E: Element, G: Group<E>> {
-    share: PublicKey<E, G>,
-    proof: Schnorr<E>
+#[derive(Serialize, Deserialize)]
+pub struct Keyshare<E: Element, G: Group<E>> {
+    pub share: PublicKey<E, G>,
+    pub proof: Schnorr<E>
 }
 
-struct Mix<E: Element> {
-    mixed_ballots: Vec<Ciphertext<E>>,
-    proof: ShuffleProof<E, E::Exp>
+#[derive(Serialize, Deserialize)]
+pub struct Mix<E: Element> {
+    pub mixed_ballots: Vec<Ciphertext<E>>,
+    pub proof: ShuffleProof<E>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct PartialDecryption<E: Element> {
+    pub partially_decrypted_ballots: Vec<Ciphertext<E>>,
+    pub proofs: Vec<ChaumPedersen<E>>
 }
 
 #[cfg(test)]

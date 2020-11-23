@@ -1,9 +1,10 @@
 use std::marker::{Send, Sync};
-
+use serde::{Deserialize, Serialize};
+use serde::de::{DeserializeOwned};
 use crate::hashing::{HashBytes};
 
 pub trait Element: HashBytes + Clone + Send + Sync {
-    type Exp: Exponent;
+    type Exp: Exponent + Serialize + DeserializeOwned;
     type Plaintext;
     
     fn mul(&self, other: &Self) -> Self;

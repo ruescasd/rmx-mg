@@ -31,21 +31,21 @@ pub struct TValues<E: Element + HashBytes> {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Responses<X: Exponent> {
-    s1: X,
-    s2: X,
-    s3: X,
-    s4: X,
-    s_hats: Vec<X>,
-    s_primes: Vec<X>
+pub struct Responses<E: Element> {
+    s1: E::Exp,
+    s2: E::Exp,
+    s3: E::Exp,
+    s4: E::Exp,
+    s_hats: Vec<E::Exp>,
+    s_primes: Vec<E::Exp>
 }
 
 // FIXME cannot get type safety and serde to work, so we're using standalone exponents here
 // type safety is maintained in gen/check proof signatures
-#[derive(Serialize, Deserialize, Clone)]
-pub struct ShuffleProof<E: Element + HashBytes, X: Exponent> {
+#[derive(Serialize, Deserialize)]
+pub struct ShuffleProof<E: Element + HashBytes> {
     t: TValues<E>,
-    s: Responses<X>,
+    s: Responses<E>,
     cs: Vec<E>,
     c_hats: Vec<E>
 }
@@ -99,7 +99,7 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
     
     pub fn gen_proof<T: Rng + Copy>
         (&self, es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciphertext<E>>, 
-        r_primes: &Vec<E::Exp>, perm: &Vec<usize>, rng: T) -> ShuffleProof<E, E::Exp> {
+        r_primes: &Vec<E::Exp>, perm: &Vec<usize>, rng: T) -> ShuffleProof<E> {
     
         let group = &self.pk.group;
         
@@ -247,7 +247,7 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
         }
     }
 
-    pub fn check_proof(&self, proof: &ShuffleProof<E, E::Exp>, es: &Vec<Ciphertext<E>>, 
+    pub fn check_proof(&self, proof: &ShuffleProof<E>, es: &Vec<Ciphertext<E>>, 
         e_primes: &Vec<Ciphertext<E>>) -> bool {
         
         let group = &self.pk.group;
