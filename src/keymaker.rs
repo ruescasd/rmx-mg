@@ -41,12 +41,10 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
         (dec_factor, proof)
     }
 
-    pub fn combine_pks(&self, other: Vec<PublicKey<E, G>>) -> PublicKey<E, G> {
-        let group = &self.sk.group;
-
-        let mut acc: E = self.pk.value.clone();
-        for i in 0..other.len() {
-            acc = acc.mul(&other[i].value).modulo(&group.modulus());
+    pub fn combine_pks(group: &G, pks: Vec<PublicKey<E, G>>) -> PublicKey<E, G> {
+        let mut acc: E = pks[0].value.clone();
+        for i in 1..pks.len() {
+            acc = acc.mul(&pks[i].value).modulo(&group.modulus());
         }
 
         group.pk_from_value(acc)
@@ -63,62 +61,3 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
         c.a.div(&acc, &group.modulus()).modulo(&group.modulus())
     }
 }
-/* 
-use crate::ristretto_b::*;
-use crate::rug_b::*;
-use rand_core::OsRng;
-use rug::Integer;
-use curve25519_dalek::ristretto::RistrettoPoint;
-
-pub struct KeymakerRug<E: Element, G: Group<E, T>, T: RngCore + CryptoRng> {
-    sk: PrivateKey<E, T>,
-    pk: PublicKey<E, T>,
-    phantom: std::marker::PhantomData<T>
-}
-
-impl KeymakerRug {
-    pub fn gen(group: &RugGroup, rng: OsRng) -> KeymakerRug {
-        let sk = group.gen_key_conc(rng);
-        let pk = PublicKey::from(sk.public_value.clone(), group);
-        
-        KeymakerRug {
-            sk: sk,
-            pk: pk
-        }
-    }
-}
-
-impl Keymaker<Integer, OsRng> for KeymakerRug {
-    fn sk(&self) -> PrivateKey<Integer, OsRng> {
-        self.sk.clone()
-    }
-    fn pk(&self) -> PublicKey<Integer, OsRng> {
-        self.pk.clone()
-    }
-}
-
-pub struct KeymakerRistretto {
-    sk: PrivateKeyRistretto,
-    pk: PublicKeyRistretto
-}
-
-impl KeymakerRistretto {
-    pub fn gen(group: &RistrettoGroup, rng: OsRng) -> KeymakerRistretto {
-        let sk = group.gen_key_conc(rng);
-        let pk = PublicKey::from(sk.public_value, &group);
-        
-        KeymakerRistretto {
-            sk: sk,
-            pk: pk
-        }
-    }
-}
-
-impl Keymaker<RistrettoPoint, OsRng> for KeymakerRistretto {
-    fn sk(&self) -> Box<dyn PrivateK<RistrettoPoint, OsRng>> {
-        Box::new(self.sk.clone())
-    }
-    fn pk(&self) -> Box<dyn PublicK<RistrettoPoint, OsRng>> {
-        Box::new(self.pk.clone())
-    }
-}*/

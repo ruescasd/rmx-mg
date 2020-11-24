@@ -284,16 +284,17 @@ mod tests {
         
         let encoded = group.encode(plaintext.clone());
         
+        let pk1_value = &pk1.value.clone();
         let pk2_value = &pk2.value.clone();
-        let other = vec![pk2];
+        let pks = vec![pk1, pk2];
         
-        let pk_combined = km1.combine_pks(other);
+        let pk_combined = Keymaker::combine_pks(&group, pks);
         let c = pk_combined.encrypt(encoded.clone(), csprng);
         
         let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
         let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
         
-        let verified1 = group.cp_verify(&pk1.value, &dec_f1, &group.generator(), &c.b, &proof1);
+        let verified1 = group.cp_verify(pk1_value, &dec_f1, &group.generator(), &c.b, &proof1);
         let verified2 = group.cp_verify(pk2_value, &dec_f2, &group.generator(), &c.b, &proof2);
         assert!(verified1 == true);
         assert!(verified2 == true);
@@ -336,10 +337,11 @@ mod tests {
         
         let encoded = group.encode(plaintext.clone());
         
+        let pk1_value = &share1_d.share.value.clone();
         let pk2_value = &share2_d.share.value.clone();
-        let other = vec![share2_d.share];
+        let pks = vec![share1_d.share, share2_d.share];
         
-        let pk_combined = km1.combine_pks(other);
+        let pk_combined = Keymaker::combine_pks(&group, pks);
         let c = pk_combined.encrypt(encoded.clone(), csprng);
         
         let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
@@ -359,7 +361,7 @@ mod tests {
         let mut pd1_d: PartialDecryption<Integer> = bincode::deserialize(&pd1_b).unwrap();
         let mut pd2_d: PartialDecryption<Integer> = bincode::deserialize(&pd2_b).unwrap();
         
-        let verified1 = group.cp_verify(&share1_d.share.value, &pd1_d.pd_ballots[0], &group.generator(), 
+        let verified1 = group.cp_verify(pk1_value, &pd1_d.pd_ballots[0], &group.generator(), 
             &c.b, &pd1_d.proofs[0]);
         let verified2 = group.cp_verify(pk2_value, &pd2_d.pd_ballots[0], &group.generator(), 
             &c.b, &pd2_d.proofs[0]);
