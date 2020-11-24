@@ -314,18 +314,21 @@ mod tests {
         let (pk1, proof1) = km1.share(csprng);
         let (pk2, proof2) = km2.share(csprng);
 
-        let pk1_b = bincode::serialize(&pk1).unwrap();
-        let pk2_b = bincode::serialize(&pk2).unwrap();
-        let proof1_b = bincode::serialize(&proof1).unwrap();
-        let proof2_b = bincode::serialize(&proof2).unwrap();
-
-        let pk1_d: PublicKey<Integer, RugGroup> = bincode::deserialize(&pk1_b).unwrap();
-        let pk2_d: PublicKey<Integer, RugGroup> = bincode::deserialize(&pk2_b).unwrap();
-        let proof1_d: Schnorr<Integer> = bincode::deserialize(&proof1_b).unwrap();
-        let proof2_d: Schnorr<Integer> = bincode::deserialize(&proof2_b).unwrap();
+        let share1 = Keyshare {
+            share: pk1,
+            proof: proof1
+        };
+        let share2 = Keyshare {
+            share: pk2,
+            proof: proof2
+        };
+        let share1_b = bincode::serialize(&share1).unwrap();
+        let share2_b = bincode::serialize(&share2).unwrap();
+        let share1_d: Keyshare<Integer, RugGroup> = bincode::deserialize(&share1_b).unwrap();
+        let share2_d: Keyshare<Integer, RugGroup> = bincode::deserialize(&share2_b).unwrap();
         
-        let verified1 = group.schnorr_verify(&pk1_d.value, &group.generator(), &proof1_d);
-        let verified2 = group.schnorr_verify(&pk2_d.value, &group.generator(), &proof2_d);
+        let verified1 = group.schnorr_verify(&share1_d.share.value, &group.generator(), &share1_d.proof);
+        let verified2 = group.schnorr_verify(&share2_d.share.value, &group.generator(), &share2_d.proof);
         assert!(verified1 == true);
         assert!(verified2 == true);
         
@@ -333,8 +336,8 @@ mod tests {
         
         let encoded = group.encode(plaintext.clone());
         
-        let pk2_value = &pk2_d.value.clone();
-        let other = vec![pk2];
+        let pk2_value = &share2_d.share.value.clone();
+        let other = vec![share2_d.share];
         
         let pk_combined = km1.combine_pks(other);
         let c = pk_combined.encrypt(encoded.clone(), csprng);
@@ -342,22 +345,28 @@ mod tests {
         let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
         let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
 
-        let dec_f1_b = bincode::serialize(&dec_f1).unwrap();
-        let dec_f2_b = bincode::serialize(&dec_f2).unwrap();
-        let proof1_b = bincode::serialize(&proof1).unwrap();
-        let proof2_b = bincode::serialize(&proof2).unwrap();
+        let pd1 = PartialDecryption {
+            pd_ballots: vec![dec_f1],
+            proofs: vec![proof1]
+        };
+        let pd2 = PartialDecryption {
+            pd_ballots: vec![dec_f2],
+            proofs: vec![proof2]
+        };
 
-        let dec_f1_d: Integer = bincode::deserialize(&dec_f1_b).unwrap();
-        let dec_f2_d: Integer = bincode::deserialize(&dec_f2_b).unwrap();
-        let proof1_d: ChaumPedersen<Integer> = bincode::deserialize(&proof1_b).unwrap();
-        let proof2_d: ChaumPedersen<Integer> = bincode::deserialize(&proof2_b).unwrap();
+        let pd1_b = bincode::serialize(&pd1).unwrap();
+        let pd2_b = bincode::serialize(&pd2).unwrap();
+        let mut pd1_d: PartialDecryption<Integer> = bincode::deserialize(&pd1_b).unwrap();
+        let mut pd2_d: PartialDecryption<Integer> = bincode::deserialize(&pd2_b).unwrap();
         
-        let verified1 = group.cp_verify(&pk1_d.value, &dec_f1_d, &group.generator(), &c.b, &proof1_d);
-        let verified2 = group.cp_verify(pk2_value, &dec_f2_d, &group.generator(), &c.b, &proof2_d);
+        let verified1 = group.cp_verify(&share1_d.share.value, &pd1_d.pd_ballots[0], &group.generator(), 
+            &c.b, &pd1_d.proofs[0]);
+        let verified2 = group.cp_verify(pk2_value, &pd2_d.pd_ballots[0], &group.generator(), 
+            &c.b, &pd2_d.proofs[0]);
         assert!(verified1 == true);
         assert!(verified2 == true);
         
-        let decs = vec![dec_f1_d, dec_f2_d];
+        let decs = vec![pd1_d.pd_ballots.remove(0), pd2_d.pd_ballots.remove(0)];
         let d = km1.joint_dec(decs, c);
         
         assert_eq!(group.decode(d), plaintext);

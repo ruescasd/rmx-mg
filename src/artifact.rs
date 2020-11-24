@@ -32,7 +32,7 @@ pub struct Mix<E: Element> {
 
 #[derive(Serialize, Deserialize)]
 pub struct PartialDecryption<E: Element> {
-    pub partially_decrypted_ballots: Vec<Ciphertext<E>>,
+    pub pd_ballots: Vec<E>,
     pub proofs: Vec<ChaumPedersen<E>>
 }
 
@@ -43,7 +43,6 @@ mod tests {
     use crate::artifact::*;
     use rand_core::OsRng;
     use ed25519_dalek::Keypair;
-
 
     #[test]
     fn test_config_serde() {
