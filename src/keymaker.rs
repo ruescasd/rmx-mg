@@ -2,6 +2,7 @@ use crate::arithm::*;
 use crate::group::*;
 use crate::elgamal::*;
 use crate::rng::Rng;
+use rayon::prelude::*;
 
 pub struct Keymaker<E: Element, G: Group<E>> {
     sk: PrivateKey<E, G>,
@@ -41,6 +42,14 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
         (dec_factor, proof)
     }
 
+    pub fn decryption_factor_many<T: Rng + Copy>(&self, cs: Vec<&Ciphertext<E>>, rng: T) -> Vec<(E, ChaumPedersen<E>)> {
+        let decs_proofs: Vec<(E, ChaumPedersen<E>)> = cs.par_iter().map(|c| {
+            self.decryption_factor(c, rng)
+        }).collect();
+        
+        decs_proofs
+    }
+
     pub fn combine_pks(group: &G, pks: Vec<PublicKey<E, G>>) -> PublicKey<E, G> {
         let mut acc: E = pks[0].value.clone();
         for i in 1..pks.len() {
@@ -50,14 +59,28 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
         group.pk_from_value(acc)
     }
 
-    pub fn joint_dec(&self, decs: Vec<E>, c: Ciphertext<E>) -> E {
-        let group = &self.sk.group;
-        
+    pub fn joint_dec(group: &G, decs: Vec<E>, c: Ciphertext<E>) -> E {
         let mut acc: E = decs[0].clone();
         for i in 1..decs.len() {
             acc = acc.mul(&decs[i]).modulo(&group.modulus());
         }
 
         c.a.div(&acc, &group.modulus()).modulo(&group.modulus())
+    }
+
+    pub fn joint_dec_many(group: &G, decs: Vec<Vec<E>>, cs: Vec<Ciphertext<E>>) -> Vec<E> {
+        assert_eq!(decs.len(), cs.len());
+
+        let modulus = group.modulus();
+        let decrypted: Vec<E> = decs.par_iter().enumerate().map(|(i, ds)| {
+            let mut acc: E = ds[0].clone();
+            for i in 1..ds.len() {
+                acc = acc.mul(&ds[i]).modulo(&modulus);
+            }
+            cs[i].a.div(&acc, &modulus).modulo(&modulus)
+
+        }).collect();
+
+        decrypted
     }
 }

@@ -15,7 +15,7 @@ pub trait Group<E: Element>: Send + Sync + Sized + Clone {
     fn gen_key<T: Rng>(&self, rng: T) -> PrivateKey<E, Self>;
     fn pk_from_value(&self, value: E) -> PublicKey<E, Self>;
     fn encode(&self, plaintext: E::Plaintext) -> E;
-    fn decode(&self, ciphertext: E) -> E::Plaintext;
+    fn decode(&self, element: E) -> E::Plaintext;
     fn exp_hasher(&self) -> Box<dyn HashTo<E::Exp>>;
     
     fn schnorr_prove<T: Rng>(&self, secret: &E::Exp, public: &E, g: &E, rng: T) -> Schnorr<E> {

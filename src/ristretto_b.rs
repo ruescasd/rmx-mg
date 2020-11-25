@@ -145,8 +145,8 @@ impl Group<RistrettoPoint> for RistrettoGroup {
 
         panic!("Failed to encode {:?}", plaintext);
     }
-    fn decode(&self, ciphertext: RistrettoPoint) -> [u8; 16] {
-        let compressed = ciphertext.compress();
+    fn decode(&self, element: RistrettoPoint) -> [u8; 16] {
+        let compressed = element.compress();
         let slice = &compressed.as_bytes()[12..28];
         to_u8_16(slice.to_vec())
     }
@@ -380,7 +380,7 @@ mod tests {
         assert!(verified2 == true);
         
         let decs = vec![dec_f1, dec_f2];
-        let d = km1.joint_dec(decs, c);
+        let d = Keymaker::joint_dec(&group, decs, c);
         let recovered = String::from_utf8(group.decode(d).to_vec());
         assert_eq!(recovered.unwrap(), text);
     }
@@ -448,7 +448,7 @@ mod tests {
         assert!(verified2 == true);
         
         let decs = vec![pd1_d.pd_ballots.remove(0), pd2_d.pd_ballots.remove(0)];
-        let d = km1.joint_dec(decs, c);
+        let d = Keymaker::joint_dec(&group, decs, c);
 
         let recovered = String::from_utf8(group.decode(d).to_vec());
         assert_eq!(recovered.unwrap(), text);
@@ -470,14 +470,7 @@ mod tests {
         let sk = group.gen_key(csprng);
         let pk = PublicKey::from(&sk.public_value, &group);
 
-        let mut es: Vec<Ciphertext<RistrettoPoint>> = Vec::with_capacity(10);
-        
-        for _ in 0..10 {
-            let text = "16 byte message!";
-            let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
-            let c = pk.encrypt(plaintext, csprng);
-            es.push(c);
-        }
+        let es = Ballots::random_ristretto(10, &group).ciphertexts;
         
         let hs = generators(es.len() + 1, &group, csprng);
         let shuffler = Shuffler {
@@ -511,7 +504,7 @@ mod tests {
             generators: &hs,
             hasher: exp_hasher
         };
-        let ok_d = shuffler.check_proof(&mix_d.proof, &es_d, &mix_d.mixed_ballots);
+        let ok_d = shuffler_d.check_proof(&mix_d.proof, &es_d, &mix_d.mixed_ballots);
         
         assert!(ok_d == true);
     }

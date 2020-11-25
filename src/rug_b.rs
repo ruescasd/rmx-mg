@@ -83,7 +83,7 @@ impl<T: Rng> RandGen for OsRandgen<T> {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq, Debug)]
 pub struct RugGroup {
     pub generator: Integer,
     pub modulus: Integer,
@@ -148,12 +148,12 @@ impl Group<Integer> for RugGroup {
         // this syntax to disambiguate between traits
         Element::modulo(&product, &self.modulus())
     }
-    fn decode(&self, plaintext: Integer) -> Integer {
-        if plaintext > self.exp_modulus() {
-            (self.modulus() - plaintext) - 1
+    fn decode(&self, element: Integer) -> Integer {
+        if element > self.exp_modulus() {
+            (self.modulus() - element) - 1
         }
         else {
-            plaintext - 1
+            element - 1
         }
     }
     fn gen_key<T: Rng>(&self, rng: T) -> PrivateKey<Integer, Self> {
@@ -300,7 +300,7 @@ mod tests {
         assert!(verified2 == true);
         
         let decs = vec![dec_f1, dec_f2];
-        let d = km1.joint_dec(decs, c);
+        let d = Keymaker::joint_dec(&group, decs, c);
         
         assert_eq!(group.decode(d), plaintext);
     }
@@ -369,7 +369,7 @@ mod tests {
         assert!(verified2 == true);
         
         let decs = vec![pd1_d.pd_ballots.remove(0), pd2_d.pd_ballots.remove(0)];
-        let d = km1.joint_dec(decs, c);
+        let d = Keymaker::joint_dec(&group, decs, c);
         
         assert_eq!(group.decode(d), plaintext);
     }
@@ -383,13 +383,7 @@ mod tests {
         let sk = group.gen_key(csprng);
         let pk = PublicKey::from(&sk.public_value, &group);
 
-        let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(10);
-        
-        for _ in 0..10 {
-            let plaintext: Integer = group.encode(group.rnd_exp(csprng));
-            let c = pk.encrypt(plaintext, csprng);
-            es.push(c);
-        }
+        let es = Ballots::random_rug(10, &group).ciphertexts;
         
         let hs = generators(es.len() + 1, &group, csprng);
         let shuffler = Shuffler {

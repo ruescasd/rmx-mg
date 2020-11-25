@@ -6,13 +6,12 @@ use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
 use crate::shuffler::*;
+use crate::rug_b::RugGroup;
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct Config {
     pub id: [u8; 16],
-    pub generator: Option<Integer>,
-    pub modulus: Option<Integer>,
-    pub modulus_exp: Option<Integer>,
+    pub rug_group: Option<RugGroup>,
     pub contests: u32, 
     pub ballotbox: SignaturePublicKey, 
     pub trustees: Vec<SignaturePublicKey>
@@ -34,6 +33,56 @@ pub struct Mix<E: Element> {
 pub struct PartialDecryption<E: Element> {
     pub pd_ballots: Vec<E>,
     pub proofs: Vec<ChaumPedersen<E>>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Ballots<E: Element> {
+    pub ciphertexts: Vec<Ciphertext<E>>
+}
+
+use rand_core::OsRng;
+use curve25519_dalek::ristretto::{RistrettoPoint};
+
+impl Ballots<RistrettoPoint> {
+    pub fn random_ristretto<G: Group<RistrettoPoint>>(n: usize, group: &G) -> Ballots<RistrettoPoint> {
+        let csprng = OsRng;
+        let mut cs = Vec::with_capacity(n);
+        for _ in 0..n {
+            cs.push(
+                Ciphertext{
+                    a: group.rnd(csprng),
+                    b: group.rnd(csprng)
+                }
+            );
+        }   
+
+        Ballots {
+            ciphertexts: cs
+        }
+    }
+}
+impl Ballots<Integer> {
+    pub fn random_rug<G: Group<Integer>>(n: usize, group: &G) -> Ballots<Integer> {
+        let csprng = OsRng;
+        let mut cs = Vec::with_capacity(n);
+        for _ in 0..n {
+            cs.push(
+                Ciphertext{
+                    a: group.encode(group.rnd_exp(csprng)),
+                    b: group.encode(group.rnd_exp(csprng))
+                }
+            );
+        }   
+
+        Ballots {
+            ciphertexts: cs
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Plaintexts<E> {
+    plaintexts: Vec<E>
 }
 
 #[cfg(test)]
@@ -59,10 +108,8 @@ mod tests {
             trustee_pks.push(keypair.public);
         }
         let cfg = Config {
-            id: id.as_bytes().clone(), 
-            generator: Some(group.generator),
-            modulus: Some(group.modulus),
-            modulus_exp: Some(group.modulus_exp),
+            id: id.as_bytes().clone(),
+            rug_group: Some(group),
             contests: contests, 
             ballotbox: ballotbox_pk, 
             trustees: trustee_pks

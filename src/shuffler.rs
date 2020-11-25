@@ -68,7 +68,7 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
         let group = &self.pk.group;
         let length = perm.len();
         
-        let e_primes = perm.par_iter().enumerate().map(|(_, p)| {
+        let e_primes = perm.par_iter().map(|p| {
             let c = &ciphertexts[*p];
     
             let r = group.rnd_exp(rng);
