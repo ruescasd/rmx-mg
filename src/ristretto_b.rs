@@ -13,7 +13,7 @@ use crate::rng::Rng;
 
 impl Element for RistrettoPoint {
     type Exp = Scalar;
-    type Plaintext = [u8; 16];
+    type Plaintext = [u8; 30];
 
     fn mul(&self, other: &Self) -> Self {
         self + other
@@ -66,34 +66,21 @@ impl Exponent for Scalar {
 pub struct RistrettoGroup;
 
 impl RistrettoGroup {
-    fn encode_test(&self, plaintext: [u8; 16]) -> u32 {
-        let upper = [0u8; 12];
-        let mut id: u32 = 0;
-
-        for i in 0..100 {
-            let id_bytes = id.to_be_bytes();
-            
-            let mut bytes = upper.to_vec();
-            bytes.extend_from_slice(&plaintext);
-            bytes.extend_from_slice(&id_bytes);
-            
-            let cr = CompressedRistretto::from_slice(bytes.as_slice());
-            
-            let result = cr.decompress();
-            if result.is_some() {
-                return i + 1;
+    fn encode_test(&self, data: [u8;30]) -> (RistrettoPoint, usize) {
+        let mut bytes = [0u8; 32];
+        bytes[1..1 + data.len()].copy_from_slice(&data);
+        for j in 0..64 {
+            bytes[31] = j as u8;
+            for i in 0..128 {
+                bytes[0] = 2 * i as u8;
+                if let Some(point) = CompressedRistretto(bytes).decompress() {
+                    return (point, i + j * 128);
+                }
             }
-            
-            id = id + 1;
         }
-
-        panic!("Failed to encode {:?}", plaintext);
+        panic!("a very unlikely event occurred");
     }
-
-    /* pub fn gen_key_conc(&self, rng: OsRng) -> PrivateKeyRistretto {
-        let secret = self.rnd_exp(rng);
-        PrivateKey::from(secret, &self.clone())
-    }*/
+    
 }
 
 impl Group<RistrettoPoint> for RistrettoGroup {
@@ -112,20 +99,12 @@ impl Group<RistrettoPoint> for RistrettoGroup {
     fn exp_modulus(&self) -> Scalar {
         Scalar::default()
     }
-    fn encode(&self, plaintext: [u8; 16]) -> RistrettoPoint {
+    /* fn encode(&self, plaintext: [u8; 30]) -> RistrettoPoint {
         let upper = [0u8; 12];
         let mut id: u32 = 0;
 
         
-        // FIXME why is p = 1/4 and not 1/8 since ristretto uses cofactor 8 curve?
-        // Update: see 
-        // https://github.com/hdevalence/ristretto255-data-encoding/blob/master/src/main.rs
-        // https://github.com/dalek-cryptography/curve25519-dalek/issues/322
-        // 
-        //
-        // cdf geometric distribution: 1-(1-p)^k
-        // probability of sucess after 100 attempts:
-        // 1-(1-1/4)^100 = 0.9999999999996792797815
+        // see https://github.com/ruescasd/rmx-mg/issues/4
         for _i in 0..100 {
             let id_bytes = id.to_be_bytes();
                         
@@ -144,11 +123,25 @@ impl Group<RistrettoPoint> for RistrettoGroup {
         }
 
         panic!("Failed to encode {:?}", plaintext);
+    }*/
+    fn encode(&self, data: [u8; 30]) -> RistrettoPoint {
+        let mut bytes = [0u8; 32];
+        bytes[1..1 + data.len()].copy_from_slice(&data);
+        for j in 0..64 {
+            bytes[31] = j as u8;
+            for i in 0..128 {
+                bytes[0] = 2 * i as u8;
+                if let Some(point) = CompressedRistretto(bytes).decompress() {
+                    return point;
+                }
+            }
+        }
+        panic!("Failed to encode into ristretto point");
     }
-    fn decode(&self, element: RistrettoPoint) -> [u8; 16] {
+    fn decode(&self, element: RistrettoPoint) -> [u8; 30] {
         let compressed = element.compress();
-        let slice = &compressed.as_bytes()[12..28];
-        to_u8_16(slice.to_vec())
+        let slice = &compressed.as_bytes()[1..31];
+        to_u8_30(slice.to_vec())
     }
     fn gen_key<T: Rng>(&self, rng: T) -> PrivateKey<RistrettoPoint, Self> {
         let secret = self.rnd_exp(rng);
@@ -166,11 +159,11 @@ impl Group<RistrettoPoint> for RistrettoGroup {
 
 use std::convert::TryInto;
 
-pub fn to_u8_16<T>(v: Vec<T>) -> [T; 16] {
+pub fn to_u8_30<T>(v: Vec<T>) -> [T; 30] {
     let boxed_slice = v.into_boxed_slice();
-    let boxed_array: Box<[T; 16]> = match boxed_slice.try_into() {
+    let boxed_array: Box<[T; 30]> = match boxed_slice.try_into() {
         Ok(ba) => ba,
-        Err(o) => panic!("Expected a Vec of length {} but it was {}", 16, o.len()),
+        Err(o) => panic!("Expected a Vec of length 30 but it was {}", o.len()),
     };
     *boxed_array
 }
@@ -195,20 +188,21 @@ mod tests {
 
     #[test]
     fn test_ristretto_elgamal() {
-        let csprng = OsRng;
+        let mut csprng = OsRng;
         let group = RistrettoGroup;
         
         let sk = group.gen_key(csprng);
         let pk = PublicKey::from(&sk.public_value, &group);
         
-        let text = "16 byte message!";
-        let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
+        let mut fill = [0u8;30];
+        csprng.fill_bytes(&mut fill);
+        let plaintext = group.encode(to_u8_30(fill.to_vec()));
         
         let c = pk.encrypt(plaintext, csprng);    
         let d = sk.decrypt(&c);
         
-        let recovered = String::from_utf8(group.decode(d).to_vec());
-        assert_eq!(text, recovered.unwrap());
+        let recovered = group.decode(d).to_vec();
+        assert_eq!(fill.to_vec(), recovered);
     }
 
     #[test]
@@ -265,7 +259,7 @@ mod tests {
     #[test]
     fn test_ristretto_prob_encoding() {
         let mut csprng = OsRng;
-        let mut bytes = [00u8; 16];
+        let mut bytes = [00u8; 30];
         let group = RistrettoGroup;
 
         let iterations = 10000;
@@ -273,9 +267,9 @@ mod tests {
 
         let v: Vec<(f32, f32)> = (0..iterations).map(|i| {
             csprng.fill_bytes(&mut bytes);
-            let fixed = to_u8_16(bytes.to_vec());
+            let fixed = to_u8_30(bytes.to_vec());
         
-            (i as f32, group.encode_test(fixed) as f32)
+            (i as f32, group.encode_test(fixed).1 as f32)
         }).collect();
 
         let size: f32 = v.len() as f32;
@@ -326,14 +320,15 @@ mod tests {
 
     #[test]
     fn test_ristretto_vdecryption() {
-        let csprng = OsRng;
+        let mut csprng = OsRng;
         let group = RistrettoGroup;
         
         let sk = group.gen_key(csprng);
         let pk = PublicKey::from(&sk.public_value, &group);
         
-        let text = "16 byte message!";
-        let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
+        let mut fill = [0u8;30];
+        csprng.fill_bytes(&mut fill);
+        let plaintext = group.encode(to_u8_30(fill.to_vec()));
         
         let c = pk.encrypt(plaintext, csprng);    
         let (d, proof) = sk.decrypt_and_prove(&c, csprng);
@@ -341,14 +336,14 @@ mod tests {
         let dec_factor = c.a.div(&d, &group.modulus()).modulo(&group.modulus());
 
         let verified = group.cp_verify(&pk.value, &dec_factor, &group.generator(), &c.b, &proof);
-        let recovered = String::from_utf8(group.decode(d).to_vec());
+        let recovered = group.decode(d).to_vec();
         assert!(verified == true);
-        assert_eq!(recovered.unwrap(), text);
+        assert_eq!(fill.to_vec(), recovered);
     }
 
     #[test]
     fn test_ristretto_distributed() {
-        let csprng = OsRng;
+        let mut csprng = OsRng;
         let group = RistrettoGroup;
         
         let km1 = Keymaker::gen(&group, OsRng);
@@ -361,8 +356,9 @@ mod tests {
         assert!(verified1 == true);
         assert!(verified2 == true);
         
-        let text = "16 byte message!";
-        let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
+        let mut fill = [0u8;30];
+        csprng.fill_bytes(&mut fill);
+        let plaintext = group.encode(to_u8_30(fill.to_vec()));
         
         let pk1_value = &pk1.value.clone();
         let pk2_value = &pk2.value.clone();
@@ -381,13 +377,13 @@ mod tests {
         
         let decs = vec![dec_f1, dec_f2];
         let d = Keymaker::joint_dec(&group, decs, c);
-        let recovered = String::from_utf8(group.decode(d).to_vec());
-        assert_eq!(recovered.unwrap(), text);
+        let recovered = group.decode(d).to_vec();
+        assert_eq!(fill.to_vec(), recovered);
     }
     
     #[test]
     fn test_ristretto_distributed_serde() {
-        let csprng = OsRng;
+        let mut csprng = OsRng;
         let group = RistrettoGroup;
         
         let km1 = Keymaker::gen(&group, OsRng);
@@ -414,8 +410,9 @@ mod tests {
         assert!(verified1 == true);
         assert!(verified2 == true);
         
-        let text = "16 byte message!";
-        let plaintext = group.encode(to_u8_16(text.as_bytes().to_vec()));
+        let mut fill = [0u8;30];
+        csprng.fill_bytes(&mut fill);
+        let plaintext = group.encode(to_u8_30(fill.to_vec()));
         let pk1_value = &share1_d.share.value.clone();
         let pk2_value = &share2_d.share.value.clone();
         let pks = vec![share1_d.share, share2_d.share];
@@ -450,8 +447,8 @@ mod tests {
         let decs = vec![pd1_d.pd_ballots.remove(0), pd2_d.pd_ballots.remove(0)];
         let d = Keymaker::joint_dec(&group, decs, c);
 
-        let recovered = String::from_utf8(group.decode(d).to_vec());
-        assert_eq!(recovered.unwrap(), text);
+        let recovered = group.decode(d).to_vec();
+        assert_eq!(fill.to_vec(), recovered);
     }
 
     #[test]
