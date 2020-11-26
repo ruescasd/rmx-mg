@@ -42,10 +42,12 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
         (dec_factor, proof)
     }
 
-    pub fn decryption_factor_many<T: Rng + Copy>(&self, cs: Vec<&Ciphertext<E>>, rng: T) -> Vec<(E, ChaumPedersen<E>)> {
-        let decs_proofs: Vec<(E, ChaumPedersen<E>)> = cs.par_iter().map(|c| {
+    pub fn decryption_factor_many<T: Rng + Copy>(&self, cs: &Vec<Ciphertext<E>>, rng: T) -> 
+        (Vec<E>, Vec<ChaumPedersen<E>>) {
+        
+            let decs_proofs: (Vec<E>, Vec<ChaumPedersen<E>>) = cs.par_iter().map(|c| {
             self.decryption_factor(c, rng)
-        }).collect();
+        }).unzip();
         
         decs_proofs
     }
@@ -59,7 +61,7 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
         group.pk_from_value(acc)
     }
 
-    pub fn joint_dec(group: &G, decs: Vec<E>, c: Ciphertext<E>) -> E {
+    pub fn joint_dec(group: &G, decs: Vec<E>, c: &Ciphertext<E>) -> E {
         let mut acc: E = decs[0].clone();
         for i in 1..decs.len() {
             acc = acc.mul(&decs[i]).modulo(&group.modulus());
@@ -68,19 +70,31 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
         c.a.div(&acc, &group.modulus()).modulo(&group.modulus())
     }
 
-    pub fn joint_dec_many(group: &G, decs: Vec<Vec<E>>, cs: Vec<Ciphertext<E>>) -> Vec<E> {
-        assert_eq!(decs.len(), cs.len());
-
+    pub fn joint_dec_many(group: &G, decs: &Vec<Vec<E>>, cs: &Vec<Ciphertext<E>>) -> Vec<E> {
         let modulus = group.modulus();
-        let decrypted: Vec<E> = decs.par_iter().enumerate().map(|(i, ds)| {
-            let mut acc: E = ds[0].clone();
-            for i in 1..ds.len() {
-                acc = acc.mul(&ds[i]).modulo(&modulus);
+        let decrypted: Vec<E> = cs.par_iter().enumerate().map(|(i, c)| {
+            let mut acc: E = decs[0][i].clone();
+            for j in 1..decs.len() {
+                acc = acc.mul(&decs[j][i]).modulo(&modulus);
             }
-            cs[i].a.div(&acc, &modulus).modulo(&modulus)
+            c.a.div(&acc, &modulus).modulo(&modulus)
 
         }).collect();
 
         decrypted
+    }
+
+    // FIXME parallel
+    pub fn verify_decryption_factors(group: &G, pk_value: &E, ciphertexts: &Vec<Ciphertext<E>>, 
+        decs: &Vec<E>, proofs: &Vec<ChaumPedersen<E>>) -> bool {
+        
+        assert_eq!(decs.len(), proofs.len());
+        assert_eq!(decs.len(), ciphertexts.len());
+        let generator = group.generator();
+        let bools: Vec<bool> = (0..decs.len()).into_par_iter().map(|i| {
+            group.cp_verify(pk_value, &decs[i], &generator, &ciphertexts[i].b, &proofs[i])
+        }).collect();
+
+        !bools.contains(&false)
     }
 }

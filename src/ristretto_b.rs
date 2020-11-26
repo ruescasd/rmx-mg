@@ -376,7 +376,7 @@ mod tests {
         assert!(verified2 == true);
         
         let decs = vec![dec_f1, dec_f2];
-        let d = Keymaker::joint_dec(&group, decs, c);
+        let d = Keymaker::joint_dec(&group, decs, &c);
         let recovered = group.decode(d).to_vec();
         assert_eq!(fill.to_vec(), recovered);
     }
@@ -410,45 +410,56 @@ mod tests {
         assert!(verified1 == true);
         assert!(verified2 == true);
         
-        let mut fill = [0u8;30];
-        csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(to_u8_30(fill.to_vec()));
         let pk1_value = &share1_d.share.value.clone();
         let pk2_value = &share2_d.share.value.clone();
         let pks = vec![share1_d.share, share2_d.share];
         
         let pk_combined = Keymaker::combine_pks(&group, pks);
-        let c = pk_combined.encrypt(plaintext, csprng);
+        let mut cs = Vec::with_capacity(10);
+        let mut bs = Vec::with_capacity(10);
         
-        let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
-        let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
-
+        for _ in 0..10 {
+            let mut fill = [0u8;30];
+            csprng.fill_bytes(&mut fill);
+            let encoded = group.encode(to_u8_30(fill.to_vec()));
+            let c = pk_combined.encrypt(encoded, csprng);
+            bs.push(fill.to_vec());
+            cs.push(c);
+        }
+        
+        let (decs1, proofs1) = km1.decryption_factor_many(&cs, csprng);
+        let (decs2, proofs2) = km2.decryption_factor_many(&cs, csprng);
+        
         let pd1 = PartialDecryption {
-            pd_ballots: vec![dec_f1],
-            proofs: vec![proof1]
+            pd_ballots: decs1,
+            proofs: proofs1
         };
         let pd2 = PartialDecryption {
-            pd_ballots: vec![dec_f2],
-            proofs: vec![proof2]
+            pd_ballots: decs2,
+            proofs: proofs2
         };
-
+        
         let pd1_b = bincode::serialize(&pd1).unwrap();
         let pd2_b = bincode::serialize(&pd2).unwrap();
-        let mut pd1_d: PartialDecryption<RistrettoPoint> = bincode::deserialize(&pd1_b).unwrap();
-        let mut pd2_d: PartialDecryption<RistrettoPoint> = bincode::deserialize(&pd2_b).unwrap();
+        let pd1_d: PartialDecryption<RistrettoPoint> = bincode::deserialize(&pd1_b).unwrap();
+        let pd2_d: PartialDecryption<RistrettoPoint> = bincode::deserialize(&pd2_b).unwrap();
         
-        let verified1 = group.cp_verify(pk1_value, &pd1_d.pd_ballots[0], &group.generator(), 
-            &c.b, &pd1_d.proofs[0]);
-        let verified2 = group.cp_verify(pk2_value, &pd2_d.pd_ballots[0], &group.generator(), 
-            &c.b, &pd2_d.proofs[0]);
+        let verified1 = Keymaker::verify_decryption_factors(&group, pk1_value, &cs, 
+            &pd1_d.pd_ballots, &pd1_d.proofs);
+        let verified2 = Keymaker::verify_decryption_factors(&group, pk2_value, &cs, 
+                &pd2_d.pd_ballots, &pd2_d.proofs);
+        
         assert!(verified1 == true);
         assert!(verified2 == true);
         
-        let decs = vec![pd1_d.pd_ballots.remove(0), pd2_d.pd_ballots.remove(0)];
-        let d = Keymaker::joint_dec(&group, decs, c);
+        let decs = vec![pd1_d.pd_ballots, pd2_d.pd_ballots];
+        let ds = Keymaker::joint_dec_many(&group, &decs, &cs);
 
-        let recovered = group.decode(d).to_vec();
-        assert_eq!(fill.to_vec(), recovered);
+        let recovered: Vec<Vec<u8>> = ds.into_iter()
+            .map(|d| group.decode(d).to_vec())
+            .collect();
+        
+        assert_eq!(bs, recovered);
     }
 
     #[test]
