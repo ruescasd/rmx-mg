@@ -30,6 +30,10 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
 
     }
 
+    pub fn verify_share(group: &G, pk: &PublicKey<E, G>, proof: &Schnorr<E>) -> bool {
+        group.schnorr_verify(&pk.value, &group.generator(), &proof)
+    }
+
     pub fn combine_pks(group: &G, pks: Vec<PublicKey<E, G>>) -> PublicKey<E, G> {
         let mut acc: E = pks[0].value.clone();
         for i in 1..pks.len() {

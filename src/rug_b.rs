@@ -316,8 +316,8 @@ mod tests {
         let share1_d: Keyshare<Integer, RugGroup> = bincode::deserialize(&share1_b).unwrap();
         let share2_d: Keyshare<Integer, RugGroup> = bincode::deserialize(&share2_b).unwrap();
         
-        let verified1 = group.schnorr_verify(&share1_d.share.value, &group.generator(), &share1_d.proof);
-        let verified2 = group.schnorr_verify(&share2_d.share.value, &group.generator(), &share2_d.proof);
+        let verified1 = Keymaker::verify_share(&group, &share1_d.share, &share1_d.proof);
+        let verified2 = Keymaker::verify_share(&group, &share2_d.share, &share2_d.proof);
         assert!(verified1 == true);
         assert!(verified2 == true);
         
