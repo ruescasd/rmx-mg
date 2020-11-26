@@ -3,23 +3,22 @@ use std::marker::{Send, Sync};
 use crate::arithm::*;
 use crate::hashing::*;
 use crate::elgamal::*;
-use crate::rng::Rng;
 
 pub trait Group<E: Element>: Send + Sync + Sized + Clone {
     
     fn generator(&self) -> E;
-    fn rnd<T: Rng>(&self, rng: T) -> E;
+    fn rnd(&self) -> E;
     fn modulus(&self) -> E;
-    fn rnd_exp<T: Rng>(&self, rng: T) -> E::Exp;
+    fn rnd_exp(&self) -> E::Exp;
     fn exp_modulus(&self) -> E::Exp;
-    fn gen_key<T: Rng>(&self, rng: T) -> PrivateKey<E, Self>;
+    fn gen_key(&self) -> PrivateKey<E, Self>;
     fn pk_from_value(&self, value: E) -> PublicKey<E, Self>;
     fn encode(&self, plaintext: E::Plaintext) -> E;
     fn decode(&self, element: E) -> E::Plaintext;
     fn exp_hasher(&self) -> Box<dyn HashTo<E::Exp>>;
     
-    fn schnorr_prove<T: Rng>(&self, secret: &E::Exp, public: &E, g: &E, rng: T) -> Schnorr<E> {
-        let r = self.rnd_exp(rng);
+    fn schnorr_prove(&self, secret: &E::Exp, public: &E, g: &E) -> Schnorr<E> {
+        let r = self.rnd_exp();
         let commitment = g.mod_pow(&r, &self.modulus());
         let challenge: E::Exp = schnorr_proof_challenge(g, public, 
             &commitment, &*self.exp_hasher());
@@ -42,8 +41,8 @@ pub trait Group<E: Element>: Send + Sync + Sized + Clone {
         ok1 && ok2
     }
 
-    fn cp_prove<T: Rng>(&self, secret: &E::Exp, public1: &E, public2: &E, g1: &E, g2: &E, rng: T) -> ChaumPedersen<E> {
-        let r = self.rnd_exp(rng);
+    fn cp_prove(&self, secret: &E::Exp, public1: &E, public2: &E, g1: &E, g2: &E) -> ChaumPedersen<E> {
+        let r = self.rnd_exp();
         let commitment1 = g1.mod_pow(&r, &self.modulus());
         let commitment2 = g2.mod_pow(&r, &self.modulus());
         let challenge: E::Exp = cp_proof_challenge(g1, g2, public1, public2,

@@ -2,7 +2,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::arithm::*;
 use crate::group::*;
-use crate::rng::Rng;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Ciphertext<E: Element> {
@@ -17,9 +16,9 @@ pub struct PublicKey<E: Element, G: Group<E>> {
 }
 
 impl<E: Element, G: Group<E>> PublicKey<E, G> {
-    pub fn encrypt<T: Rng>(&self, plaintext: E, rng: T) -> Ciphertext<E> {
+    pub fn encrypt(&self, plaintext: E) -> Ciphertext<E> {
         
-        let randomness = self.group.rnd_exp(rng);
+        let randomness = self.group.rnd_exp();
         Ciphertext {
             a: plaintext.mul(&self.value.mod_pow(&randomness, &self.group.modulus()))
                 .modulo(&self.group.modulus()),
@@ -48,14 +47,13 @@ impl<E: Element, G: Group<E>> PrivateKey<E, G> {
         c.a.div(&c.b.mod_pow(&self.value, modulus), modulus)
             .modulo(modulus)
     }
-    pub fn decrypt_and_prove<T: Rng>
-        (&self, c: &Ciphertext<E>, rng: T) -> (E, ChaumPedersen<E>) {
+    pub fn decrypt_and_prove(&self, c: &Ciphertext<E>) -> (E, ChaumPedersen<E>) {
         let modulus = &self.group.modulus();
         
         let dec_factor = &c.b.mod_pow(&self.value, modulus);
 
         let proof = self.group.cp_prove(&self.value, &self.public_value, 
-            dec_factor, &self.group.generator(), &c.b, rng);
+            dec_factor, &self.group.generator(), &c.b);
         
         let decrypted = c.a.div(dec_factor, modulus)
             .modulo(modulus);

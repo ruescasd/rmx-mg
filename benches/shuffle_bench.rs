@@ -18,19 +18,18 @@ use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, Benchm
 fn shuffle_rug(n: usize) -> bool {
     let group = RugGroup::default();
     let exp_hasher = &*group.exp_hasher();
-    let csprng = OsRng;
         
-    let sk = group.gen_key(csprng);
+    let sk = group.gen_key();
     let pk = PublicKey::from(sk.public_value, &group);
     
     let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(n);
 
     for _ in 0..n {
-        let plaintext: Integer = group.encode(group.rnd_exp(csprng));
-        let c = pk.encrypt(plaintext, csprng);
+        let plaintext: Integer = group.encode(group.rnd_exp());
+        let c = pk.encrypt(plaintext);
         es.push(c);
     }
-    let hs = generators(es.len() + 1, &group, csprng);
+    let hs = generators(es.len() + 1, &group);
     let shuffler = Shuffler {
         pk: &pk,
         generators: &hs,
@@ -45,21 +44,20 @@ fn shuffle_rug(n: usize) -> bool {
 }
 
 fn shuffle_ristretto(n: usize) -> bool {
-    let csprng = OsRng;
     let group = RistrettoGroup;
     let exp_hasher = &*group.exp_hasher();
 
-    let sk = group.gen_key(csprng);
+    let sk = group.gen_key();
     let pk = PublicKey::from(sk.public_value, &group);
 
     let mut es = Vec::with_capacity(10);
 
     for _ in 0..n {
-        let plaintext = group.rnd(csprng);
-        let c = pk.encrypt(plaintext, csprng);
+        let plaintext = group.rnd();
+        let c = pk.encrypt(plaintext;
         es.push(c);
     }
-    let hs = generators(es.len() + 1, &group, csprng);
+    let hs = generators(es.len() + 1, &group);
     let shuffler = Shuffler {
         pk: &pk,
         generators: &hs,

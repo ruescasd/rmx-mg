@@ -1,3 +1,4 @@
+use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 
 use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
@@ -9,7 +10,6 @@ use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
 use crate::hashing::{HashTo, RistrettoHasher};
-use crate::rng::Rng;
 
 impl Element for RistrettoPoint {
     type Exp = Scalar;
@@ -87,43 +87,22 @@ impl Group<RistrettoPoint> for RistrettoGroup {
     fn generator(&self) -> RistrettoPoint {
         RISTRETTO_BASEPOINT_POINT
     }
-    fn rnd<T: Rng>(&self, mut rng: T) -> RistrettoPoint {
+    fn rnd(&self) -> RistrettoPoint {
+        let mut rng = OsRng;
         RistrettoPoint::random(&mut rng)
     }
     fn modulus(&self) -> RistrettoPoint {
         RistrettoPoint::default()
     }
-    fn rnd_exp<T: Rng>(&self, mut rng: T) -> Scalar {
+    fn rnd_exp(&self) -> Scalar {
+        let mut rng = OsRng;
         Scalar::random(&mut rng)
     }
     fn exp_modulus(&self) -> Scalar {
         Scalar::default()
     }
-    /* fn encode(&self, plaintext: [u8; 30]) -> RistrettoPoint {
-        let upper = [0u8; 12];
-        let mut id: u32 = 0;
 
-        
-        // see https://github.com/ruescasd/rmx-mg/issues/4
-        for _i in 0..100 {
-            let id_bytes = id.to_be_bytes();
-                        
-            let mut bytes = upper.to_vec();
-            bytes.extend_from_slice(&plaintext);
-            bytes.extend_from_slice(&id_bytes);
-            
-            let cr = CompressedRistretto::from_slice(bytes.as_slice());
-            
-            let result = cr.decompress();
-            if result.is_some() {
-                return result.unwrap();
-            }
-            
-            id = id + 1;
-        }
-
-        panic!("Failed to encode {:?}", plaintext);
-    }*/
+    // see https://github.com/ruescasd/rmx-mg/issues/4
     fn encode(&self, data: [u8; 30]) -> RistrettoPoint {
         let mut bytes = [0u8; 32];
         bytes[1..1 + data.len()].copy_from_slice(&data);
@@ -143,8 +122,8 @@ impl Group<RistrettoPoint> for RistrettoGroup {
         let slice = &compressed.as_bytes()[1..31];
         to_u8_30(slice.to_vec())
     }
-    fn gen_key<T: Rng>(&self, rng: T) -> PrivateKey<RistrettoPoint, Self> {
-        let secret = self.rnd_exp(rng);
+    fn gen_key(&self) -> PrivateKey<RistrettoPoint, Self> {
+        let secret = self.rnd_exp();
         PrivateKey::from(&secret, self)
     }
     fn pk_from_value(&self, value: RistrettoPoint) -> PublicKey<RistrettoPoint, Self> {
@@ -191,14 +170,14 @@ mod tests {
         let mut csprng = OsRng;
         let group = RistrettoGroup;
         
-        let sk = group.gen_key(csprng);
+        let sk = group.gen_key();
         let pk = PublicKey::from(&sk.public_value, &group);
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
         let plaintext = group.encode(to_u8_30(fill.to_vec()));
         
-        let c = pk.encrypt(plaintext, csprng);    
+        let c = pk.encrypt(plaintext);    
         let d = sk.decrypt(&c);
         
         let recovered = group.decode(d).to_vec();
@@ -287,33 +266,31 @@ mod tests {
 
     #[test]
     fn test_ristretto_schnorr() {
-        let csprng = OsRng;
         let group = RistrettoGroup;
         let g = group.generator();
-        let secret = group.rnd_exp(csprng);
+        let secret = group.rnd_exp();
         let public = g.mod_pow(&secret, &group.modulus());
-        let schnorr = group.schnorr_prove(&secret, &public, &g, csprng);
+        let schnorr = group.schnorr_prove(&secret, &public, &g);
         let verified = group.schnorr_verify(&public, &g, &schnorr);
         assert!(verified == true);
-        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
+        let public_false = group.generator().mod_pow(&group.rnd_exp(), &group.modulus());
         let verified_false = group.schnorr_verify(&public_false, &g, &schnorr);
         assert!(verified_false == false);
     }
 
     #[test]
     fn test_ristretto_chaumpedersen() {
-        let csprng = OsRng;
         let group = RistrettoGroup;
         let g1 = group.generator();
-        let g2 = group.rnd(csprng);
-        let secret = group.rnd_exp(csprng);
+        let g2 = group.rnd();
+        let secret = group.rnd_exp();
         let public1 = g1.mod_pow(&secret, &group.modulus());
         let public2 = g2.mod_pow(&secret, &group.modulus());
-        let proof = group.cp_prove(&secret, &public1, &public2, &g1, &g2, csprng);
+        let proof = group.cp_prove(&secret, &public1, &public2, &g1, &g2);
         let verified = group.cp_verify(&public1, &public2, &g1, &g2, &proof);
         
         assert!(verified == true);
-        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
+        let public_false = group.generator().mod_pow(&group.rnd_exp(), &group.modulus());
         let verified_false = group.cp_verify(&public1, &public_false, &g1, &g2, &proof);
         assert!(verified_false == false);
     }
@@ -323,15 +300,15 @@ mod tests {
         let mut csprng = OsRng;
         let group = RistrettoGroup;
         
-        let sk = group.gen_key(csprng);
+        let sk = group.gen_key();
         let pk = PublicKey::from(&sk.public_value, &group);
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
         let plaintext = group.encode(to_u8_30(fill.to_vec()));
         
-        let c = pk.encrypt(plaintext, csprng);    
-        let (d, proof) = sk.decrypt_and_prove(&c, csprng);
+        let c = pk.encrypt(plaintext);    
+        let (d, proof) = sk.decrypt_and_prove(&c);
 
         let dec_factor = c.a.div(&d, &group.modulus()).modulo(&group.modulus());
 
@@ -346,10 +323,10 @@ mod tests {
         let mut csprng = OsRng;
         let group = RistrettoGroup;
         
-        let km1 = Keymaker::gen(&group, OsRng);
-        let km2 = Keymaker::gen(&group, OsRng);
-        let (pk1, proof1) = km1.share(csprng);
-        let (pk2, proof2) = km2.share(csprng);
+        let km1 = Keymaker::gen(&group);
+        let km2 = Keymaker::gen(&group);
+        let (pk1, proof1) = km1.share();
+        let (pk2, proof2) = km2.share();
         
         let verified1 = group.schnorr_verify(&pk1.value, &group.generator(), &proof1);
         let verified2 = group.schnorr_verify(&pk2.value, &group.generator(), &proof2);
@@ -365,10 +342,10 @@ mod tests {
         let pks = vec![pk1, pk2];
         
         let pk_combined = Keymaker::combine_pks(&group, pks);
-        let c = pk_combined.encrypt(plaintext, csprng);
+        let c = pk_combined.encrypt(plaintext);
         
-        let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
-        let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
+        let (dec_f1, proof1) = km1.decryption_factor(&c);
+        let (dec_f2, proof2) = km2.decryption_factor(&c);
         
         let verified1 = group.cp_verify(pk1_value, &dec_f1, &group.generator(), &c.b, &proof1);
         let verified2 = group.cp_verify(pk2_value, &dec_f2, &group.generator(), &c.b, &proof2);
@@ -386,10 +363,10 @@ mod tests {
         let mut csprng = OsRng;
         let group = RistrettoGroup;
         
-        let km1 = Keymaker::gen(&group, OsRng);
-        let km2 = Keymaker::gen(&group, OsRng);
-        let (pk1, proof1) = km1.share(csprng);
-        let (pk2, proof2) = km2.share(csprng);
+        let km1 = Keymaker::gen(&group);
+        let km2 = Keymaker::gen(&group);
+        let (pk1, proof1) = km1.share();
+        let (pk2, proof2) = km2.share();
 
         let share1 = Keyshare {
             share: pk1,
@@ -422,13 +399,13 @@ mod tests {
             let mut fill = [0u8;30];
             csprng.fill_bytes(&mut fill);
             let encoded = group.encode(to_u8_30(fill.to_vec()));
-            let c = pk_combined.encrypt(encoded, csprng);
+            let c = pk_combined.encrypt(encoded);
             bs.push(fill.to_vec());
             cs.push(c);
         }
         
-        let (decs1, proofs1) = km1.decryption_factor_many(&cs, csprng);
-        let (decs2, proofs2) = km2.decryption_factor_many(&cs, csprng);
+        let (decs1, proofs1) = km1.decryption_factor_many(&cs);
+        let (decs2, proofs2) = km2.decryption_factor_many(&cs);
         
         let pd1 = PartialDecryption {
             pd_ballots: decs1,
@@ -471,23 +448,22 @@ mod tests {
 
     #[test]
     fn test_ristretto_shuffle_serde() {
-        let csprng = OsRng;
         let group = RistrettoGroup;
         let exp_hasher = &*group.exp_hasher();
         
-        let sk = group.gen_key(csprng);
+        let sk = group.gen_key();
         let pk = PublicKey::from(&sk.public_value, &group);
 
         let es = Ballots::random_ristretto(10, &group).ciphertexts;
         
-        let hs = generators(es.len() + 1, &group, csprng);
+        let hs = generators(es.len() + 1, &group);
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,
             hasher: exp_hasher
         };
-        let (e_primes, rs, perm) = shuffler.gen_shuffle(&es, csprng);
-        let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm, csprng);
+        let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
+        let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
         let ok = shuffler.check_proof(&proof, &es, &e_primes);
 
         let mix = Mix{

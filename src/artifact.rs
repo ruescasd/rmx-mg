@@ -1,4 +1,5 @@
 use ed25519_dalek::PublicKey as SignaturePublicKey;
+use curve25519_dalek::ristretto::{RistrettoPoint};
 use rug::Integer;
 use serde::{Deserialize, Serialize};
 
@@ -40,18 +41,17 @@ pub struct Ballots<E: Element> {
     pub ciphertexts: Vec<Ciphertext<E>>
 }
 
-use rand_core::OsRng;
-use curve25519_dalek::ristretto::{RistrettoPoint};
+
+
 
 impl Ballots<RistrettoPoint> {
     pub fn random_ristretto<G: Group<RistrettoPoint>>(n: usize, group: &G) -> Ballots<RistrettoPoint> {
-        let csprng = OsRng;
         let mut cs = Vec::with_capacity(n);
         for _ in 0..n {
             cs.push(
                 Ciphertext{
-                    a: group.rnd(csprng),
-                    b: group.rnd(csprng)
+                    a: group.rnd(),
+                    b: group.rnd()
                 }
             );
         }   
@@ -63,13 +63,12 @@ impl Ballots<RistrettoPoint> {
 }
 impl Ballots<Integer> {
     pub fn random_rug<G: Group<Integer>>(n: usize, group: &G) -> Ballots<Integer> {
-        let csprng = OsRng;
         let mut cs = Vec::with_capacity(n);
         for _ in 0..n {
             cs.push(
                 Ciphertext{
-                    a: group.encode(group.rnd_exp(csprng)),
-                    b: group.encode(group.rnd_exp(csprng))
+                    a: group.encode(group.rnd_exp()),
+                    b: group.encode(group.rnd_exp())
                 }
             );
         }   

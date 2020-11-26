@@ -1,14 +1,14 @@
 use rug::{
     rand::{RandGen, RandState},
-    Integer,
+    Integer
 };
+use rand_core::{RngCore, OsRng};
 use serde::{Deserialize, Serialize};
 
 use crate::hashing::{HashTo, RugHasher};
 use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
-use crate::rng::Rng;
 
 impl Element for Integer {
     type Exp = Integer;
@@ -75,9 +75,9 @@ impl Exponent for Integer {
     }
 }
 
-struct OsRandgen<T: Rng>(T);
+struct OsRandgen(OsRng);
 
-impl<T: Rng> RandGen for OsRandgen<T> {
+impl RandGen for OsRandgen {
     fn gen(&mut self) -> u32 {
         return self.0.next_u32();
     }
@@ -109,19 +109,14 @@ impl RugGroup {
             modulus_exp: q
         }
     }
-
-    /*pub fn gen_key_conc(&self, rng: OsRng) -> PrivateKeyRug {
-        let secret = self.rnd_exp(rng);
-        PrivateKey::from(secret, &self.clone())
-    }*/
 }
 
 impl Group<Integer> for RugGroup {
     fn generator(&self) -> Integer {
         self.generator.clone()
     }
-    fn rnd<T: Rng>(&self, _rng: T) -> Integer {
-        let mut gen  = OsRandgen(_rng);
+    fn rnd(&self) -> Integer {
+        let mut gen  = OsRandgen(OsRng);
         let mut state = RandState::new_custom(&mut gen);
         
         self.encode(self.modulus_exp.clone().random_below(&mut state))
@@ -129,8 +124,8 @@ impl Group<Integer> for RugGroup {
     fn modulus(&self) -> Integer {
         self.modulus.clone()
     }
-    fn rnd_exp<T: Rng>(&self, _rng: T) -> Integer {
-        let mut gen = OsRandgen(_rng);
+    fn rnd_exp(&self) -> Integer {
+        let mut gen = OsRandgen(OsRng);
         let mut state = RandState::new_custom(&mut gen);
         
         self.modulus_exp.clone().random_below(&mut state)
@@ -156,8 +151,8 @@ impl Group<Integer> for RugGroup {
             element - 1
         }
     }
-    fn gen_key<T: Rng>(&self, rng: T) -> PrivateKey<Integer, Self> {
-        let secret = self.rnd_exp(rng);
+    fn gen_key(&self) -> PrivateKey<Integer, Self> {
+        let secret = self.rnd_exp();
         PrivateKey::from(&secret, self)
     }
     fn pk_from_value(&self, value: Integer) -> PublicKey<Integer, Self> {
@@ -175,7 +170,6 @@ impl Group<Integer> for RugGroup {
 
 #[cfg(test)]
 mod tests {
-    use rand_core::{OsRng};
     use crate::rug_b::*;
     use crate::keymaker::*;
     use crate::shuffler::*;
@@ -191,72 +185,68 @@ mod tests {
 
     #[test]
     fn test_rug_elgamal() {
-        let csprng = OsRng;
         let group = RugGroup::default();
         
-        let sk = group.gen_key(csprng);
+        let sk = group.gen_key();
         let pk = PublicKey::from(&sk.public_value, &group);
 
-        let plaintext = group.rnd_exp(csprng);
+        let plaintext = group.rnd_exp();
         
         let encoded = group.encode(plaintext.clone());
-        let c = pk.encrypt(encoded.clone(), csprng);
+        let c = pk.encrypt(encoded.clone());
         let d = group.decode(sk.decrypt(&c));
         assert_eq!(d, plaintext);
 
         let zero = Integer::from(0);
         let encoded_zero = group.encode(zero.clone());
-        let c_zero = pk.encrypt(encoded_zero.clone(), csprng);
+        let c_zero = pk.encrypt(encoded_zero.clone());
         let d_zero = group.decode(sk.decrypt(&c_zero));
         assert_eq!(d_zero, zero);
     }
 
     #[test]
     fn test_rug_schnorr() {
-        let csprng = OsRng;
         let group = RugGroup::default();
         let g = group.generator();
-        let secret = group.rnd_exp(csprng);
+        let secret = group.rnd_exp();
         let public = g.mod_pow(&secret, &group.modulus());
-        let schnorr = group.schnorr_prove(&secret, &public, &g, csprng);
+        let schnorr = group.schnorr_prove(&secret, &public, &g);
         let verified = group.schnorr_verify(&public, &g, &schnorr);
         assert!(verified == true);
-        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
+        let public_false = group.generator().mod_pow(&group.rnd_exp(), &group.modulus());
         let verified_false = group.schnorr_verify(&public_false, &g, &schnorr);
         assert!(verified_false == false);
     }
 
     #[test]
     fn test_rug_chaumpedersen() {
-        let csprng = OsRng;
         let group = RugGroup::default();
         let g1 = group.generator();
-        let g2 = group.rnd(csprng);
-        let secret = group.rnd_exp(csprng);
+        let g2 = group.rnd();
+        let secret = group.rnd_exp();
         let public1 = g1.mod_pow(&secret, &group.modulus());
         let public2 = g2.mod_pow(&secret, &group.modulus());
-        let proof = group.cp_prove(&secret, &public1, &public2, &g1, &g2, csprng);
+        let proof = group.cp_prove(&secret, &public1, &public2, &g1, &g2);
         let verified = group.cp_verify(&public1, &public2, &g1, &g2, &proof);
         
         assert!(verified == true);
-        let public_false = group.generator().mod_pow(&group.rnd_exp(csprng), &group.modulus());
+        let public_false = group.generator().mod_pow(&group.rnd_exp(), &group.modulus());
         let verified_false = group.cp_verify(&public1, &public_false, &g1, &g2, &proof);
         assert!(verified_false == false);
     }
 
     #[test]
     fn test_rug_vdecryption() {
-        let csprng = OsRng;
         let group = RugGroup::default();
         
-        let sk = group.gen_key(csprng);
+        let sk = group.gen_key();
         let pk = PublicKey::from(&sk.public_value, &group);
 
-        let plaintext = group.rnd_exp(csprng);
+        let plaintext = group.rnd_exp();
         
         let encoded = group.encode(plaintext.clone());
-        let c = pk.encrypt(encoded.clone(), csprng);
-        let (d, proof) = sk.decrypt_and_prove(&c, csprng);
+        let c = pk.encrypt(encoded.clone());
+        let (d, proof) = sk.decrypt_and_prove(&c);
 
         let dec_factor =  Element::modulo(&c.a.div(&d, &group.modulus()), &group.modulus());
         let verified = group.cp_verify(&pk.value, &dec_factor, &group.generator(), &c.b, &proof);
@@ -267,20 +257,19 @@ mod tests {
 
     #[test]
     fn test_rug_distributed() {
-        let csprng = OsRng;
         let group = RugGroup::default();
         
-        let km1 = Keymaker::gen(&group, OsRng);
-        let km2 = Keymaker::gen(&group, OsRng);
-        let (pk1, proof1) = km1.share(csprng);
-        let (pk2, proof2) = km2.share(csprng);
+        let km1 = Keymaker::gen(&group);
+        let km2 = Keymaker::gen(&group);
+        let (pk1, proof1) = km1.share();
+        let (pk2, proof2) = km2.share();
         
         let verified1 = group.schnorr_verify(&pk1.value, &group.generator(), &proof1);
         let verified2 = group.schnorr_verify(&pk2.value, &group.generator(), &proof2);
         assert!(verified1 == true);
         assert!(verified2 == true);
         
-        let plaintext = group.rnd_exp(csprng);
+        let plaintext = group.rnd_exp();
         
         let encoded = group.encode(plaintext.clone());
         
@@ -289,10 +278,10 @@ mod tests {
         let pks = vec![pk1, pk2];
         
         let pk_combined = Keymaker::combine_pks(&group, pks);
-        let c = pk_combined.encrypt(encoded.clone(), csprng);
+        let c = pk_combined.encrypt(encoded.clone());
         
-        let (dec_f1, proof1) = km1.decryption_factor(&c, csprng);
-        let (dec_f2, proof2) = km2.decryption_factor(&c, csprng);
+        let (dec_f1, proof1) = km1.decryption_factor(&c);
+        let (dec_f2, proof2) = km2.decryption_factor(&c);
         
         let verified1 = group.cp_verify(pk1_value, &dec_f1, &group.generator(), &c.b, &proof1);
         let verified2 = group.cp_verify(pk2_value, &dec_f2, &group.generator(), &c.b, &proof2);
@@ -307,13 +296,12 @@ mod tests {
 
     #[test]
     fn test_rug_distributed_serde() {
-        let csprng = OsRng;
         let group = RugGroup::default();
         
-        let km1 = Keymaker::gen(&group, OsRng);
-        let km2 = Keymaker::gen(&group, OsRng);
-        let (pk1, proof1) = km1.share(csprng);
-        let (pk2, proof2) = km2.share(csprng);
+        let km1 = Keymaker::gen(&group);
+        let km2 = Keymaker::gen(&group);
+        let (pk1, proof1) = km1.share();
+        let (pk2, proof2) = km2.share();
 
         let share1 = Keyshare {
             share: pk1,
@@ -341,15 +329,15 @@ mod tests {
         let mut cs = Vec::with_capacity(10);
         let mut bs = Vec::with_capacity(10);
         for _ in 0..10 {
-            let plaintext = group.rnd_exp(csprng);
+            let plaintext = group.rnd_exp();
             let encoded = group.encode(plaintext.clone());
-            let c = pk_combined.encrypt(encoded, csprng);
+            let c = pk_combined.encrypt(encoded);
             bs.push(plaintext);
             cs.push(c);
         }
         
-        let (decs1, proofs1) = km1.decryption_factor_many(&cs, csprng);
-        let (decs2, proofs2) = km2.decryption_factor_many(&cs, csprng);
+        let (decs1, proofs1) = km1.decryption_factor_many(&cs);
+        let (decs2, proofs2) = km2.decryption_factor_many(&cs);
 
         let pd1 = PartialDecryption {
             pd_ballots: decs1,
@@ -383,23 +371,22 @@ mod tests {
 
     #[test]
     fn test_rug_shuffle_serde() {
-        let csprng = OsRng;
         let group = RugGroup::default();
         let exp_hasher = &*group.exp_hasher();
         
-        let sk = group.gen_key(csprng);
+        let sk = group.gen_key();
         let pk = PublicKey::from(&sk.public_value, &group);
 
         let es = Ballots::random_rug(10, &group).ciphertexts;
         
-        let hs = generators(es.len() + 1, &group, csprng);
+        let hs = generators(es.len() + 1, &group);
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,
             hasher: exp_hasher
         };
-        let (e_primes, rs, perm) = shuffler.gen_shuffle(&es, csprng);
-        let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm, csprng);
+        let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
+        let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
         let ok = shuffler.check_proof(&proof, &es, &e_primes);
         assert!(ok == true);
 
