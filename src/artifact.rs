@@ -41,8 +41,11 @@ pub struct Ballots<E: Element> {
     pub ciphertexts: Vec<Ciphertext<E>>
 }
 
-
-
+#[derive(Serialize, Deserialize)]
+pub struct EncryptedPrivateKey {
+    pub bytes: Vec<u8>,
+    pub iv: Vec<u8>
+}
 
 impl Ballots<RistrettoPoint> {
     pub fn random_ristretto<G: Group<RistrettoPoint>>(n: usize, group: &G) -> Ballots<RistrettoPoint> {

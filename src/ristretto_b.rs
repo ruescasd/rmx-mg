@@ -164,6 +164,7 @@ mod tests {
     use crate::ristretto_b::*;
     use crate::shuffler::*;
     use crate::artifact::*;
+    use crate::symmetric;
 
     #[test]
     fn test_ristretto_elgamal() {
@@ -485,5 +486,28 @@ mod tests {
         let ok_d = shuffler_d.check_proof(&mix_d.proof, &es_d, &mix_d.mixed_ballots);
         
         assert!(ok_d == true);
+    }
+
+    #[test]
+    fn test_ristretto_encrypted_pk() {
+        let mut csprng = OsRng;
+        let group = RistrettoGroup;
+        
+        let sk = group.gen_key();
+        let pk = PublicKey::from(&sk.public_value, &group);
+        
+        let mut fill = [0u8;30];
+        csprng.fill_bytes(&mut fill);
+        let plaintext = group.encode(to_u8_30(fill.to_vec()));
+        let c = pk.encrypt(plaintext);
+        let sym_key = symmetric::gen_key();
+        let enc_sk = sk.to_encrypted(sym_key);
+        let enc_sk_b = bincode::serialize(&enc_sk).unwrap();
+        let enc_sk_d: EncryptedPrivateKey = bincode::deserialize(&enc_sk_b).unwrap();
+        let sk_d = PrivateKey::from_encrypted(sym_key, enc_sk_d, &group);
+        let d = sk_d.decrypt(&c);
+        
+        let recovered = group.decode(d).to_vec();
+        assert_eq!(fill.to_vec(), recovered);
     }
 }

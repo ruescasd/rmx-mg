@@ -4,7 +4,7 @@ use serde::de::{DeserializeOwned};
 use crate::hashing::{HashBytes};
 
 pub trait Element: HashBytes + Clone + Send + Sync {
-    type Exp: Exponent + Serialize + DeserializeOwned;
+    type Exp: Exponent;
     type Plaintext;
     
     fn mul(&self, other: &Self) -> Self;
@@ -16,7 +16,7 @@ pub trait Element: HashBytes + Clone + Send + Sync {
     fn mul_identity() -> Self;
 }
 
-pub trait Exponent: Clone + Send + Sync {
+pub trait Exponent: Clone + Send + Sync + Serialize + DeserializeOwned {
     fn add(&self, other: &Self) -> Self;
     fn sub(&self, other: &Self) -> Self;
     fn neg(&self) -> Self;
@@ -26,4 +26,7 @@ pub trait Exponent: Clone + Send + Sync {
     
     fn add_identity() -> Self;
     fn mul_identity() -> Self;
+    // needed to encrypt private keys
+    // fn to_bytes(&self) -> Vec<u8>;
+    // fn from_bytes(bytes: Vec<u8>) -> Vec<u8>;
 }

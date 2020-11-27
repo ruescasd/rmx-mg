@@ -2,6 +2,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::arithm::*;
 use crate::group::*;
+use crate::artifact::EncryptedPrivateKey;
+use crate::symmetric;
+use generic_array::{typenum::U32, typenum::U16, GenericArray};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Ciphertext<E: Element> {
@@ -69,6 +72,25 @@ impl<E: Element, G: Group<E>> PrivateKey<E, G> {
         let public_value = group.generator().mod_pow(&secret, &group.modulus());
         PrivateKey {
             value: secret.clone(),
+            group: group.clone(),
+            public_value: public_value
+        }
+    }
+    pub fn to_encrypted(&self, key: GenericArray<u8, U32>) -> EncryptedPrivateKey {
+        let key_bytes = bincode::serialize(&self.value).unwrap();
+        let (b, iv) = symmetric::encrypt(key, &key_bytes);
+        EncryptedPrivateKey {
+            bytes: b,
+            iv: iv
+        }
+    }
+    pub fn from_encrypted(key: GenericArray<u8, U32>, encrypted: EncryptedPrivateKey, group: &G) -> PrivateKey<E, G> {
+        let key_bytes = symmetric::decrypt(key, &encrypted.iv, &encrypted.bytes);
+        let value: E::Exp = bincode::deserialize(&key_bytes).unwrap();
+        let public_value = group.generator().mod_pow(&value, &group.modulus());
+
+        PrivateKey {
+            value: value.clone(),
             group: group.clone(),
             public_value: public_value
         }

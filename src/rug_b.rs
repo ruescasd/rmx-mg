@@ -174,6 +174,7 @@ mod tests {
     use crate::keymaker::*;
     use crate::shuffler::*;
     use crate::artifact::*;
+    use crate::symmetric;
 
     #[test]
     #[should_panic]
@@ -413,5 +414,26 @@ mod tests {
         let ok_d = shuffler_d.check_proof(&mix_d.proof, &es_d, &mix_d.mixed_ballots);
 
         assert!(ok_d == true);
+    }
+
+    #[test]
+    fn test_rug_encrypted_pk() {
+        let group = RugGroup::default();
+        
+        let sk = group.gen_key();
+        let pk = PublicKey::from(&sk.public_value, &group);
+
+        let plaintext = group.rnd_exp();
+        
+        let encoded = group.encode(plaintext.clone());
+        let c = pk.encrypt(encoded.clone());
+        
+        let sym_key = symmetric::gen_key();
+        let enc_sk = sk.to_encrypted(sym_key);
+        let enc_sk_b = bincode::serialize(&enc_sk).unwrap();
+        let enc_sk_d: EncryptedPrivateKey = bincode::deserialize(&enc_sk_b).unwrap();
+        let sk_d = PrivateKey::from_encrypted(sym_key, enc_sk_d, &group);
+        let d = group.decode(sk_d.decrypt(&c));
+        assert_eq!(d, plaintext);
     }
 }
