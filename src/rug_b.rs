@@ -175,6 +175,7 @@ mod tests {
     use crate::shuffler::*;
     use crate::artifact::*;
     use crate::symmetric;
+    use crate::util;
 
     #[test]
     #[should_panic]
@@ -378,7 +379,7 @@ mod tests {
         let sk = group.gen_key();
         let pk = PublicKey::from(&sk.public_value, &group);
 
-        let es = Ballots::random_rug(10, &group).ciphertexts;
+        let es = util::random_rug_ballots(10, &group).ciphertexts;
         
         let hs = generators(es.len() + 1, &group);
         let shuffler = Shuffler {

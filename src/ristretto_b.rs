@@ -10,6 +10,7 @@ use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
 use crate::hashing::{HashTo, RistrettoHasher};
+use crate::util;
 
 impl Element for RistrettoPoint {
     type Exp = Scalar;
@@ -120,7 +121,7 @@ impl Group<RistrettoPoint> for RistrettoGroup {
     fn decode(&self, element: RistrettoPoint) -> [u8; 30] {
         let compressed = element.compress();
         let slice = &compressed.as_bytes()[1..31];
-        to_u8_30(slice.to_vec())
+        util::to_u8_30(slice.to_vec())
     }
     fn gen_key(&self) -> PrivateKey<RistrettoPoint, Self> {
         let secret = self.rnd_exp();
@@ -134,17 +135,6 @@ impl Group<RistrettoPoint> for RistrettoGroup {
         Box::new(RistrettoHasher)
     }
     
-}
-
-use std::convert::TryInto;
-
-pub fn to_u8_30<T>(v: Vec<T>) -> [T; 30] {
-    let boxed_slice = v.into_boxed_slice();
-    let boxed_array: Box<[T; 30]> = match boxed_slice.try_into() {
-        Ok(ba) => ba,
-        Err(o) => panic!("Expected a Vec of length 30 but it was {}", o.len()),
-    };
-    *boxed_array
 }
 
 
@@ -165,6 +155,7 @@ mod tests {
     use crate::shuffler::*;
     use crate::artifact::*;
     use crate::symmetric;
+    use crate::util;
 
     #[test]
     fn test_ristretto_elgamal() {
@@ -176,7 +167,7 @@ mod tests {
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(to_u8_30(fill.to_vec()));
+        let plaintext = group.encode(util::to_u8_30(fill.to_vec()));
         
         let c = pk.encrypt(plaintext);    
         let d = sk.decrypt(&c);
@@ -240,7 +231,7 @@ mod tests {
 
         let v: Vec<(f32, f32)> = (0..iterations).map(|i| {
             csprng.fill_bytes(&mut bytes);
-            let fixed = to_u8_30(bytes.to_vec());
+            let fixed = util::to_u8_30(bytes.to_vec());
         
             (i as f32, group.encode_test(fixed).1 as f32)
         }).collect();
@@ -299,7 +290,7 @@ mod tests {
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(to_u8_30(fill.to_vec()));
+        let plaintext = group.encode(util::to_u8_30(fill.to_vec()));
         
         let c = pk.encrypt(plaintext);    
         let (d, proof) = sk.decrypt_and_prove(&c);
@@ -329,7 +320,7 @@ mod tests {
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(to_u8_30(fill.to_vec()));
+        let plaintext = group.encode(util::to_u8_30(fill.to_vec()));
         
         let pk1_value = &pk1.value.clone();
         let pk2_value = &pk2.value.clone();
@@ -393,7 +384,7 @@ mod tests {
         for _ in 0..10 {
             let mut fill = [0u8;30];
             csprng.fill_bytes(&mut fill);
-            let encoded = group.encode(to_u8_30(fill.to_vec()));
+            let encoded = group.encode(util::to_u8_30(fill.to_vec()));
             let c = pk_combined.encrypt(encoded);
             bs.push(fill.to_vec());
             cs.push(c);
@@ -449,7 +440,7 @@ mod tests {
         let sk = group.gen_key();
         let pk = PublicKey::from(&sk.public_value, &group);
 
-        let es = Ballots::random_ristretto(10, &group).ciphertexts;
+        let es = util::random_ristretto_ballots(10, &group).ciphertexts;
         
         let hs = generators(es.len() + 1, &group);
         let shuffler = Shuffler {
@@ -498,7 +489,7 @@ mod tests {
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(to_u8_30(fill.to_vec()));
+        let plaintext = group.encode(util::to_u8_30(fill.to_vec()));
         let c = pk.encrypt(plaintext);
         let sym_key = symmetric::gen_key();
         let enc_sk = sk.to_encrypted(sym_key);

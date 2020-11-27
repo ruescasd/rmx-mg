@@ -150,3 +150,26 @@ pub fn hash<T: HashBytes>(data: T) -> Vec<u8> {
     hasher.update(bytes);
     hasher.finalize().to_vec()
 }
+
+
+#[cfg(test)]
+mod tests {  
+    use hex_literal::hex;
+    use sha2::{Sha512, Digest};
+    
+    #[test]
+    fn test_sha512() {
+        
+        // create a Sha256 object
+        let mut hasher = Sha512::new();
+
+        // write input message
+        hasher.update(b"hello world");
+
+        // read hash digest and consume hasher
+        let mut result = [0u8;64];
+        let bytes = hasher.finalize();
+        result.copy_from_slice(bytes.as_slice());
+    }
+
+}

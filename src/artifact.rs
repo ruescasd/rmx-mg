@@ -1,6 +1,5 @@
 use ed25519_dalek::PublicKey as SignaturePublicKey;
 use curve25519_dalek::ristretto::{RistrettoPoint};
-use rug::Integer;
 use serde::{Deserialize, Serialize};
 
 use crate::arithm::*;
@@ -19,9 +18,84 @@ pub struct Config {
 }
 
 #[derive(Serialize, Deserialize)]
+pub struct ConfigStatement {
+    _stmt: [u8; 6],
+    pub config_hash: Vec<u8>
+}
+impl ConfigStatement {
+    fn new(config_hash: Vec<u8>) -> ConfigStatement {
+        ConfigStatement {
+            _stmt: *b"config",
+            config_hash: config_hash
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
 pub struct Keyshare<E: Element, G: Group<E>> {
     pub share: PublicKey<E, G>,
     pub proof: Schnorr<E>
+}
+#[derive(Serialize, Deserialize)]
+pub struct KeyshareStatement {
+    _stmt: [u8; 8],
+    pub config_hash: Vec<u8>,
+    pub keyshare_hash: Vec<u8>
+}
+impl KeyshareStatement {
+    fn new(config_hash: Vec<u8>, keyshare_hash: Vec<u8>) -> KeyshareStatement {
+        KeyshareStatement {
+            _stmt: *b"keyshare",
+            config_hash: config_hash,
+            keyshare_hash: keyshare_hash
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct EncryptedPrivateKey {
+    pub bytes: Vec<u8>,
+    pub iv: Vec<u8>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Pk<E: Element, G: Group<E>> {
+    pub value: PublicKey<E, G>,
+}
+#[derive(Serialize, Deserialize)]
+pub struct PkStatement {
+    _stmt: [u8; 2],
+    pub config_hash: Vec<u8>,
+    pub public_key_hash: Vec<u8>
+}
+impl PkStatement {
+    fn new(config_hash: Vec<u8>, public_key_hash: Vec<u8>) -> PkStatement {
+        PkStatement {
+            _stmt: *b"pk",
+            config_hash: config_hash,
+            public_key_hash: public_key_hash
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Ballots<E: Element> {
+    pub ciphertexts: Vec<Ciphertext<E>>
+}
+#[derive(Serialize, Deserialize)]
+pub struct BallotsStatement {
+    _stmt: [u8; 7],
+    pub config_hash: Vec<u8>,
+    pub ballots_hash: Vec<u8>
+}
+impl BallotsStatement {
+    fn new(config_hash: Vec<u8>, ballots_hash: Vec<u8>) -> BallotsStatement {
+        BallotsStatement {
+            _stmt: *b"ballots",
+            config_hash: config_hash,
+            ballots_hash: ballots_hash
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -34,52 +108,6 @@ pub struct Mix<E: Element> {
 pub struct PartialDecryption<E: Element> {
     pub pd_ballots: Vec<E>,
     pub proofs: Vec<ChaumPedersen<E>>
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Ballots<E: Element> {
-    pub ciphertexts: Vec<Ciphertext<E>>
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct EncryptedPrivateKey {
-    pub bytes: Vec<u8>,
-    pub iv: Vec<u8>
-}
-
-impl Ballots<RistrettoPoint> {
-    pub fn random_ristretto<G: Group<RistrettoPoint>>(n: usize, group: &G) -> Ballots<RistrettoPoint> {
-        let mut cs = Vec::with_capacity(n);
-        for _ in 0..n {
-            cs.push(
-                Ciphertext{
-                    a: group.rnd(),
-                    b: group.rnd()
-                }
-            );
-        }   
-
-        Ballots {
-            ciphertexts: cs
-        }
-    }
-}
-impl Ballots<Integer> {
-    pub fn random_rug<G: Group<Integer>>(n: usize, group: &G) -> Ballots<Integer> {
-        let mut cs = Vec::with_capacity(n);
-        for _ in 0..n {
-            cs.push(
-                Ciphertext{
-                    a: group.encode(group.rnd_exp()),
-                    b: group.encode(group.rnd_exp())
-                }
-            );
-        }   
-
-        Ballots {
-            ciphertexts: cs
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize)]

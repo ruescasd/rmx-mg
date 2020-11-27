@@ -37,7 +37,6 @@ trait Names {
     fn plaintexts_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/plaintexts.stmt", auth, contest).to_string() }
     fn plaintexts_sig(contest: u32, auth: u32) -> String { format!("{}/{}/plaintexts.sig", auth, contest).to_string() }
     
-    
     fn auth_error(auth: u32) -> String { format!("{}/error", auth).to_string() }
 }
 
