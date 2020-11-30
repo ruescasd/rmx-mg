@@ -12,6 +12,6 @@ pub mod git;
 pub mod bb;
 pub mod protocol;
 pub mod artifact;
+pub mod util;
 mod rng;
 mod symmetric;
-mod util;
