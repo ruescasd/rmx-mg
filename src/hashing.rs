@@ -69,7 +69,7 @@ impl HashBytes for Scalar {
 
 impl HashBytes for Integer {
     fn get_bytes(&self) -> Vec<u8> {
-        self.to_digits::<u8>(Order::Lsf)
+        self.to_digits::<u8>(Order::LsfLe)
     }
 }
 
@@ -99,7 +99,7 @@ pub fn shuffle_proof_us<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciph
     for i in 0..n {
         let next_bytes: Vec<u8> = [
             prefix, 
-            i.to_be_bytes().to_vec().as_slice()
+            i.to_le_bytes().to_vec().as_slice()
         ].concat();    
         
         let u: E::Exp = exp_hasher.hash_to(&next_bytes);
@@ -156,6 +156,11 @@ pub fn hash<T: HashBytes>(data: T) -> Vec<u8> {
 mod tests {  
     use hex_literal::hex;
     use sha2::{Sha512, Digest};
+    use rand_core::{RngCore, OsRng};
+    use rug::{
+        Integer,
+        integer::Order
+    };
     
     #[test]
     fn test_sha512() {
@@ -170,6 +175,19 @@ mod tests {
         let mut result = [0u8;64];
         let bytes = hasher.finalize();
         result.copy_from_slice(bytes.as_slice());
+    }
+
+    #[test]
+    fn test_rug_endian() {
+        
+        let mut csprng = OsRng;
+        let value = csprng.next_u64();
+        let i = Integer::from(value);
+
+        let b1 = value.to_le_bytes().to_vec();
+        let b2 = i.to_digits::<u8>(Order::LsfLe);
+
+        assert_eq!(b1, b2);
     }
 
 }

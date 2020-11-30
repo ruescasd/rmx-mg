@@ -8,6 +8,63 @@ use crate::group::*;
 use crate::shuffler::*;
 use crate::rug_b::RugGroup;
 
+type Hash = Vec<u8>;
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+pub struct Statement(String, u32, Vec<Hash>);
+
+impl Statement {
+    pub fn config(config: Hash, item: u32) -> Statement {
+        Statement(
+            "config".to_string(),
+            item,
+            vec![config]
+        )
+    }
+    pub fn keyshare(config: Hash, item: u32, share: Hash) -> Statement {
+        Statement(
+            "keyshare".to_string(),
+            item,
+            vec![config, share]
+        )
+    }
+    pub fn public_key(config: Hash, item: u32, public_key: Hash) -> Statement {
+        Statement(
+            "public_key".to_string(),
+            item,
+            vec![config, public_key]
+        )
+    }
+    pub fn ballots(config: Hash, item: u32, ballots: Hash) -> Statement {
+        Statement(
+            "ballots".to_string(),
+            item,
+            vec![config, ballots]
+        )
+    }
+    pub fn mix(config: Hash, item: u32, mix: Hash, ballots: Hash) -> Statement {
+        Statement(
+            "mix".to_string(),
+            item,
+            vec![config, mix, ballots]
+        )
+    }
+    pub fn partial_decryption(config: Hash, item: u32, partial_decryptions: Hash, ballots: Hash) -> Statement {
+        Statement(
+            "partial_decryption".to_string(),
+            item,
+            vec![config, partial_decryptions, ballots]
+        )
+    }
+    pub fn plaintexts(config: Hash, item: u32, plaintexts: Hash, partial_decryptions: Hash) -> Statement {
+        Statement(
+            "plaintexts".to_string(),
+            item,
+            vec![config, plaintexts, partial_decryptions]
+        )
+    }
+}
+
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct Config {
     pub id: [u8; 16],
@@ -18,38 +75,9 @@ pub struct Config {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ConfigStatement {
-    _stmt: [u8; 6],
-    pub config_hash: Vec<u8>
-}
-impl ConfigStatement {
-    fn new(config_hash: Vec<u8>) -> ConfigStatement {
-        ConfigStatement {
-            _stmt: *b"config",
-            config_hash: config_hash
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
 pub struct Keyshare<E: Element, G: Group<E>> {
     pub share: PublicKey<E, G>,
     pub proof: Schnorr<E>
-}
-#[derive(Serialize, Deserialize)]
-pub struct KeyshareStatement {
-    _stmt: [u8; 8],
-    pub config_hash: Vec<u8>,
-    pub keyshare_hash: Vec<u8>
-}
-impl KeyshareStatement {
-    fn new(config_hash: Vec<u8>, keyshare_hash: Vec<u8>) -> KeyshareStatement {
-        KeyshareStatement {
-            _stmt: *b"keyshare",
-            config_hash: config_hash,
-            keyshare_hash: keyshare_hash
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -62,40 +90,10 @@ pub struct EncryptedPrivateKey {
 pub struct Pk<E: Element, G: Group<E>> {
     pub value: PublicKey<E, G>,
 }
-#[derive(Serialize, Deserialize)]
-pub struct PkStatement {
-    _stmt: [u8; 2],
-    pub config_hash: Vec<u8>,
-    pub public_key_hash: Vec<u8>
-}
-impl PkStatement {
-    fn new(config_hash: Vec<u8>, public_key_hash: Vec<u8>) -> PkStatement {
-        PkStatement {
-            _stmt: *b"pk",
-            config_hash: config_hash,
-            public_key_hash: public_key_hash
-        }
-    }
-}
 
 #[derive(Serialize, Deserialize)]
 pub struct Ballots<E: Element> {
     pub ciphertexts: Vec<Ciphertext<E>>
-}
-#[derive(Serialize, Deserialize)]
-pub struct BallotsStatement {
-    _stmt: [u8; 7],
-    pub config_hash: Vec<u8>,
-    pub ballots_hash: Vec<u8>
-}
-impl BallotsStatement {
-    fn new(config_hash: Vec<u8>, ballots_hash: Vec<u8>) -> BallotsStatement {
-        BallotsStatement {
-            _stmt: *b"ballots",
-            config_hash: config_hash,
-            ballots_hash: ballots_hash
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -114,6 +112,7 @@ pub struct PartialDecryption<E: Element> {
 pub struct Plaintexts<E> {
     plaintexts: Vec<E>
 }
+
 
 #[cfg(test)]
 mod tests {  
