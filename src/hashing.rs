@@ -154,7 +154,7 @@ pub fn hash<T: HashBytes>(data: T) -> Vec<u8> {
 
 #[cfg(test)]
 mod tests {  
-    use hex_literal::hex;
+    // use hex_literal::hex;
     use sha2::{Sha512, Digest};
     use rand_core::{RngCore, OsRng};
     use rug::{

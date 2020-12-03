@@ -12,8 +12,10 @@ use serde::{Deserialize, Serialize};
 struct GitBulletinBoard {
     pub ssh_key_path: String,
     pub url: String,
-    pub fs_path: String
+    pub fs_path: String,
+    pub append_only: bool
 }
+
 
 impl GitBulletinBoard {
     
@@ -28,8 +30,11 @@ impl GitBulletinBoard {
     
         let fetch_head = repo.find_reference("FETCH_HEAD")?;
         let commit = repo.reference_to_annotated_commit(&fetch_head)?;
-        let object = repo.find_object(commit.id(), None)?;
-        repo.reset(&object, git2::ResetType::Hard, None)?;
+        
+        let head = repo.head()?;
+        let local_commit = repo.reference_to_annotated_commit(&head)?;
+        let local_object = repo.find_object(local_commit.id(), None)?;
+        repo.reset(&local_object, git2::ResetType::Hard, None)?;
         
         let analysis = repo.merge_analysis(&[&commit])?;
     
@@ -38,6 +43,20 @@ impl GitBulletinBoard {
             Ok(())
         }
         else if analysis.0.is_fast_forward() {        
+            println!("Requires fast-forward");
+            if self.append_only {
+                let mut opts = DiffOptions::new();
+                let tree_old = repo.find_commit(local_commit.id()).unwrap().tree().unwrap();
+                let tree_new = repo.find_commit(commit.id()).unwrap().tree().unwrap();
+                
+                let diff = repo.diff_tree_to_tree(Some(&tree_old), Some(&tree_new), Some(&mut opts))?;
+                for d in diff.deltas() {
+                    if d.status() != Delta::Added {
+                        return Err(git2::Error::from_str(&format!("Found non-add git delta in append-only mode: {:?}", d)))
+                    }
+                }
+            }
+            
             let refname = format!("refs/heads/master");
             let mut r = repo.find_reference(&refname)?;
             fast_forward(&repo, &mut r, &commit)?;
@@ -52,7 +71,7 @@ impl GitBulletinBoard {
     pub fn post(&self, files: Vec<(&str, &Path)>, message: &str) -> Result<(), git2::Error> {
         let repo = self.open_or_clone()?;
         self.reset(&repo)?;
-        self.add_commit_many(&repo, files, message)?;
+        self.add_commit_many(&repo, files, message, self.append_only)?;
         self.push(&repo)
     }
 
@@ -106,20 +125,23 @@ impl GitBulletinBoard {
         target_path.to_path_buf()
     }
     
-    fn add_commit_many(&self, repo: &Repository, files: Vec<(&str, &Path)>, message: &str) -> Result<Oid, git2::Error> {
+    fn add_commit_many(&self, repo: &Repository, files: Vec<(&str, &Path)>, 
+        message: &str, append_only: bool) -> Result<Oid, git2::Error> {
         let mut paths = vec![];
         for (target, source) in files {
             let target_path = self.add_to_working_copy(target, source);
             paths.push(target_path);
         }
         // adding to repo index uses relative path
-        add_and_commit(&repo, paths, message)
+        add_and_commit(&repo, paths, message, append_only)
     }
     
-    fn add_commit(&self, repo: &Repository, target: &str, source: &Path, message: &str) -> Result<Oid, git2::Error> {
+    fn add_commit(&self, repo: &Repository, target: &str, source: &Path, message: &str,
+        append_only: bool) -> Result<Oid, git2::Error> {
+        
         let target_path = self.add_to_working_copy(target, source);
         // adding to repo index uses relative path: &target_path
-        add_and_commit(&repo, [target_path].to_vec(), message)
+        add_and_commit(&repo, [target_path].to_vec(), message, append_only)
     }
 
     // resets the working copy to match that of the remote
@@ -172,16 +194,28 @@ fn fast_forward(
     Ok(())
 }
 
-fn add_and_commit(repo: &Repository, paths: Vec<PathBuf>, message: &str) -> Result<Oid, git2::Error> {
+fn add_and_commit(repo: &Repository, paths: Vec<PathBuf>, message: &str, 
+    append_only: bool) -> Result<Oid, git2::Error> {
+    
     let mut index = repo.index()?;
     for p in paths {
         index.add_path(&p)?;
     }
-    
     let oid = index.write_tree()?;
     let signature = Signature::now("rmx", "rmx@foo.bar")?;
     let parent_commit = find_last_commit(&repo)?;
     let tree = repo.find_tree(oid)?;
+    
+    if append_only {
+        let mut opts = DiffOptions::new();
+        let diff = repo.diff_tree_to_index(Some(&parent_commit.tree()?), Some(&index), Some(&mut opts))?;
+        for d in diff.deltas() {
+            if d.status() != Delta::Added {
+                return Err(git2::Error::from_str(&format!("Found non-add git delta in append-only mode: {:?}", d)))     
+            }
+        }
+    }
+    
     repo.commit(Some("HEAD"),
                 &signature,
                 &signature,
@@ -238,11 +272,23 @@ mod tests {
     fn test_open_or_clone() {
         
         let g = read_config();
-        fs::remove_dir_all(&g.fs_path).unwrap();
+        fs::remove_dir_all(&g.fs_path).ok();
         g.open_or_clone().unwrap();
         
         let dir = Path::new(&g.fs_path);
         assert!(dir.exists() && dir.is_dir());
+    }
+
+    #[test]
+    #[serial]
+    fn test_refresh() {
+        let g = read_config();
+        g.open_or_clone().unwrap();
+        
+        let dir = Path::new(&g.fs_path);
+        assert!(dir.exists() && dir.is_dir());
+
+        g.refresh().unwrap();
     }
 
     #[test]
@@ -252,7 +298,7 @@ mod tests {
         let g = read_config();
         fs::remove_dir_all(&g.fs_path).unwrap();
         g.open_or_clone().unwrap();
-        let files = g.list();
+        let _files = g.list();
     }
 
 }

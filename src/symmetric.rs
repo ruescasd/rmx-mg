@@ -1,7 +1,6 @@
 use aes::Aes256;
 use block_modes::{BlockMode, Cbc};
 use block_modes::block_padding::Pkcs7;
-use hex_literal::hex;
 use generic_array::{typenum::U32, typenum::U16, GenericArray};
 use rand_core::{OsRng, RngCore};
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
