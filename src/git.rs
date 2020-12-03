@@ -8,6 +8,8 @@ use walkdir::{DirEntry, WalkDir};
 
 use serde::{Deserialize, Serialize};
 
+use crate::util;
+
 #[derive(Serialize, Deserialize)]
 struct GitBulletinBoard {
     pub ssh_key_path: String,
@@ -162,7 +164,8 @@ impl GitBulletinBoard {
         let mut options = PushOptions::new();
         options.remote_callbacks(remote_callbacks(&self.ssh_key_path));
         let mut remote = repo.find_remote("origin").unwrap();
-        remote.connect(Direction::Push)?;
+        repo.remote_add_push("origin", "refs/heads/master:refs/heads/master").unwrap();
+        remote.connect_auth(Direction::Push, Some(remote_callbacks(&self.ssh_key_path)), None)?;
         remote.push(&["refs/heads/master:refs/heads/master"], Some(&mut options))
     }
 }
@@ -215,7 +218,8 @@ fn add_and_commit(repo: &Repository, paths: Vec<PathBuf>, message: &str,
             }
         }
     }
-    
+
+    index.write()?;
     repo.commit(Some("HEAD"),
                 &signature,
                 &signature,
@@ -293,12 +297,43 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_list() {
-        
+    fn test_post() {
         let g = read_config();
-        fs::remove_dir_all(&g.fs_path).unwrap();
+        fs::remove_dir_all(&g.fs_path).ok();
         g.open_or_clone().unwrap();
-        let _files = g.list();
+        let added = util::create_random_file("/tmp");
+        let name = added.file_name().unwrap().to_str().unwrap();
+        
+        g.post(vec![(name, &added)], "new file").unwrap();
+        fs::remove_dir_all(&g.fs_path).ok();
+        g.open_or_clone().unwrap();
+        let files = g.list();
+        assert!(files.contains(&name.to_string()));
     }
 
+    #[test]
+    #[serial]
+    fn test_post_append_only() {
+        let mut g = read_config();
+        fs::remove_dir_all(&g.fs_path).ok();
+        g.open_or_clone().unwrap();
+        let added = util::create_random_file("/tmp");
+        let name = added.file_name().unwrap().to_str().unwrap();
+        
+        g.post(vec![(name, &added)], "new file").unwrap();
+        fs::remove_dir_all(&g.fs_path).ok();
+        g.open_or_clone().unwrap();
+        let files = g.list();
+        assert!(files.contains(&name.to_string()));
+        let modify = added.to_str().unwrap();
+        println!("Modifying {}", modify);
+        util::modify_file(&modify);
+        let mut result = g.post(vec![(name, &added)], "file modification");
+
+        assert!(result.is_err());
+        g.append_only = false;
+        result = g.post(vec![(name, &added)], "file modification");
+
+        assert!(result.is_ok());
+    }
 }
