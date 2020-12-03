@@ -313,27 +313,45 @@ mod tests {
 
     #[test]
     #[serial]
-    fn test_post_append_only() {
+    fn test_append_only() {
         let mut g = read_config();
         fs::remove_dir_all(&g.fs_path).ok();
         g.open_or_clone().unwrap();
+        
+        // add new file
         let added = util::create_random_file("/tmp");
         let name = added.file_name().unwrap().to_str().unwrap();
-        
         g.post(vec![(name, &added)], "new file").unwrap();
+        
+        // create 2nd repo after creating file but before making modification
+        let mut g2 = read_config();
+        g2.fs_path.push_str("_");
+        fs::remove_dir_all(&g2.fs_path).ok();
+        g2.open_or_clone().unwrap();
+
         fs::remove_dir_all(&g.fs_path).ok();
         g.open_or_clone().unwrap();
         let files = g.list();
         assert!(files.contains(&name.to_string()));
+        
         let modify = added.to_str().unwrap();
         println!("Modifying {}", modify);
         util::modify_file(&modify);
         let mut result = g.post(vec![(name, &added)], "file modification");
-
+        // cannot modify up in append_only mode
         assert!(result.is_err());
+        
         g.append_only = false;
         result = g.post(vec![(name, &added)], "file modification");
+        assert!(result.is_ok());
 
+        g2.append_only = true;
+        result = g2.refresh();
+        // cannot modify down in append_only mode
+        assert!(result.is_err());
+
+        g2.append_only = false;
+        result = g2.refresh();
         assert!(result.is_ok());
     }
 }
