@@ -16,7 +16,7 @@ pub trait Element: HashBytes + Clone + Send + Sync {
     fn mul_identity() -> Self;
 }
 
-pub trait Exponent: Clone + Send + Sync + Serialize + DeserializeOwned {
+pub trait Exponent: HashBytes + Clone + Send + Sync + Serialize + DeserializeOwned {
     fn add(&self, other: &Self) -> Self;
     fn sub(&self, other: &Self) -> Self;
     fn neg(&self) -> Self;

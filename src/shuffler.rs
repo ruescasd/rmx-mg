@@ -21,7 +21,7 @@ pub struct YChallengeInput<'a, E: Element + HashBytes, G: Group<E>> {
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct TValues<E: Element + HashBytes> {
+pub struct TValues<E: Element> {
     pub t1: E,
     pub t2: E,
     pub t3: E,
@@ -32,22 +32,22 @@ pub struct TValues<E: Element + HashBytes> {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Responses<E: Element> {
-    s1: E::Exp,
-    s2: E::Exp,
-    s3: E::Exp,
-    s4: E::Exp,
-    s_hats: Vec<E::Exp>,
-    s_primes: Vec<E::Exp>
+    pub s1: E::Exp,
+    pub s2: E::Exp,
+    pub s3: E::Exp,
+    pub s4: E::Exp,
+    pub s_hats: Vec<E::Exp>,
+    pub s_primes: Vec<E::Exp>
 }
 
 // FIXME cannot get type safety and serde to work, so we're using standalone exponents here
 // type safety is maintained in gen/check proof signatures
 #[derive(Serialize, Deserialize)]
-pub struct ShuffleProof<E: Element + HashBytes> {
-    t: TValues<E>,
-    s: Responses<E>,
-    cs: Vec<E>,
-    c_hats: Vec<E>
+pub struct ShuffleProof<E: Element> {
+    pub t: TValues<E>,
+    pub s: Responses<E>,
+    pub cs: Vec<E>,
+    pub c_hats: Vec<E>
 }
 
 pub struct Shuffler<'a, E: Element, G: Group<E>> {

@@ -11,7 +11,7 @@ use crate::rug_b::RugGroup;
 type Hash = Vec<u8>;
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
-pub struct Statement(String, u32, Vec<Hash>);
+pub struct Statement(pub String, pub u32, pub Vec<Hash>);
 
 impl Statement {
     pub fn config(config: Hash, item: u32) -> Statement {
@@ -110,7 +110,7 @@ pub struct PartialDecryption<E: Element> {
 
 #[derive(Serialize, Deserialize)]
 pub struct Plaintexts<E> {
-    plaintexts: Vec<E>
+    pub plaintexts: Vec<E>
 }
 
 

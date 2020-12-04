@@ -338,7 +338,7 @@ mod tests {
         println!("Modifying {}", modify);
         util::modify_file(&modify);
         let mut result = g.post(vec![(name, &added)], "file modification");
-        // cannot modify up in append_only mode
+        // cannot modify upstream in append_only mode
         assert!(result.is_err());
         
         g.append_only = false;
@@ -347,7 +347,7 @@ mod tests {
 
         g2.append_only = true;
         result = g2.refresh();
-        // cannot modify down in append_only mode
+        // cannot modify downstream in append_only mode
         assert!(result.is_err());
 
         g2.append_only = false;

@@ -1,8 +1,10 @@
+use crate::hashing;
+
 trait BulletinBoard {
     fn refresh(&self);
     fn post(&self);
     fn list(&self) -> Vec<String>;
-    fn get(&self, key: String) -> &[u8];
+    fn get(&self, key: String, hash: hashing::Hash) -> &[u8];
 }
 
 trait Names {
@@ -27,7 +29,7 @@ trait Names {
     
     fn mix(contest: u32, auth: u32) -> String { format!("{}/{}/mix", auth, contest).to_string() }
     fn mix_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/mix.stmt", auth, contest).to_string() }
-    fn mix_sig(contest: u32, auth: u32, sign_auth: u32) -> String { format!("{}/{}/mix.{}.sig", sign_auth, contest, auth).to_string() }
+    fn mix_sig(contest: u32, auth: u32, signing_auth: u32) -> String { format!("{}/{}/mix.{}.sig", signing_auth, contest, auth).to_string() }
 
     fn decryption(contest: u32, auth: u32) -> String { format!("{}/{}/decryption", auth, contest).to_string() }
     fn decryption_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/decryption.stmt", auth, contest).to_string() }
@@ -56,7 +58,7 @@ impl BulletinBoard for MemoryBulletinBoard<'_> {
     fn list(&self) -> Vec<String> {
         self.data.iter().map(|(a, _)| a.clone()).collect()
     }
-    fn get(&self, key: String) -> &[u8] {
+    fn get(&self, key: String, hash: hashing::Hash) -> &[u8] {
         self.data.get(&key).unwrap()
     }
 }

@@ -4,7 +4,7 @@ use crate::arithm::*;
 use crate::hashing::*;
 use crate::elgamal::*;
 
-pub trait Group<E: Element>: Send + Sync + Sized + Clone {
+pub trait Group<E: Element>: HashBytes + Send + Sync + Sized + Clone {
     
     fn generator(&self) -> E;
     fn rnd(&self) -> E;
@@ -79,17 +79,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct Schnorr<E: Element> {
-    commitment: E,
-    challenge: E::Exp,
-    response: E::Exp
+    pub commitment: E,
+    pub challenge: E::Exp,
+    pub response: E::Exp
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct ChaumPedersen<E: Element> {
-    commitment1: E,
-    commitment2: E,
-    challenge: E::Exp,
-    response: E::Exp
+    pub commitment1: E,
+    pub commitment2: E,
+    pub challenge: E::Exp,
+    pub response: E::Exp
 }
 
 /*
