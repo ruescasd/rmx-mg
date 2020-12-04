@@ -4,6 +4,12 @@ use crate::artifact::*;
 use curve25519_dalek::ristretto::{RistrettoPoint};
 use rug::Integer;
 use rayon::prelude::*;
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
+use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::io::Write;
+use std::fs::OpenOptions;
 
 pub fn to_u8_30(input: Vec<u8>) -> [u8; 30] {
     assert_eq!(input.len(), 30);
@@ -19,13 +25,6 @@ pub fn to_u8_64(input: Vec<u8>) -> [u8; 64] {
     bytes
 }
 
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
-use std::path::{Path, PathBuf};
-use std::fs::File;
-use std::io::{Write, BufReader, BufRead, Error};
-use std::fs::OpenOptions;
-
 pub fn create_random_file(dir: &str) -> PathBuf {
     let mut buff = Uuid::encode_buffer();
     let id = Uuid::new_v4().to_simple().encode_lower(&mut buff);
@@ -35,8 +34,6 @@ pub fn create_random_file(dir: &str) -> PathBuf {
     writeln!(output, "File created at {}", now).unwrap();
     target
 }
-
-
 
 pub fn modify_file(file: &str) {
     let mut file = OpenOptions::new()

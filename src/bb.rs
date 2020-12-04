@@ -1,13 +1,15 @@
 use crate::hashing;
+use serde::de::DeserializeOwned;
+use std::collections::HashMap;
 
-trait BulletinBoard {
+pub trait BulletinBoard {
     fn refresh(&self);
     fn post(&self);
     fn list(&self) -> Vec<String>;
-    fn get(&self, key: String, hash: hashing::Hash) -> &[u8];
+    fn get<A: hashing::HashBytes + DeserializeOwned>(&self, key: String, hash: hashing::Hash) -> Result<A, bincode::Error>;
 }
 
-trait Names {
+pub trait Names {
     const CONFIG: &'static str = "config.json";
     const CONFIG_STMT: &'static str = "config.stmt.json";
     const PAUSE: &'static str = "pause";
@@ -42,23 +44,85 @@ trait Names {
     fn auth_error(auth: u32) -> String { format!("{}/error", auth).to_string() }
 }
 
-use std::collections::HashMap;
+pub struct MemoryBulletinBoard(pub HashMap<String, Vec<u8>>);
 
-struct MemoryBulletinBoard<'a> {
-    data: HashMap<String, &'a [u8]>
+impl MemoryBulletinBoard {
+    pub fn new() -> MemoryBulletinBoard {
+        MemoryBulletinBoard(HashMap::new())
+    }
+    pub fn add(&mut self, key: String, value: Vec<u8>) {
+        self.0.insert(key, value);
+    }
 }
-impl MemoryBulletinBoard<'_> {
-    
-}
 
-
-impl BulletinBoard for MemoryBulletinBoard<'_> {
+impl BulletinBoard for MemoryBulletinBoard {
     fn refresh(&self) {}
     fn post(&self) {}
     fn list(&self) -> Vec<String> {
-        self.data.iter().map(|(a, _)| a.clone()).collect()
+        self.0.iter().map(|(a, _)| a.clone()).collect()
     }
-    fn get(&self, key: String, hash: hashing::Hash) -> &[u8] {
-        self.data.get(&key).unwrap()
+    fn get<A: hashing::HashBytes + DeserializeOwned>(&self, key: String, hash: hashing::Hash) -> Result<A, bincode::Error> {
+        let bytes = self.0.get(&key).ok_or(bincode::ErrorKind::Custom("not found".to_string()))?;
+
+        let artifact = bincode::deserialize::<A>(bytes)?;
+
+        let hashed = hashing::hash(&artifact);
+        
+        if hashed == hash {
+            Ok(artifact)
+        }
+        else {
+            Err(Box::new(bincode::ErrorKind::Custom("Mismatched hash".to_string())))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::hashing;
+    use crate::bb;
+    use crate::bb::BulletinBoard;
+    use crate::artifact;
+    use uuid::Uuid;
+    use crate::rug_b::*;
+    use rand_core::OsRng;
+    use ed25519_dalek::Keypair;
+        
+    #[test]
+    fn test_membb_get() {
+        let mut csprng = OsRng;
+        
+        
+        let id = Uuid::new_v4();
+        let group = RugGroup::default();
+        let contests = 2;
+        let ballotbox_pk = Keypair::generate(&mut csprng).public; 
+        let trustees = 3;
+        let mut trustee_pks = Vec::with_capacity(trustees);
+        
+        for _ in 0..trustees {
+            let keypair = Keypair::generate(&mut csprng);
+            trustee_pks.push(keypair.public);
+        }
+        let mut cfg = artifact::Config {
+            id: id.as_bytes().clone(),
+            rug_group: Some(group),
+            contests: contests, 
+            ballotbox: ballotbox_pk, 
+            trustees: trustee_pks
+        };
+
+        let mut bb = bb::MemoryBulletinBoard::new();
+        let cfg_b = bincode::serialize(&cfg).unwrap();
+        let hash = hashing::hash(&cfg);
+        bb.add("hello".to_string(), cfg_b);
+        let mut cfg_result = bb.get::<artifact::Config>("hello".to_string(), hash);
+        assert!(cfg_result.is_ok());
+
+        cfg.id = Uuid::new_v4().as_bytes().clone();
+        let bad_hash = hashing::hash(&cfg);
+        cfg_result = bb.get::<artifact::Config>("hello".to_string(), bad_hash);
+        assert!(cfg_result.is_err());
     }
 }

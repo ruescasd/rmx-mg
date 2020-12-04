@@ -9,6 +9,7 @@ use walkdir::{DirEntry, WalkDir};
 use serde::{Deserialize, Serialize};
 
 use crate::util;
+use std::sync::Mutex;
 
 #[derive(Serialize, Deserialize)]
 struct GitBulletinBoard {
@@ -72,7 +73,7 @@ impl GitBulletinBoard {
 
     pub fn post(&self, files: Vec<(&str, &Path)>, message: &str) -> Result<(), git2::Error> {
         let repo = self.open_or_clone()?;
-        self.reset(&repo)?;
+        // includes resetting before commit
         self.add_commit_many(&repo, files, message, self.append_only)?;
         self.push(&repo)
     }
@@ -113,7 +114,7 @@ impl GitBulletinBoard {
         }
     }
 
-    fn add_to_working_copy(&self, target: &str, source: &Path) -> PathBuf {
+    fn prepare_add(&self, target: &str, source: &Path) -> GitAddEntry {
         let target_path = Path::new(target);
         let target_file = Path::new(&self.fs_path).join(target_path);
         if target_file.is_file() && target_file.exists() {
@@ -122,28 +123,35 @@ impl GitBulletinBoard {
         let tmp_file = NamedTempFile::new().unwrap();
         let tmp_file_path = tmp_file.path();
         fs::copy(source, tmp_file_path).unwrap();
-        fs::rename(tmp_file_path, &target_file).unwrap();
-
-        target_path.to_path_buf()
+        
+        GitAddEntry {
+            tmp_file: tmp_file, 
+            fs_path: target_file.to_path_buf(), 
+            repo_path: target_path.to_path_buf()
+        }
     }
     
     fn add_commit_many(&self, repo: &Repository, files: Vec<(&str, &Path)>, 
         message: &str, append_only: bool) -> Result<Oid, git2::Error> {
-        let mut paths = vec![];
+        let mut entries = vec![];
         for (target, source) in files {
-            let target_path = self.add_to_working_copy(target, source);
-            paths.push(target_path);
+            let next = self.prepare_add(target, source);
+            entries.push(next);
         }
+        // reset right before commiting
+        self.reset(&repo)?;
         // adding to repo index uses relative path
-        add_and_commit(&repo, paths, message, append_only)
+        add_and_commit(&repo, entries, message, append_only)
     }
     
     fn add_commit(&self, repo: &Repository, target: &str, source: &Path, message: &str,
         append_only: bool) -> Result<Oid, git2::Error> {
         
-        let target_path = self.add_to_working_copy(target, source);
+        let entry = self.prepare_add(target, source);
+        // reset right before commiting
+        self.reset(&repo)?;
         // adding to repo index uses relative path: &target_path
-        add_and_commit(&repo, [target_path].to_vec(), message, append_only)
+        add_and_commit(&repo, vec![entry], message, append_only)
     }
 
     // resets the working copy to match that of the remote
@@ -170,6 +178,12 @@ impl GitBulletinBoard {
     }
 }
 
+struct GitAddEntry {
+    tmp_file: NamedTempFile,
+    fs_path: PathBuf,
+    repo_path: PathBuf
+}
+
 fn find_last_commit(repo: &Repository) -> Result<Commit, Error> {
     let obj = repo.head()?.resolve()?.peel(ObjectType::Commit)?;
     match obj.into_commit() {
@@ -188,7 +202,6 @@ fn fast_forward(
         None => String::from_utf8_lossy(lb.name_bytes()).to_string(),
     };
     let msg = format!("Fast-Forward: Setting {} to id: {}", name, rc.id());
-    println!("{}", msg);
     lb.set_target(rc.id(), &msg)?;
     repo.set_head(&name)?;
     repo.checkout_head(Some(
@@ -197,12 +210,14 @@ fn fast_forward(
     Ok(())
 }
 
-fn add_and_commit(repo: &Repository, paths: Vec<PathBuf>, message: &str, 
+fn add_and_commit(repo: &Repository, entries: Vec<GitAddEntry>, message: &str, 
     append_only: bool) -> Result<Oid, git2::Error> {
     
     let mut index = repo.index()?;
-    for p in paths {
-        index.add_path(&p)?;
+    for e in entries {
+        println!("{:?} -> {:?}", e.tmp_file.path(), e.fs_path);
+        fs::rename(e.tmp_file.path(), &e.fs_path).unwrap();
+        index.add_path(&e.repo_path)?;
     }
     let oid = index.write_tree()?;
     let signature = Signature::now("rmx", "rmx@foo.bar")?;
@@ -335,7 +350,7 @@ mod tests {
         assert!(files.contains(&name.to_string()));
         
         let modify = added.to_str().unwrap();
-        println!("Modifying {}", modify);
+        
         util::modify_file(&modify);
         let mut result = g.post(vec![(name, &added)], "file modification");
         // cannot modify upstream in append_only mode

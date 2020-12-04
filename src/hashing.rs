@@ -1,4 +1,4 @@
-use curve25519_dalek::ristretto::{RistrettoPoint};
+use curve25519_dalek::ristretto::RistrettoPoint;
 use sha2::{Sha512, Digest};
 use curve25519_dalek::scalar::Scalar;
 use rug::{
@@ -118,12 +118,16 @@ pub fn cp_proof_challenge<E: Element>(g1: &E, g2: &E, public1: &E, public2: &E,
     exp_hasher.hash_to(&bytes)
 }
 
-pub fn hash<T: HashBytes>(data: T) -> Vec<u8> {
+use crate::util;
+
+pub fn hash<T: HashBytes>(data: &T) -> [u8; 64] {
     let bytes = data.get_bytes();
     let mut hasher = Sha512::new();
     hasher.update(bytes);
-    hasher.finalize().to_vec()
+    util::to_u8_64(hasher.finalize().to_vec())
 }
+
+
 
 impl<E: Element + HashBytes> HashBytes for Ciphertext<E> {
     fn get_bytes(&self) -> Vec<u8> {
