@@ -1,11 +1,9 @@
-use curve25519_dalek::ristretto::RistrettoPoint;
-use sha2::{Sha512, Digest};
-use curve25519_dalek::scalar::Scalar;
-use rug::{
-    Integer,
-    integer::Order
-};
 use std::marker::{Send, Sync};
+
+use curve25519_dalek::ristretto::RistrettoPoint;
+use curve25519_dalek::scalar::Scalar;
+use sha2::{Sha512, Digest};
+use rug::{Integer,integer::Order};
 
 use crate::arithm::*;
 use crate::elgamal::*;

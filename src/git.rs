@@ -10,9 +10,9 @@ use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 
 use std::sync::Mutex;
+
 use crate::bb::BulletinBoard;
-use crate::hashing::Hash;
-use crate::hashing::HashBytes;
+use crate::hashing::{Hash, HashBytes};
 use crate::hashing;
 
 #[derive(Serialize, Deserialize)]

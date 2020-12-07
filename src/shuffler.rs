@@ -1,5 +1,6 @@
 use std::sync::Mutex;
 use rand::Rng as rand_rng;
+use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use rayon::prelude::*;
 
@@ -8,7 +9,7 @@ use crate::group::*;
 use crate::elgamal::*;
 use crate::hashing;
 use crate::hashing::{HashBytes, HashTo};
-use rand_core::OsRng;
+
 
 // type ParRng = RngCore + CryptoRng + Sync + Send;
 

@@ -1,5 +1,4 @@
 use ed25519_dalek::PublicKey as SignaturePublicKey;
-// use curve25519_dalek::ristretto::{RistrettoPoint};
 use serde::{Deserialize, Serialize};
 
 use crate::arithm::*;

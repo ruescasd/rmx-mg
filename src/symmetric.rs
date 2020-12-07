@@ -1,8 +1,10 @@
 use aes::Aes256;
 use block_modes::{BlockMode, Cbc};
 use block_modes::block_padding::Pkcs7;
+
 use generic_array::{typenum::U32, typenum::U16, GenericArray};
 use rand_core::{OsRng, RngCore};
+
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 
 pub fn encrypt(key: GenericArray<u8, U32>, bytes: &[u8]) -> (Vec<u8>, Vec<u8>) {

@@ -1,8 +1,9 @@
-use crate::hashing::*;
-use crate::hashing;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::path::Path;
+
+use crate::hashing::{HashBytes, Hash};
+use crate::hashing;
 
 pub trait BulletinBoard<E> {
     fn refresh(&self) -> Result<(), E>;

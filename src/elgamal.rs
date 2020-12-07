@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
+use generic_array::{typenum::U32, GenericArray};
 
 use crate::arithm::*;
 use crate::group::*;
 use crate::artifact::EncryptedPrivateKey;
 use crate::symmetric;
-use generic_array::{typenum::U32, GenericArray};
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Ciphertext<E: Element> {

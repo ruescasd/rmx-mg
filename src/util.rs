@@ -1,15 +1,17 @@
-use crate::group::*;
-use crate::elgamal::*;
-use crate::artifact::*;
+use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::io::Write;
+use std::fs::OpenOptions;
+
 use curve25519_dalek::ristretto::{RistrettoPoint};
 use rug::Integer;
 use rayon::prelude::*;
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
-use std::path::{Path, PathBuf};
-use std::fs::File;
-use std::io::Write;
-use std::fs::OpenOptions;
+
+use crate::group::*;
+use crate::elgamal::*;
+use crate::artifact::*;
 
 pub fn to_u8_30(input: Vec<u8>) -> [u8; 30] {
     assert_eq!(input.len(), 30);

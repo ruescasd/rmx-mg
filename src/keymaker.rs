@@ -1,7 +1,8 @@
+use rayon::prelude::*;
+
 use crate::arithm::*;
 use crate::group::*;
 use crate::elgamal::*;
-use rayon::prelude::*;
 
 pub struct Keymaker<E: Element, G: Group<E>> {
     sk: PrivateKey<E, G>,

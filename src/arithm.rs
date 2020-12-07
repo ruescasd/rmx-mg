@@ -1,7 +1,8 @@
 use std::marker::{Send, Sync};
-use serde::{Serialize};
-use serde::de::{DeserializeOwned};
-use crate::hashing::{HashBytes};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+
+use crate::hashing::HashBytes;
 
 pub trait Element: HashBytes + Clone + Send + Sync {
     type Exp: Exponent;
