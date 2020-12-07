@@ -1,12 +1,53 @@
+use crate::hashing::*;
 use crate::hashing;
 use serde::de::DeserializeOwned;
 use std::collections::HashMap;
+use std::path::Path;
 
-pub trait BulletinBoard {
-    fn refresh(&self);
-    fn post(&self);
+pub trait BulletinBoard<E> {
+    fn refresh(&self) -> Result<(), E>;
+    fn post(&self, files: Vec<(&Path, &Path)>, message: &str) -> Result<(), E>;
     fn list(&self) -> Vec<String>;
-    fn get<A: hashing::HashBytes + DeserializeOwned>(&self, key: String, hash: hashing::Hash) -> Result<A, bincode::Error>;
+    fn get<A: HashBytes + DeserializeOwned>(&self, key: String, hash: Hash) -> 
+        Result<A, bincode::Error>;
+}
+
+pub struct MemoryBulletinBoard(pub HashMap<String, Vec<u8>>);
+
+impl MemoryBulletinBoard {
+    pub fn new() -> MemoryBulletinBoard {
+        MemoryBulletinBoard(HashMap::new())
+    }
+    pub fn add(&mut self, key: String, value: Vec<u8>) {
+        self.0.insert(key, value);
+    }
+}
+
+impl BulletinBoard<&'static str> for MemoryBulletinBoard {
+    fn refresh(&self) -> Result<(), &'static str> {
+        Ok(())
+    }
+    fn post(&self, files: Vec<(&Path, &Path)>, message: &str) -> Result<(), &'static str> {
+        Ok(())
+    }
+    fn list(&self) -> Vec<String> {
+        self.0.iter().map(|(a, _)| a.clone()).collect()
+    }
+    fn get<A: HashBytes + DeserializeOwned>(&self, key: String, hash: Hash) -> Result<A, bincode::Error> {
+        let bytes = self.0.get(&key)
+            .ok_or(bincode::ErrorKind::Custom("not found".to_string()))?;
+
+        let artifact = bincode::deserialize::<A>(bytes)?;
+
+        let hashed = hashing::hash(&artifact);
+        
+        if hashed == hash {
+            Ok(artifact)
+        }
+        else {
+            Err(Box::new(bincode::ErrorKind::Custom("Mismatched hash".to_string())))
+        }
+    }
 }
 
 pub trait Names {
@@ -42,39 +83,6 @@ pub trait Names {
     fn plaintexts_sig(contest: u32, auth: u32) -> String { format!("{}/{}/plaintexts.sig", auth, contest).to_string() }
     
     fn auth_error(auth: u32) -> String { format!("{}/error", auth).to_string() }
-}
-
-pub struct MemoryBulletinBoard(pub HashMap<String, Vec<u8>>);
-
-impl MemoryBulletinBoard {
-    pub fn new() -> MemoryBulletinBoard {
-        MemoryBulletinBoard(HashMap::new())
-    }
-    pub fn add(&mut self, key: String, value: Vec<u8>) {
-        self.0.insert(key, value);
-    }
-}
-
-impl BulletinBoard for MemoryBulletinBoard {
-    fn refresh(&self) {}
-    fn post(&self) {}
-    fn list(&self) -> Vec<String> {
-        self.0.iter().map(|(a, _)| a.clone()).collect()
-    }
-    fn get<A: hashing::HashBytes + DeserializeOwned>(&self, key: String, hash: hashing::Hash) -> Result<A, bincode::Error> {
-        let bytes = self.0.get(&key).ok_or(bincode::ErrorKind::Custom("not found".to_string()))?;
-
-        let artifact = bincode::deserialize::<A>(bytes)?;
-
-        let hashed = hashing::hash(&artifact);
-        
-        if hashed == hash {
-            Ok(artifact)
-        }
-        else {
-            Err(Box::new(bincode::ErrorKind::Custom("Mismatched hash".to_string())))
-        }
-    }
 }
 
 #[cfg(test)]

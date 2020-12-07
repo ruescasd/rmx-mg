@@ -7,9 +7,13 @@ use tempfile::NamedTempFile;
 use walkdir::{DirEntry, WalkDir};
 
 use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 
-use crate::util;
 use std::sync::Mutex;
+use crate::bb::BulletinBoard;
+use crate::hashing::Hash;
+use crate::hashing::HashBytes;
+use crate::hashing;
 
 #[derive(Serialize, Deserialize)]
 struct GitBulletinBoard {
@@ -19,10 +23,8 @@ struct GitBulletinBoard {
     pub append_only: bool
 }
 
-
-impl GitBulletinBoard {
-    
-    pub fn refresh(&self) -> Result<(), git2::Error> {
+impl BulletinBoard<Error> for GitBulletinBoard {
+    fn refresh(&self) -> Result<(), Error> {
         let repo = self.open_or_clone()?;
         let mut remote = repo.find_remote("origin").unwrap();
         let mut fo = FetchOptions::new();
@@ -71,14 +73,14 @@ impl GitBulletinBoard {
         }
     }
 
-    pub fn post(&self, files: Vec<(&str, &Path)>, message: &str) -> Result<(), git2::Error> {
+    fn post(&self, files: Vec<(&Path, &Path)>, message: &str) -> Result<(), Error> {
         let repo = self.open_or_clone()?;
         // includes resetting before commit
         self.add_commit_many(&repo, files, message, self.append_only)?;
         self.push(&repo)
     }
 
-    pub fn list(&self) -> Vec<String> {
+    fn list(&self) -> Vec<String> {
         let walker = WalkDir::new(&self.fs_path).min_depth(1).into_iter();
         let entries: Vec<DirEntry> = walker
             .filter_entry(|e| !is_hidden(e))
@@ -98,6 +100,30 @@ impl GitBulletinBoard {
         files
     }
 
+    fn get<A: HashBytes + DeserializeOwned>(&self, key: 
+        String, hash: Hash) -> Result<A, bincode::Error> {
+
+        // let bytes = self.0.get(&key)
+        //    .ok_or("not found")?;
+        let bytes: Vec<u8> = vec![];
+
+        let artifact = bincode::deserialize::<A>(&bytes)?;
+
+        let hashed = hashing::hash(&artifact);
+        
+        if hashed == hash {
+            Ok(artifact)
+        }
+        else {
+            Err(Box::new(bincode::ErrorKind::Custom("Mismatched hash".to_string())))
+        }
+    }
+}
+
+impl GitBulletinBoard {
+    
+    
+
     fn open_or_clone(&self) -> Result<Repository, Error> {    
         if Path::new(&self.fs_path).exists() {
             Repository::open(&self.fs_path)
@@ -113,9 +139,32 @@ impl GitBulletinBoard {
                 .clone(&self.url, Path::new(&self.fs_path))
         }
     }
+    
+    fn add_commit_many(&self, repo: &Repository, files: Vec<(&Path, &Path)>, 
+        message: &str, append_only: bool) -> Result<(), Error> {
+        let mut entries = vec![];
+        for (target, source) in files {
+            let next = self.prepare_add(target, source);
+            entries.push(next);
+        }
+        // reset right before commiting
+        self.reset(&repo)?;
+        // adding to repo index uses relative path
+        add_and_commit(&repo, entries, message, append_only)
+    }
+    
+    fn add_commit(&self, repo: &Repository, target: &Path, source: &Path, message: &str,
+        append_only: bool) -> Result<(), Error> {
+        
+        let entry = self.prepare_add(target, source);
+        // reset right before commiting
+        self.reset(&repo)?;
+        // adding to repo index uses relative path: &target_path
+        add_and_commit(&repo, vec![entry], message, append_only)
+    }
 
-    fn prepare_add(&self, target: &str, source: &Path) -> GitAddEntry {
-        let target_path = Path::new(target);
+    fn prepare_add(&self, target_path: &Path, source: &Path) -> GitAddEntry {
+        // let target_path = Path::new(target);
         let target_file = Path::new(&self.fs_path).join(target_path);
         if target_file.is_file() && target_file.exists() {
             fs::remove_file(&target_file).unwrap();
@@ -130,33 +179,10 @@ impl GitBulletinBoard {
             repo_path: target_path.to_path_buf()
         }
     }
-    
-    fn add_commit_many(&self, repo: &Repository, files: Vec<(&str, &Path)>, 
-        message: &str, append_only: bool) -> Result<Oid, git2::Error> {
-        let mut entries = vec![];
-        for (target, source) in files {
-            let next = self.prepare_add(target, source);
-            entries.push(next);
-        }
-        // reset right before commiting
-        self.reset(&repo)?;
-        // adding to repo index uses relative path
-        add_and_commit(&repo, entries, message, append_only)
-    }
-    
-    fn add_commit(&self, repo: &Repository, target: &str, source: &Path, message: &str,
-        append_only: bool) -> Result<Oid, git2::Error> {
-        
-        let entry = self.prepare_add(target, source);
-        // reset right before commiting
-        self.reset(&repo)?;
-        // adding to repo index uses relative path: &target_path
-        add_and_commit(&repo, vec![entry], message, append_only)
-    }
 
     // resets the working copy to match that of the remote
     // local commits and working copy are discarded
-    fn reset(&self, repo: &Repository) -> Result<(), git2::Error> {
+    fn reset(&self, repo: &Repository) -> Result<(), Error> {
         let mut remote = repo.find_remote("origin")?;
         let mut fo = FetchOptions::new();
         fo.remote_callbacks(remote_callbacks(&self.ssh_key_path));
@@ -168,7 +194,7 @@ impl GitBulletinBoard {
         repo.reset(&object, git2::ResetType::Hard, None)
     }
 
-    fn push(&self, repo: &Repository) -> Result<(), git2::Error> {
+    fn push(&self, repo: &Repository) -> Result<(), Error> {
         let mut options = PushOptions::new();
         options.remote_callbacks(remote_callbacks(&self.ssh_key_path));
         let mut remote = repo.find_remote("origin").unwrap();
@@ -196,7 +222,7 @@ fn fast_forward(
     repo: &Repository,
     lb: &mut git2::Reference,
     rc: &git2::AnnotatedCommit,
-) -> Result<(), git2::Error> {
+) -> Result<(), Error> {
     let name = match lb.name() {
         Some(s) => s.to_string(),
         None => String::from_utf8_lossy(lb.name_bytes()).to_string(),
@@ -211,7 +237,7 @@ fn fast_forward(
 }
 
 fn add_and_commit(repo: &Repository, entries: Vec<GitAddEntry>, message: &str, 
-    append_only: bool) -> Result<Oid, git2::Error> {
+    append_only: bool) -> Result<(), Error> {
     
     let mut index = repo.index()?;
     for e in entries {
@@ -240,7 +266,8 @@ fn add_and_commit(repo: &Repository, entries: Vec<GitAddEntry>, message: &str,
                 &signature,
                 message,
                 &tree,
-                &[&parent_commit])
+                &[&parent_commit])?;
+    Ok(())
 }
 
 fn remote_callbacks<'a>(ssh_path: &'a str) -> RemoteCallbacks<'a> {
@@ -284,7 +311,7 @@ mod tests {
     use std::fs;
     use std::path::{Path};
     use crate::git::*;
-
+    use crate::util;
     
     #[test]
     #[serial]
@@ -317,13 +344,15 @@ mod tests {
         fs::remove_dir_all(&g.fs_path).ok();
         g.open_or_clone().unwrap();
         let added = util::create_random_file("/tmp");
-        let name = added.file_name().unwrap().to_str().unwrap();
+        let name = Path::new(
+            added.file_name().unwrap().to_str().unwrap()
+        );
         
         g.post(vec![(name, &added)], "new file").unwrap();
         fs::remove_dir_all(&g.fs_path).ok();
         g.open_or_clone().unwrap();
         let files = g.list();
-        assert!(files.contains(&name.to_string()));
+        assert!(files.contains(&name.to_str().unwrap().to_string()));
     }
 
     #[test]
@@ -335,7 +364,9 @@ mod tests {
         
         // add new file
         let added = util::create_random_file("/tmp");
-        let name = added.file_name().unwrap().to_str().unwrap();
+        let name = Path::new(
+            added.file_name().unwrap().to_str().unwrap()
+        );
         g.post(vec![(name, &added)], "new file").unwrap();
         
         // create 2nd repo after creating file but before making modification
@@ -347,7 +378,7 @@ mod tests {
         fs::remove_dir_all(&g.fs_path).ok();
         g.open_or_clone().unwrap();
         let files = g.list();
-        assert!(files.contains(&name.to_string()));
+        assert!(files.contains(&name.to_str().unwrap().to_string()));
         
         let modify = added.to_str().unwrap();
         

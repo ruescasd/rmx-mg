@@ -65,6 +65,10 @@ impl Statement {
     }
 }
 
+trait Artifact {
+    fn get_name(&self) -> String;
+}
+
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct Config {
     pub id: [u8; 16],

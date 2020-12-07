@@ -14,6 +14,18 @@ use crate::shuffler::{YChallengeInput, TValues};
 
 pub type Hash = [u8; 64];
 
+trait ConcatWithLength  {
+    fn extendl(&mut self, add: Vec<u8>);
+}
+
+impl ConcatWithLength for Vec<u8> {
+    fn extendl(&mut self, add: Vec<u8>) {
+        let length = add.len() as u64;
+        self.extend(&length.to_le_bytes());
+        self.extend(add);
+    }
+}
+
 pub trait HashBytes {
     fn get_bytes(&self) -> Vec<u8>;
 }
@@ -47,11 +59,22 @@ impl HashTo<Integer> for RugHasher {
     }
 }
 
+fn first_bytes<T: HashBytes>(input: T) -> Vec<u8> {
+    let mut bytes = input.get_bytes();
+    let length = bytes.len() as u64;
+    let mut first = length.to_le_bytes().to_vec();
+    first.append(&mut bytes);
+
+    first
+}
+
 // https://stackoverflow.com/questions/39675949/is-there-a-trait-supplying-iter
 fn concat_bytes_iter<'a, H: 'a + HashBytes, I: IntoIterator<Item = &'a H>>(cs: I) -> Vec<u8> {
     cs.into_iter()
     .map(|x| x.get_bytes())
     .fold(vec![], |mut a, b| {
+        let length = b.len() as u64;
+        a.extend(&length.to_le_bytes());
         a.extend(b);
         a
     })
@@ -132,7 +155,7 @@ pub fn hash<T: HashBytes>(data: &T) -> [u8; 64] {
 impl<E: Element + HashBytes> HashBytes for Ciphertext<E> {
     fn get_bytes(&self) -> Vec<u8> {
         let mut ret = self.a.get_bytes();
-        ret.extend_from_slice(&self.b.get_bytes());
+        ret.extend(self.b.get_bytes());
 
         ret
     }
@@ -367,6 +390,36 @@ impl<E: Element> HashBytes for Plaintexts<E> {
         concat_bytes(&self.plaintexts)
     }
 }
+
+use crate::protocol::Act;
+
+impl HashBytes for Act {
+    fn get_bytes(&self) -> Vec<u8> {
+        match self {
+            Act::CheckConfig(h) => {
+                let mut v = vec![1u8];
+                v.extendl(h.to_vec());
+                v
+            },
+            Act::CheckPk(h, i, s) => {
+                let mut v = vec![2u8];
+                v.extendl(h.to_vec());
+                v.extendl(i.to_le_bytes().to_vec());
+                v.extendl(s.to_vec());
+                v
+            },
+            _ => vec![]
+        }
+    }
+}
+
+/*
+impl HashBytes for str {
+    fn get_bytes(&self) -> Vec<u8> {
+        self.as_bytes().to_vec()
+    }
+}
+*/
 
 #[cfg(test)]
 mod tests {  
