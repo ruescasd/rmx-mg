@@ -13,52 +13,52 @@ type Hash = Vec<u8>;
 pub struct Statement(pub String, pub u32, pub Vec<Hash>);
 
 impl Statement {
-    pub fn config(config: Hash, item: u32) -> Statement {
+    pub fn config(config: Hash, contest: u32) -> Statement {
         Statement(
             "config".to_string(),
-            item,
+            contest,
             vec![config]
         )
     }
-    pub fn keyshare(config: Hash, item: u32, share: Hash) -> Statement {
+    pub fn keyshare(config: Hash, contest: u32, share: Hash) -> Statement {
         Statement(
             "keyshare".to_string(),
-            item,
+            contest,
             vec![config, share]
         )
     }
-    pub fn public_key(config: Hash, item: u32, public_key: Hash) -> Statement {
+    pub fn public_key(config: Hash, contest: u32, public_key: Hash) -> Statement {
         Statement(
             "public_key".to_string(),
-            item,
+            contest,
             vec![config, public_key]
         )
     }
-    pub fn ballots(config: Hash, item: u32, ballots: Hash) -> Statement {
+    pub fn ballots(config: Hash, contest: u32, ballots: Hash) -> Statement {
         Statement(
             "ballots".to_string(),
-            item,
+            contest,
             vec![config, ballots]
         )
     }
-    pub fn mix(config: Hash, item: u32, mix: Hash, ballots: Hash) -> Statement {
+    pub fn mix(config: Hash, contest: u32, mix: Hash, ballots: Hash) -> Statement {
         Statement(
             "mix".to_string(),
-            item,
+            contest,
             vec![config, mix, ballots]
         )
     }
-    pub fn partial_decryption(config: Hash, item: u32, partial_decryptions: Hash, ballots: Hash) -> Statement {
+    pub fn partial_decryption(config: Hash, contest: u32, partial_decryptions: Hash, ballots: Hash) -> Statement {
         Statement(
             "partial_decryption".to_string(),
-            item,
+            contest,
             vec![config, partial_decryptions, ballots]
         )
     }
-    pub fn plaintexts(config: Hash, item: u32, plaintexts: Hash, partial_decryptions: Hash) -> Statement {
+    pub fn plaintexts(config: Hash, contest: u32, plaintexts: Hash, partial_decryptions: Hash) -> Statement {
         Statement(
             "plaintexts".to_string(),
-            item,
+            contest,
             vec![config, plaintexts, partial_decryptions]
         )
     }
@@ -80,7 +80,8 @@ pub struct Config {
 #[derive(Serialize, Deserialize)]
 pub struct Keyshare<E: Element, G: Group<E>> {
     pub share: PublicKey<E, G>,
-    pub proof: Schnorr<E>
+    pub proof: Schnorr<E>,
+    // pub encrypted_sk: EncryptedPrivateKey
 }
 
 #[derive(Serialize, Deserialize)]

@@ -10,8 +10,6 @@ use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 
 use std::sync::Mutex;
-
-use crate::bb::BulletinBoard;
 use crate::hashing::{Hash, HashBytes};
 use crate::hashing;
 
@@ -23,7 +21,8 @@ struct GitBulletinBoard {
     pub append_only: bool
 }
 
-impl BulletinBoard<Error> for GitBulletinBoard {
+impl GitBulletinBoard {
+
     fn refresh(&self) -> Result<(), Error> {
         let repo = self.open_or_clone()?;
         let mut remote = repo.find_remote("origin").unwrap();
@@ -73,7 +72,7 @@ impl BulletinBoard<Error> for GitBulletinBoard {
         }
     }
 
-    fn post(&self, files: Vec<(&Path, &Path)>, message: &str) -> Result<(), Error> {
+    fn post(&mut self, files: Vec<(&Path, &Path)>, message: &str) -> Result<(), Error> {
         let repo = self.open_or_clone()?;
         // includes resetting before commit
         self.add_commit_many(&repo, files, message, self.append_only)?;
@@ -100,8 +99,8 @@ impl BulletinBoard<Error> for GitBulletinBoard {
         files
     }
 
-    fn get<A: HashBytes + DeserializeOwned>(&self, key: 
-        String, hash: Hash) -> Result<A, bincode::Error> {
+    fn get<A: HashBytes + DeserializeOwned>(&self, target: 
+        &Path, hash: Hash) -> Result<A, bincode::Error> {
 
         // let bytes = self.0.get(&key)
         //    .ok_or("not found")?;
@@ -118,12 +117,7 @@ impl BulletinBoard<Error> for GitBulletinBoard {
             Err(Box::new(bincode::ErrorKind::Custom("Mismatched hash".to_string())))
         }
     }
-}
-
-impl GitBulletinBoard {
     
-    
-
     fn open_or_clone(&self) -> Result<Repository, Error> {    
         if Path::new(&self.fs_path).exists() {
             Repository::open(&self.fs_path)
@@ -340,7 +334,7 @@ mod tests {
     #[test]
     #[serial]
     fn test_post() {
-        let g = read_config();
+        let mut g = read_config();
         fs::remove_dir_all(&g.fs_path).ok();
         g.open_or_clone().unwrap();
         let added = util::create_random_file("/tmp");

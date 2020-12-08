@@ -1,55 +1,8 @@
 use serde::de::DeserializeOwned;
-use std::collections::HashMap;
 use std::path::Path;
 
 use crate::hashing::{HashBytes, Hash};
-use crate::hashing;
-
-pub trait BulletinBoard<E> {
-    fn refresh(&self) -> Result<(), E>;
-    fn post(&self, files: Vec<(&Path, &Path)>, message: &str) -> Result<(), E>;
-    fn list(&self) -> Vec<String>;
-    fn get<A: HashBytes + DeserializeOwned>(&self, key: String, hash: Hash) -> 
-        Result<A, bincode::Error>;
-}
-
-pub struct MemoryBulletinBoard(pub HashMap<String, Vec<u8>>);
-
-impl MemoryBulletinBoard {
-    pub fn new() -> MemoryBulletinBoard {
-        MemoryBulletinBoard(HashMap::new())
-    }
-    pub fn add(&mut self, key: String, value: Vec<u8>) {
-        self.0.insert(key, value);
-    }
-}
-
-impl BulletinBoard<&'static str> for MemoryBulletinBoard {
-    fn refresh(&self) -> Result<(), &'static str> {
-        Ok(())
-    }
-    fn post(&self, files: Vec<(&Path, &Path)>, message: &str) -> Result<(), &'static str> {
-        Ok(())
-    }
-    fn list(&self) -> Vec<String> {
-        self.0.iter().map(|(a, _)| a.clone()).collect()
-    }
-    fn get<A: HashBytes + DeserializeOwned>(&self, key: String, hash: Hash) -> Result<A, bincode::Error> {
-        let bytes = self.0.get(&key)
-            .ok_or(bincode::ErrorKind::Custom("not found".to_string()))?;
-
-        let artifact = bincode::deserialize::<A>(bytes)?;
-
-        let hashed = hashing::hash(&artifact);
-        
-        if hashed == hash {
-            Ok(artifact)
-        }
-        else {
-            Err(Box::new(bincode::ErrorKind::Custom("Mismatched hash".to_string())))
-        }
-    }
-}
+use crate::artifact::*;
 
 pub trait Names {
     const CONFIG: &'static str = "config.json";
@@ -79,59 +32,77 @@ pub trait Names {
     fn decryption_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/decryption.stmt", auth, contest).to_string() }
     fn decryption_sig(contest: u32, auth: u32) -> String { format!("{}/{}/decryption.sig", auth, contest).to_string() }
 
-    fn plaintexts(contest: u32, auth: u32) -> String { format!("{}/{}/plaintexts", auth, contest).to_string() }
-    fn plaintexts_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/plaintexts.stmt", auth, contest).to_string() }
-    fn plaintexts_sig(contest: u32, auth: u32) -> String { format!("{}/{}/plaintexts.sig", auth, contest).to_string() }
+    fn plau32exts(contest: u32, auth: u32) -> String { format!("{}/{}/plau32exts", auth, contest).to_string() }
+    fn plau32exts_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/plau32exts.stmt", auth, contest).to_string() }
+    fn plau32exts_sig(contest: u32, auth: u32) -> String { format!("{}/{}/plau32exts.sig", auth, contest).to_string() }
     
     fn auth_error(auth: u32) -> String { format!("{}/error", auth).to_string() }
 }
 
-#[cfg(test)]
-mod tests {
+pub trait BulletinB {
 
-    use crate::hashing;
-    use crate::bb;
-    use crate::bb::BulletinBoard;
-    use crate::artifact;
-    use uuid::Uuid;
-    use crate::rug_b::*;
-    use rand_core::OsRng;
-    use ed25519_dalek::Keypair;
-        
-    #[test]
-    fn test_membb_get() {
-        let mut csprng = OsRng;
-        
-        
-        let id = Uuid::new_v4();
-        let group = RugGroup::default();
-        let contests = 2;
-        let ballotbox_pk = Keypair::generate(&mut csprng).public; 
-        let trustees = 3;
-        let mut trustee_pks = Vec::with_capacity(trustees);
-        
-        for _ in 0..trustees {
-            let keypair = Keypair::generate(&mut csprng);
-            trustee_pks.push(keypair.public);
-        }
-        let mut cfg = artifact::Config {
-            id: id.as_bytes().clone(),
-            rug_group: Some(group),
-            contests: contests, 
-            ballotbox: ballotbox_pk, 
-            trustees: trustee_pks
-        };
+    // fn list(&self) -> Vec<String>;
+    fn add_config(&mut self, config: &Path);
+    fn get_config(&self) -> Option<Config>;
+    fn add_config_sig(&self, sig: &Path, trustee: u32);
 
-        let mut bb = bb::MemoryBulletinBoard::new();
-        let cfg_b = bincode::serialize(&cfg).unwrap();
-        let hash = hashing::hash(&cfg);
-        bb.add("hello".to_string(), cfg_b);
-        let mut cfg_result = bb.get::<artifact::Config>("hello".to_string(), hash);
-        assert!(cfg_result.is_ok());
+    /*fn add_error(&self, error: Path, position: u32);
+  
+    fn get_config_statement(&self) -> Option<Vec<u8>>;
 
-        cfg.id = Uuid::new_v4().as_bytes().clone();
-        let bad_hash = hashing::hash(&cfg);
-        cfg_result = bb.get::<artifact::Config>("hello".to_string(), bad_hash);
-        assert!(cfg_result.is_err());
-    }
+    fn get_config_signature(&self, auth: u32) -> Option<Vec<u8>>;
+
+    fn add_share(&self, share: Path, stmt: Path, sig: Path, contest: u32, position: u32);
+
+    fn get_share(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
+
+    fn get_share_statement(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
+
+    fn get_share_signature(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
+
+    fn add_public_key(&self, public_key: Path, stmt: Path, sig: Path, contest: u32, auth: u32);
+
+    fn add_public_key_signature(&self, sig: Path, contest: u32, auth: u32);
+
+    fn get_public_key(&self, contest: u32) -> Option<Vec<u8>>;
+
+    fn get_public_key_statement(&self, contest: u32) -> Option<Vec<u8>>;
+
+    fn get_public_key_signature(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
+
+    fn get_ballots(&self, contest: u32) -> Option<Vec<u8>>;
+
+    fn get_ballots_statement(&self, contest: u32) -> Option<Vec<u8>>;
+
+    fn get_ballots_signature(&self, contest: u32) -> Option<Vec<u8>>;
+
+    fn add_ballots(&self, ballots: Path, stmt: Path, sig: Path, contest: u32);
+
+    fn get_mix(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
+
+    fn get_mix_statement(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
+
+    fn get_mix_signature(&self, contest: u32, auth: u32, auth2: u32) -> Option<Vec<u8>>;
+
+    fn add_mix(&self, mix: Path, stmt: Path, sig: Path, contest: u32, auth: u32);
+
+    fn add_mix_signature(&self, sig: Path, contest: u32, auth_mixer: u32, auth_signer: u32);
+
+    fn get_decryption(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
+
+    fn get_decryption_statement(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
+
+    fn get_decryption_signature(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
+
+    fn add_decryption(&self, decryption: Path, stmt: Path, sig: Path, contest: u32, auth: u32);
+
+    fn get_plaintexts(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
+
+    fn get_plaintexts_statement(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
+
+    fn get_plaintexts_signature(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
+
+    fn add_plaintexts(&self, plau32exts: Path, stmt: Path, sig: Path, contest: u32, auth: u32);
+
+    fn add_plaintexts_signature(&self, sig: Path, contest: u32, auth: u32);*/
 }

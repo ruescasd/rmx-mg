@@ -27,7 +27,4 @@ pub trait Exponent: HashBytes + Clone + Send + Sync + Serialize + DeserializeOwn
     
     fn add_identity() -> Self;
     fn mul_identity() -> Self;
-    // needed to encrypt private keys
-    // fn to_bytes(&self) -> Vec<u8>;
-    // fn from_bytes(bytes: Vec<u8>) -> Vec<u8>;
 }

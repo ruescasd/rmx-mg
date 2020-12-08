@@ -7,11 +7,20 @@ use curve25519_dalek::ristretto::{RistrettoPoint};
 use rug::Integer;
 use rayon::prelude::*;
 use chrono::{DateTime, Utc};
+use tempfile::NamedTempFile;
 use uuid::Uuid;
+use std::io;
 
 use crate::group::*;
 use crate::elgamal::*;
 use crate::artifact::*;
+
+pub fn write_to_tmp(bytes: Vec<u8>) -> io::Result<PathBuf> {
+    let tmp_file = NamedTempFile::new().unwrap();
+    let path = tmp_file.path();
+    std::fs::write(path, bytes)?;
+    Ok(path.to_path_buf())
+}
 
 pub fn to_u8_30(input: Vec<u8>) -> [u8; 30] {
     assert_eq!(input.len(), 30);
