@@ -304,7 +304,8 @@ use crate::artifact::Statement;
 
 impl HashBytes for Statement {
     fn get_bytes(&self) -> Vec<u8> {
-        let mut bytes = self.0.as_bytes().to_vec();
+        let discriminant = self.0 as u8;
+        let mut bytes: Vec<u8> = vec![discriminant];
         bytes.extend(&self.1.to_le_bytes());
         
         for b in self.2.iter() {

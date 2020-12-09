@@ -19,10 +19,6 @@ impl MemoryBulletinBoard {
             data: HashMap::new()
         }
     }
-
-    fn refresh(&self) -> Result<(), &'static str> {
-        Ok(())
-    }
     fn put(&mut self, name: &str, data: &Path) {
         let bytes = fs::read(data).unwrap();
         self.data.insert(name.to_string(), bytes);
@@ -46,6 +42,27 @@ impl MemoryBulletinBoard {
             Err("Hash mismatch".to_string())
         }
     }
+    fn get_statements(&self) -> Vec<String> {
+        self.list().into_iter().filter(|s| {
+            s.ends_with(".stmt")
+        }).collect()
+    }
+    fn get_statement_triples(&self) -> Vec<(Vec<u8>, Vec<u8>, Vec<u8>)> {
+        
+        let sts = self.get_statements();
+        
+        sts.iter().map(|s| {
+            let data = s.replace(".stmt", "");
+            let sig = s.replace(".stmt", ".sig");
+
+            let stmt = self.data.get(s).unwrap().to_vec();
+            let data_ = self.data.get(&data).unwrap().to_vec();
+            let sig_ = self.data.get(&sig).unwrap().to_vec();
+
+
+            (stmt, data_, sig_)
+        }).collect()
+    }
 }
 
 impl BulletinB for MemoryBulletinBoard {
@@ -58,11 +75,20 @@ impl BulletinB for MemoryBulletinBoard {
 
         Some(ret)
     }
-    fn add_config_sig(&self, sig: &Path, trustee: u32) {
-        
-    }
 }
 
+fn artifact_location(path: &str) -> (u32, u32) {
+    let p = Path::new(&path);
+    let comp: Vec<&str> = p.components()
+        .take(2)
+        .map(|comp| comp.as_os_str().to_str().unwrap())
+        .collect();
+    
+    let auth: u32 = comp[0].parse().unwrap_or(0);
+    let contest: u32 = comp[1].parse().unwrap_or(0);
+
+    (auth, contest)
+}
 
 #[cfg(test)]
 mod tests {

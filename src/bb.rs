@@ -44,7 +44,7 @@ pub trait BulletinB {
     // fn list(&self) -> Vec<String>;
     fn add_config(&mut self, config: &Path);
     fn get_config(&self) -> Option<Config>;
-    fn add_config_sig(&self, sig: &Path, trustee: u32);
+    // fn add_config_sig(&self, sig: &Path, trustee: u32);
 
     /*fn add_error(&self, error: Path, position: u32);
   

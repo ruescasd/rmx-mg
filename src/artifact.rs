@@ -10,65 +10,6 @@ use crate::rug_b::RugGroup;
 type Hash = Vec<u8>;
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
-pub struct Statement(pub String, pub u32, pub Vec<Hash>);
-
-impl Statement {
-    pub fn config(config: Hash, contest: u32) -> Statement {
-        Statement(
-            "config".to_string(),
-            contest,
-            vec![config]
-        )
-    }
-    pub fn keyshare(config: Hash, contest: u32, share: Hash) -> Statement {
-        Statement(
-            "keyshare".to_string(),
-            contest,
-            vec![config, share]
-        )
-    }
-    pub fn public_key(config: Hash, contest: u32, public_key: Hash) -> Statement {
-        Statement(
-            "public_key".to_string(),
-            contest,
-            vec![config, public_key]
-        )
-    }
-    pub fn ballots(config: Hash, contest: u32, ballots: Hash) -> Statement {
-        Statement(
-            "ballots".to_string(),
-            contest,
-            vec![config, ballots]
-        )
-    }
-    pub fn mix(config: Hash, contest: u32, mix: Hash, ballots: Hash) -> Statement {
-        Statement(
-            "mix".to_string(),
-            contest,
-            vec![config, mix, ballots]
-        )
-    }
-    pub fn partial_decryption(config: Hash, contest: u32, partial_decryptions: Hash, ballots: Hash) -> Statement {
-        Statement(
-            "partial_decryption".to_string(),
-            contest,
-            vec![config, partial_decryptions, ballots]
-        )
-    }
-    pub fn plaintexts(config: Hash, contest: u32, plaintexts: Hash, partial_decryptions: Hash) -> Statement {
-        Statement(
-            "plaintexts".to_string(),
-            contest,
-            vec![config, plaintexts, partial_decryptions]
-        )
-    }
-}
-
-trait Artifact {
-    fn get_name(&self) -> String;
-}
-
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct Config {
     pub id: [u8; 16],
     pub rug_group: Option<RugGroup>,
@@ -117,6 +58,72 @@ pub struct Plaintexts<E> {
     pub plaintexts: Vec<E>
 }
 
+#[repr(u8)]
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Copy)]
+pub enum StatementType {
+    Config,
+    Keyshare,
+    PublicKey,
+    Ballots,
+    Mix,
+    PDecryptions,
+    Plaintexts
+}
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+pub struct Statement(pub StatementType, pub u32, pub Vec<Hash>);
+
+impl Statement {
+    pub fn config(config: Hash) -> Statement {
+        Statement(
+            StatementType::Config,
+            0,
+            vec![config]
+        )
+    }
+    pub fn keyshare(config: Hash, contest: u32, share: Hash) -> Statement {
+        Statement(
+            StatementType::Keyshare,
+            contest,
+            vec![config, share]
+        )
+    }
+    pub fn public_key(config: Hash, contest: u32, public_key: Hash) -> Statement {
+        Statement(
+            StatementType::PublicKey,
+            contest,
+            vec![config, public_key]
+        )
+    }
+    pub fn ballots(config: Hash, contest: u32, ballots: Hash) -> Statement {
+        Statement(
+            StatementType::Ballots,
+            contest,
+            vec![config, ballots]
+        )
+    }
+    pub fn mix(config: Hash, contest: u32, mix: Hash, ballots: Hash) -> Statement {
+        Statement(
+            StatementType::Mix,
+            contest,
+            vec![config, mix, ballots]
+        )
+    }
+    pub fn partial_decryption(config: Hash, contest: u32, partial_decryptions: Hash, ballots: Hash) -> Statement {
+        Statement(
+            StatementType::PDecryptions,
+            contest,
+            vec![config, partial_decryptions, ballots]
+        )
+    }
+    pub fn plaintexts(config: Hash, contest: u32, plaintexts: Hash, partial_decryptions: Hash) -> Statement {
+        Statement(
+            StatementType::Plaintexts,
+            contest,
+            vec![config, plaintexts, partial_decryptions]
+        )
+    }
+}
 
 #[cfg(test)]
 mod tests {  
