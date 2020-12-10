@@ -1,5 +1,6 @@
 use ed25519_dalek::PublicKey as SignaturePublicKey;
 use serde::{Deserialize, Serialize};
+use crepe::crepe;
 
 use crate::arithm::*;
 use crate::elgamal::*;
@@ -58,6 +59,9 @@ pub struct Plaintexts<E> {
     pub plaintexts: Vec<E>
 }
 
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+pub struct Statement(pub StatementType, pub u32, pub Vec<Hash>);
+
 #[repr(u8)]
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Copy)]
 pub enum StatementType {
@@ -69,9 +73,6 @@ pub enum StatementType {
     PDecryptions,
     Plaintexts
 }
-
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
-pub struct Statement(pub StatementType, pub u32, pub Vec<Hash>);
 
 impl Statement {
     pub fn config(config: Hash) -> Statement {
@@ -125,6 +126,12 @@ impl Statement {
     }
 }
 
+pub struct StatementData {
+    pub statement: Statement,
+    pub trustee: u32,
+    pub contest: u32
+}
+
 #[cfg(test)]
 mod tests {  
     use uuid::Uuid;
@@ -135,6 +142,7 @@ mod tests {
 
     #[test]
     fn test_config_serde() {
+        
         let mut csprng = OsRng;
         let id = Uuid::new_v4();
         let group = RugGroup::default();

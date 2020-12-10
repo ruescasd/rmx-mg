@@ -47,20 +47,22 @@ impl MemoryBulletinBoard {
             s.ends_with(".stmt")
         }).collect()
     }
-    fn get_statement_triples(&self) -> Vec<(Vec<u8>, Vec<u8>, Vec<u8>)> {
+    fn get_statement_triples(&self) -> Vec<StatementData> {
         
         let sts = self.get_statements();
-        
         sts.iter().map(|s| {
-            let data = s.replace(".stmt", "");
-            let sig = s.replace(".stmt", ".sig");
+            
+            let s_bytes = self.data.get(s).unwrap().to_vec();
+            let (trustee, contest) = artifact_location(s);
 
-            let stmt = self.data.get(s).unwrap().to_vec();
-            let data_ = self.data.get(&data).unwrap().to_vec();
-            let sig_ = self.data.get(&sig).unwrap().to_vec();
+            let stmt = bincode::deserialize(&s_bytes).unwrap();
 
-
-            (stmt, data_, sig_)
+            StatementData {
+                statement: stmt,
+                trustee: trustee,
+                contest: contest
+            }
+            
         }).collect()
     }
 }
