@@ -6,6 +6,7 @@ use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
 use crate::shuffler::*;
+use crate::bb::*;
 use crate::rug_b::RugGroup;
 
 type Hash = Vec<u8>;
@@ -130,6 +131,12 @@ pub struct StatementData {
     pub statement: Statement,
     pub trustee: u32,
     pub contest: u32
+}
+
+impl StatementData {
+    pub fn verify<B: BulletinBoard>(&self, board: B) {
+
+    }
 }
 
 #[cfg(test)]

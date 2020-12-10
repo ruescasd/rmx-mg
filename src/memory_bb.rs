@@ -67,7 +67,7 @@ impl MemoryBulletinBoard {
     }
 }
 
-impl BulletinB for MemoryBulletinBoard {
+impl BulletinBoard for MemoryBulletinBoard {
     fn add_config(&mut self, config: &Path) {
         self.put(Self::CONFIG, config);
     }

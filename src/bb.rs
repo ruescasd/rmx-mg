@@ -39,7 +39,7 @@ pub trait Names {
     fn auth_error(auth: u32) -> String { format!("{}/error", auth).to_string() }
 }
 
-pub trait BulletinB {
+pub trait BulletinBoard {
 
     // fn list(&self) -> Vec<String>;
     fn add_config(&mut self, config: &Path);
