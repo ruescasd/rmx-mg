@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::hashing::{HashBytes, Hash};
 use crate::artifact::*;
+use crate::protocol::StatementV;
 
 pub trait Names {
     const CONFIG: &'static str = "config.json";
@@ -41,9 +42,15 @@ pub trait Names {
 
 pub trait BulletinBoard {
 
-    // fn list(&self) -> Vec<String>;
+    fn list(&self) -> Vec<String>;
     fn add_config(&mut self, config: &Path);
-    fn get_config(&self) -> Option<Config>;
+    fn get_config(&self) -> Option<(Config, Hash)>;
+    fn get_statements(&self) -> Vec<StatementV>;
+    fn get_stmts(&self) -> Vec<String> {
+        self.list().into_iter().filter(|s| {
+            s.ends_with(".stmt")
+        }).collect()
+    }
     // fn add_config_sig(&self, sig: &Path, trustee: u32);
 
     /*fn add_error(&self, error: Path, position: u32);

@@ -7,6 +7,7 @@ use crate::hashing::{HashBytes, Hash};
 use crate::hashing;
 use crate::bb::*;
 use crate::artifact::*;
+use crate::protocol::StatementV;
 
 pub struct MemoryBulletinBoard {
     data: HashMap<String, Vec<u8>>
@@ -23,9 +24,7 @@ impl MemoryBulletinBoard {
         let bytes = fs::read(data).unwrap();
         self.data.insert(name.to_string(), bytes);
     }
-    fn list(&self) -> Vec<String> {
-        self.data.iter().map(|(a, _)| a.clone()).collect()
-    }
+   
     fn get<A: HashBytes + DeserializeOwned>(&self, target: &Path, hash: Hash) -> Result<A, String> {
         let key = target.to_str().unwrap().to_string();
         let bytes = self.data.get(&key).ok_or("Not found")?;
@@ -42,23 +41,37 @@ impl MemoryBulletinBoard {
             Err("Hash mismatch".to_string())
         }
     }
-    fn get_statements(&self) -> Vec<String> {
-        self.list().into_iter().filter(|s| {
-            s.ends_with(".stmt")
-        }).collect()
+    
+}
+
+impl BulletinBoard for MemoryBulletinBoard {
+    fn add_config(&mut self, config: &Path) {
+        self.put(Self::CONFIG, config);
     }
-    fn get_statement_triples(&self) -> Vec<StatementData> {
+    fn get_config(&self) -> Option<(Config, Hash)> {
+        let bytes = self.data.get(Self::CONFIG)?;
+        let ret: Config = bincode::deserialize(bytes).unwrap();
+        let hash = hashing::hash_bytes(bytes);
+
+        Some((ret, hash))
+    }
+    fn list(&self) -> Vec<String> {
+        self.data.iter().map(|(a, _)| a.clone()).collect()
+    }
+    fn get_statements(&self) -> Vec<StatementV> {
         
-        let sts = self.get_statements();
+        let sts = self.get_stmts();
         sts.iter().map(|s| {
             
             let s_bytes = self.data.get(s).unwrap().to_vec();
+            let sig_bytes = self.data.get(&s.replace(".stmt", ".sig")).unwrap().to_vec();
             let (trustee, contest) = artifact_location(s);
 
             let stmt = bincode::deserialize(&s_bytes).unwrap();
 
-            StatementData {
+            StatementV {
                 statement: stmt,
+                signature: sig_bytes,
                 trustee: trustee,
                 contest: contest
             }
@@ -67,26 +80,14 @@ impl MemoryBulletinBoard {
     }
 }
 
-impl BulletinBoard for MemoryBulletinBoard {
-    fn add_config(&mut self, config: &Path) {
-        self.put(Self::CONFIG, config);
-    }
-    fn get_config(&self) -> Option<Config> {
-        let bytes = self.data.get(Self::CONFIG)?;
-        let ret: Config = bincode::deserialize(bytes).unwrap();
-
-        Some(ret)
-    }
-}
-
-fn artifact_location(path: &str) -> (u32, u32) {
+fn artifact_location(path: &str) -> (usize, u32) {
     let p = Path::new(&path);
     let comp: Vec<&str> = p.components()
         .take(2)
         .map(|comp| comp.as_os_str().to_str().unwrap())
         .collect();
     
-    let auth: u32 = comp[0].parse().unwrap_or(0);
+    let auth: usize = comp[0].parse().unwrap_or(0);
     let contest: u32 = comp[1].parse().unwrap_or(0);
 
     (auth, contest)

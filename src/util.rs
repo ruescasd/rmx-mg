@@ -15,11 +15,11 @@ use crate::group::*;
 use crate::elgamal::*;
 use crate::artifact::*;
 
-pub fn write_to_tmp(bytes: Vec<u8>) -> io::Result<PathBuf> {
+pub fn write_to_tmp(bytes: Vec<u8>) -> io::Result<NamedTempFile> {
     let tmp_file = NamedTempFile::new().unwrap();
     let path = tmp_file.path();
     std::fs::write(path, bytes)?;
-    Ok(path.to_path_buf())
+    Ok(tmp_file)
 }
 
 pub fn to_u8_30(input: Vec<u8>) -> [u8; 30] {

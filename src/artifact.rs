@@ -127,17 +127,9 @@ impl Statement {
     }
 }
 
-pub struct StatementData {
-    pub statement: Statement,
-    pub trustee: u32,
-    pub contest: u32
-}
 
-impl StatementData {
-    pub fn verify<B: BulletinBoard>(&self, board: B) {
 
-    }
-}
+
 
 #[cfg(test)]
 mod tests {  
