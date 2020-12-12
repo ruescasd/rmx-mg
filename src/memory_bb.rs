@@ -8,16 +8,23 @@ use crate::hashing;
 use crate::bb::*;
 use crate::artifact::*;
 use crate::protocol::StatementV;
+use crate::arithm::Element;
+use crate::group::Group;
 
-pub struct MemoryBulletinBoard {
-    data: HashMap<String, Vec<u8>>
+pub struct MemoryBulletinBoard<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> {
+    data: HashMap<String, Vec<u8>>,
+    bogus: Option<E>,
+    bogus2: Option<G>
 }
-impl Names for MemoryBulletinBoard{}
+impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Names for MemoryBulletinBoard
+<E, G>{}
 
-impl MemoryBulletinBoard {
-    pub fn new() -> MemoryBulletinBoard {
+impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBulletinBoard<E, G> {
+    pub fn new() -> MemoryBulletinBoard<E, G> {
         MemoryBulletinBoard {
-            data: HashMap::new()
+            data: HashMap::new(),
+            bogus: None,
+            bogus2: None
         }
     }
     fn put(&mut self, name: &str, data: &Path) {
@@ -44,16 +51,25 @@ impl MemoryBulletinBoard {
     
 }
 
-impl BulletinBoard for MemoryBulletinBoard {
+
+impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> 
+    BulletinBoard<E, G> for MemoryBulletinBoard<E, G> {
+    
     fn add_config(&mut self, config: &Path) {
+        // let stmt = Statement::from_config
         self.put(Self::CONFIG, config);
     }
-    fn get_config(&self) -> Option<(Config, Hash)> {
+    fn get_config(&self) -> Option<Config> {
         let bytes = self.data.get(Self::CONFIG)?;
         let ret: Config = bincode::deserialize(bytes).unwrap();
-        let hash = hashing::hash_bytes(bytes);
 
-        Some((ret, hash))
+        Some(ret)
+    }
+    fn get_share(&self, contest: u32, auth: u32) -> Option<Keyshare<E, G>> {
+        let bytes = self.data.get(&Self::share(contest, auth))?;
+        let ret: Keyshare<E, G> = bincode::deserialize(bytes).unwrap();
+
+        Some(ret)
     }
     fn list(&self) -> Vec<String> {
         self.data.iter().map(|(a, _)| a.clone()).collect()
@@ -68,10 +84,13 @@ impl BulletinBoard for MemoryBulletinBoard {
             let (trustee, contest) = artifact_location(s);
 
             let stmt = bincode::deserialize(&s_bytes).unwrap();
+            let stmt_hash = hashing::hash(&stmt);
+            let sig = bincode::deserialize(&sig_bytes).unwrap();
 
             StatementV {
                 statement: stmt,
-                signature: sig_bytes,
+                signature: sig,
+                statement_hash: stmt_hash,
                 trustee: trustee,
                 contest: contest
             }
@@ -102,6 +121,7 @@ mod tests {
     use ed25519_dalek::Keypair;
     use tempfile::NamedTempFile;
     use std::path::Path;
+    use rug::Integer;
 
     use crate::hashing;
     use crate::artifact;
@@ -132,7 +152,7 @@ mod tests {
             trustees: trustee_pks
         };
 
-        let mut bb = MemoryBulletinBoard::new();
+        let mut bb = MemoryBulletinBoard::<Integer, RugGroup>::new();
         let cfg_b = bincode::serialize(&cfg).unwrap();
         
         let tmp_file = NamedTempFile::new().unwrap();

@@ -304,14 +304,18 @@ mod tests {
         let km2 = Keymaker::gen(&group);
         let (pk1, proof1) = km1.share();
         let (pk2, proof2) = km2.share();
+        let esk1 = km1.get_encrypted_sk();
+        let esk2 = km2.get_encrypted_sk();
 
         let share1 = Keyshare {
             share: pk1,
-            proof: proof1
+            proof: proof1,
+            encrypted_sk: esk1
         };
         let share2 = Keyshare {
             share: pk2,
-            proof: proof2
+            proof: proof2,
+            encrypted_sk: esk2
         };
         let share1_b = bincode::serialize(&share1).unwrap();
         let share2_b = bincode::serialize(&share2).unwrap();

@@ -1,12 +1,16 @@
+use generic_array::{typenum::U32, GenericArray};
 use rayon::prelude::*;
 
+use crate::artifact::EncryptedPrivateKey;
 use crate::arithm::*;
 use crate::group::*;
 use crate::elgamal::*;
+use crate::symmetric;
 
 pub struct Keymaker<E: Element, G: Group<E>> {
     sk: PrivateKey<E, G>,
-    pk: PublicKey<E, G>
+    pk: PublicKey<E, G>,
+    symmetric: GenericArray<u8, U32>
 }
 
 impl<E: Element, G: Group<E>> Keymaker<E, G> {
@@ -14,10 +18,12 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
     pub fn gen(group: &G) -> Keymaker<E, G> {
         let sk = group.gen_key();
         let pk = PublicKey::from(&sk.public_value.clone(), group);
+        let symmetric = symmetric::gen_key();
         
         Keymaker {
             sk: sk,
-            pk: pk
+            pk: pk,
+            symmetric: symmetric
         }
     }
     
@@ -29,6 +35,10 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
 
         (pk, proof)
 
+    }
+
+    pub fn get_encrypted_sk(&self) -> EncryptedPrivateKey {
+        self.sk.to_encrypted(self.symmetric)
     }
 
     pub fn verify_share(group: &G, pk: &PublicKey<E, G>, proof: &Schnorr<E>) -> bool {

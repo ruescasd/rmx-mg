@@ -3,6 +3,8 @@ use std::path::Path;
 
 use crate::hashing::{HashBytes, Hash};
 use crate::artifact::*;
+use crate::arithm::Element;
+use crate::group::Group;
 use crate::protocol::StatementV;
 
 pub trait Names {
@@ -40,11 +42,17 @@ pub trait Names {
     fn auth_error(auth: u32) -> String { format!("{}/error", auth).to_string() }
 }
 
-pub trait BulletinBoard {
+pub trait BulletinBoard<E: Element, G: Group<E>> {
 
     fn list(&self) -> Vec<String>;
     fn add_config(&mut self, config: &Path);
-    fn get_config(&self) -> Option<(Config, Hash)>;
+    fn get_config(&self) -> Option<Config>;
+    
+    // fn add_share(&self, share: Path, stmt: Path, sig: Path, contest: u32, position: u32);
+
+    fn get_share(&self, contest: u32, auth: u32) -> Option<Keyshare<E, G>>;
+
+
     fn get_statements(&self) -> Vec<StatementV>;
     fn get_stmts(&self) -> Vec<String> {
         self.list().into_iter().filter(|s| {
@@ -59,10 +67,7 @@ pub trait BulletinBoard {
 
     fn get_config_signature(&self, auth: u32) -> Option<Vec<u8>>;
 
-    fn add_share(&self, share: Path, stmt: Path, sig: Path, contest: u32, position: u32);
-
-    fn get_share(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
-
+    
     fn get_share_statement(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;
 
     fn get_share_signature(&self, contest: u32, auth: u32) -> Option<Vec<u8>>;

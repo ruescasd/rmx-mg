@@ -8,6 +8,7 @@ use crate::group::*;
 use crate::shuffler::*;
 use crate::bb::*;
 use crate::rug_b::RugGroup;
+use crate::hashing;
 
 type Hash = Vec<u8>;
 
@@ -24,7 +25,7 @@ pub struct Config {
 pub struct Keyshare<E: Element, G: Group<E>> {
     pub share: PublicKey<E, G>,
     pub proof: Schnorr<E>,
-    // pub encrypted_sk: EncryptedPrivateKey
+    pub encrypted_sk: EncryptedPrivateKey
 }
 
 #[derive(Serialize, Deserialize)]
@@ -71,11 +72,15 @@ pub enum StatementType {
     PublicKey,
     Ballots,
     Mix,
-    PDecryptions,
+    PDecryption,
     Plaintexts
 }
 
 impl Statement {
+    pub fn from_config(config: &Config) -> Statement {
+        let hash = hashing::hash(config);
+        Statement::config(hash.to_vec())
+    }
     pub fn config(config: Hash) -> Statement {
         Statement(
             StatementType::Config,
@@ -113,7 +118,7 @@ impl Statement {
     }
     pub fn partial_decryption(config: Hash, contest: u32, partial_decryptions: Hash, ballots: Hash) -> Statement {
         Statement(
-            StatementType::PDecryptions,
+            StatementType::PDecryption,
             contest,
             vec![config, partial_decryptions, ballots]
         )

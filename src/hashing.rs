@@ -147,12 +147,12 @@ pub fn hash<T: HashBytes>(data: &T) -> [u8; 64] {
     hasher.update(bytes);
     util::to_u8_64(hasher.finalize().to_vec())
 }
-
+/*
 pub fn hash_bytes(bytes: &Vec<u8>) -> [u8; 64] {
     let mut hasher = Sha512::new();
     hasher.update(bytes);
     util::to_u8_64(hasher.finalize().to_vec())
-}
+}*/
 
 impl<E: Element + HashBytes> HashBytes for Ciphertext<E> {
     fn get_bytes(&self) -> Vec<u8> {
@@ -396,6 +396,12 @@ impl<E: Element> HashBytes for Plaintexts<E> {
 
 use crate::protocol::Act;
 
+impl HashBytes for Hash {
+    fn get_bytes(&self) -> Vec<u8> {
+        self.to_vec()
+    }
+}
+
 impl HashBytes for Act {
     fn get_bytes(&self) -> Vec<u8> {
         match self {
@@ -404,11 +410,12 @@ impl HashBytes for Act {
                 v.extendl(h.to_vec());
                 v
             },
-            Act::CheckPk(h, i, s) => {
+            Act::CheckPk(h, i, pk, s) => {
                 let mut v = vec![2u8];
                 v.extendl(h.to_vec());
                 v.extendl(i.to_le_bytes().to_vec());
-                v.extendl(s.to_vec());
+                v.extendl(pk.to_vec());
+                v.extendl(concat_bytes_iter(s));
                 v
             },
             _ => vec![]
