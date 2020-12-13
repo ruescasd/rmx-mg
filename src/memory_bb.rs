@@ -99,14 +99,14 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
     }
 }
 
-fn artifact_location(path: &str) -> (usize, u32) {
+fn artifact_location(path: &str) -> (u32, u32) {
     let p = Path::new(&path);
     let comp: Vec<&str> = p.components()
         .take(2)
         .map(|comp| comp.as_os_str().to_str().unwrap())
         .collect();
     
-    let auth: usize = comp[0].parse().unwrap_or(0);
+    let auth: u32 = comp[0].parse().unwrap_or(0);
     let contest: u32 = comp[1].parse().unwrap_or(0);
 
     (auth, contest)

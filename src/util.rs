@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io::Write;
 use std::fs::OpenOptions;
+use std::fs;
 
 use curve25519_dalek::ristretto::{RistrettoPoint};
 use rug::Integer;
@@ -15,10 +16,19 @@ use crate::group::*;
 use crate::elgamal::*;
 use crate::artifact::*;
 
+pub fn read_file_bytes(path: &Path) -> io::Result<Vec<u8>> {
+    fs::read(path)
+}
+
+pub fn write_file_bytes(path: &Path, bytes: Vec<u8>) -> io::Result<()> {
+    fs::write(path, bytes)?;
+    Ok(())
+}
+
 pub fn write_to_tmp(bytes: Vec<u8>) -> io::Result<NamedTempFile> {
     let tmp_file = NamedTempFile::new().unwrap();
     let path = tmp_file.path();
-    std::fs::write(path, bytes)?;
+    fs::write(path, bytes)?;
     Ok(tmp_file)
 }
 
