@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::marker::PhantomData;
 
 use serde::{Deserialize, Serialize};
 use ed25519_dalek::PublicKey as SignaturePublicKey;
@@ -16,7 +17,7 @@ use crate::group::Group;
 
 pub type TrusteeTotal = u32;
 pub type TrusteeIndex = u32;
-pub type ItemIndex = u32;
+pub type ContestIndex = u32;
 
 pub type ConfigHash = Hash;
 pub type ShareHash = Hash;
@@ -25,11 +26,10 @@ pub type BallotsHash = Hash;
 pub type MixHash = Hash;
 pub type DecryptionHash = Hash;
 pub type PlaintextsHash = Hash;
-type Hashes = [Hash; 10];
 
 type SerializedHash = Vec<u8>;
+type Hashes = [Hash; 10];
 
-use std::marker::PhantomData;
 
 struct Protocol<E: Element, G: Group<E>, B: BulletinBoard<E, G>> {
     board: B,
@@ -61,9 +61,11 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
                 .position(|s| s.to_bytes() == self_pk.to_bytes())
                 .unwrap();
             let hash = hashing::hash(&cfg);
+            let contests = cfg.contests;
 
             let f = Fact::config_present(
                 hash,
+                contests,
                 trustees as u32,
                 self_pos as u32
             );
@@ -93,54 +95,6 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
 
         output.0
     }
-}
-
-fn get_facts<E: Element, G: Group<E>, B: BulletinBoard<E, G>>
-    (board: &B, self_pk: SignaturePublicKey) -> Vec<Fact> {
-    
-    let mut facts: Vec<Fact> = board.get_statements().iter()
-        .map(|sv| sv.verify(board))
-        .filter(|f| f.is_some())
-        .map(|f| f.unwrap())
-        .collect();
-    
-    if let Some(cfg) = board.get_config() {
-        let trustees = cfg.trustees.len();
-        let self_pos = cfg.trustees.iter()
-            .position(|s| s.to_bytes() == self_pk.to_bytes())
-            .unwrap();
-        let hash = hashing::hash(&cfg);
-
-        let f = Fact::config_present(
-            hash,
-            trustees as u32,
-            self_pos as u32
-        );
-        facts.push(f);
-    };
-
-    facts
-}
-fn process_facts<E: Element, G: Group<E>, B: BulletinBoard<E, G>>
-    (board: &B, self_pk: SignaturePublicKey) -> HashSet<Do> {
-    let mut runtime = Crepe::new();
-    let facts = get_facts(board, self_pk);
-    facts.into_iter().map(|f| {
-        match f {
-            Fact::ConfigPresent(x) => runtime.extend(&[x]),
-            Fact::ConfigSignedBy(x) => runtime.extend(&[x]),
-            Fact::PkShareSignedBy(x) => runtime.extend(&[x]),
-            Fact::PkSignedBy(x) => runtime.extend(&[x]),
-            Fact::BallotsSigned(x) => runtime.extend(&[x]),
-            Fact::MixSignedBy(x) => runtime.extend(&[x]),
-            Fact::DecryptionSignedBy(x) => runtime.extend(&[x]),
-            Fact::PlaintextSignedBy(x) => runtime.extend(&[x])
-        }
-    }).count();
-
-    let output = runtime.run();
-
-    output.0
 }
 
 pub struct StatementV {
@@ -212,40 +166,40 @@ enum Fact {
     PlaintextSignedBy(PlaintextSignedBy)
 }
 impl Fact {
-    fn config_present(c: ConfigHash, total: TrusteeIndex, 
+    fn config_present(c: ConfigHash, cn: ContestIndex, trustees: TrusteeIndex, 
         self_index: TrusteeIndex) -> Fact {
         
-        Fact::ConfigPresent(ConfigPresent(c, total, self_index))
+        Fact::ConfigPresent(ConfigPresent(c, cn, trustees, self_index))
     }
     fn config_signed_by(c: ConfigHash, trustee: TrusteeIndex) -> Fact {
         Fact::ConfigSignedBy(ConfigSignedBy(c, trustee))
     }
-    fn share_signed_by(c: ConfigHash, contest: ItemIndex, share: ShareHash,
+    fn share_signed_by(c: ConfigHash, contest: ContestIndex, share: ShareHash,
         trustee: TrusteeIndex) -> Fact {
         
         Fact::PkShareSignedBy(PkShareSignedBy(c, contest, share, trustee))
     }
-    fn pk_signed_by(c: ConfigHash, contest: ItemIndex, pk: PkHash, 
+    fn pk_signed_by(c: ConfigHash, contest: ContestIndex, pk: PkHash, 
         trustee: TrusteeIndex) -> Fact {
         
         Fact::PkSignedBy(PkSignedBy(c, contest, pk, trustee))
     }
-    fn ballots_signed(c: ConfigHash, contest: ItemIndex, 
+    fn ballots_signed(c: ConfigHash, contest: ContestIndex, 
         ballots: BallotsHash) -> Fact {
         
         Fact::BallotsSigned(BallotsSigned(c, contest, ballots))
     }
-    fn mix_signed_by(c: ConfigHash, contest: ItemIndex, mix: MixHash, 
+    fn mix_signed_by(c: ConfigHash, contest: ContestIndex, mix: MixHash, 
         ballots: BallotsHash, trustee: TrusteeIndex) -> Fact {
         
         Fact::MixSignedBy(MixSignedBy(c, contest, mix, ballots, trustee))
     }
-    fn decryption_signed_by(c: ConfigHash, contest: ItemIndex, decryption: DecryptionHash, 
+    fn decryption_signed_by(c: ConfigHash, contest: ContestIndex, decryption: DecryptionHash, 
         trustee: TrusteeIndex) -> Fact {
         
         Fact::DecryptionSignedBy(DecryptionSignedBy(c, contest, decryption, trustee))
     }
-    fn plaintext_signed_by(c: ConfigHash, contest: ItemIndex, plaintexts: PlaintextsHash,
+    fn plaintext_signed_by(c: ConfigHash, contest: ContestIndex, plaintexts: PlaintextsHash,
         decryptions: DecryptionHash, trustee: TrusteeIndex) -> Fact {
         
         Fact::PlaintextSignedBy(
@@ -257,31 +211,33 @@ impl Fact {
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
 pub enum Act {
     CheckConfig(ConfigHash),
-    MakePk(ConfigHash, ItemIndex, Hashes),
-    CheckPk(ConfigHash, ItemIndex, PkHash, Hashes),
-    CheckMix(ConfigHash, ItemIndex, TrusteeIndex, MixHash),
-    Mix(ConfigHash, ItemIndex, BallotsHash),
-    PartialDecrypt(ConfigHash, ItemIndex, BallotsHash),
-    CheckPlaintexts(ConfigHash, ItemIndex, MixHash, DecryptionHash)
+    PostShare(ConfigHash, ContestIndex),
+    CombineShares(ConfigHash, ContestIndex, Hashes),
+    CheckPk(ConfigHash, ContestIndex, PkHash, Hashes),
+    CheckMix(ConfigHash, ContestIndex, TrusteeIndex, MixHash),
+    Mix(ConfigHash, ContestIndex, BallotsHash),
+    PartialDecrypt(ConfigHash, ContestIndex, BallotsHash),
+    CombineDecryptions(ConfigHash, ContestIndex, Hashes),
+    CheckPlaintexts(ConfigHash, ContestIndex, MixHash, Hashes)
 }
 
 crepe! {
     @input
-    struct ConfigPresent(ConfigHash, TrusteeIndex, TrusteeIndex);
+    struct ConfigPresent(ConfigHash, ContestIndex, TrusteeIndex, TrusteeIndex);
     @input
     struct ConfigSignedBy(ConfigHash, u32);
     @input
-    struct PkShareSignedBy(ConfigHash, ItemIndex, ShareHash, TrusteeIndex);
+    struct PkShareSignedBy(ConfigHash, ContestIndex, ShareHash, TrusteeIndex);
     @input
-    struct PkSignedBy(ConfigHash, ItemIndex, PkHash, TrusteeIndex);
+    struct PkSignedBy(ConfigHash, ContestIndex, PkHash, TrusteeIndex);
     @input
-    struct BallotsSigned(ConfigHash, ItemIndex, BallotsHash);
+    struct BallotsSigned(ConfigHash, ContestIndex, BallotsHash);
     @input
-    struct MixSignedBy(ConfigHash, ItemIndex, MixHash, BallotsHash, TrusteeIndex);
+    struct MixSignedBy(ConfigHash, ContestIndex, MixHash, BallotsHash, TrusteeIndex);
     @input
-    struct DecryptionSignedBy(ConfigHash, ItemIndex, DecryptionHash, TrusteeIndex);
+    struct DecryptionSignedBy(ConfigHash, ContestIndex, DecryptionHash, TrusteeIndex);
     @input
-    struct PlaintextSignedBy(ConfigHash, ItemIndex, PlaintextsHash, DecryptionHash, 
+    struct PlaintextSignedBy(ConfigHash, ContestIndex, PlaintextsHash, DecryptionHash, 
         TrusteeIndex);
 
     // 0
@@ -295,10 +251,12 @@ crepe! {
     struct ConfigOk(ConfigHash);
     // 3
     @output
-    struct PkSharesUpTo(ConfigHash, ItemIndex, TrusteeIndex, Hashes);
+    struct PkSharesUpTo(ConfigHash, ContestIndex, TrusteeIndex, Hashes);
     // 4
     @output
-    struct PkSharesOk(ConfigHash, ItemIndex, Hashes);
+    struct PkSharesOk(ConfigHash, ContestIndex, Hashes);
+    @output
+    struct Contest(ConfigHash, u32);
     
     ConfigSignedUpTo(config, 1) <-
         ConfigSignedBy(config, 1);
@@ -308,12 +266,24 @@ crepe! {
         ConfigSignedBy(config, trustee + 1);
     
     ConfigOk(config) <- 
-        ConfigSignedUpTo(config, auth_total),
-        ConfigPresent(config, auth_total, _self);
+        ConfigSignedUpTo(config, total_t),
+        ConfigPresent(config, _, total_t, _);
 
+    Contest(config, contests) <-
+        ConfigPresent(config, contests, total_t, _self);
+
+    Contest(config, n - 1) <- Contest(config, n),
+        (n > 0);
+    
+    Do(Act::PostShare(config, contest)) <- 
+        ConfigPresent(config, _, _, self_t),
+        Contest(config, contest),
+        ConfigOk(config),
+        !PkShareSignedBy(config, contest, _, self_t);
+    
     Do(Act::CheckConfig(config)) <- 
-        ConfigPresent(config, _, _self),
-        !ConfigSignedBy(config, _self);
+        ConfigPresent(config, _, _, self_t),
+        !ConfigSignedBy(config, self_t);
 
     PkSharesUpTo(config, contest, 1, first) <-
         PkShareSignedBy(config, contest, share, 1),
@@ -325,13 +295,13 @@ crepe! {
         let shares = array_set(input_shares, trustee + 1, share);
 
     PkSharesOk(config, contest, shares) <-
-        PkSharesUpTo(config, contest, trustee_total, shares),
-        ConfigPresent(config, trustee_total, _self),
+        PkSharesUpTo(config, contest, total_t, shares),
+        ConfigPresent(config, _, total_t, _),
         ConfigOk(config);
 
-    Do(Act::MakePk(config, contest, hashes)) <- 
+    Do(Act::CombineShares(config, contest, hashes)) <- 
         PkSharesOk(config, contest, hashes),
-        ConfigPresent(config, _, 1),
+        ConfigPresent(config, _, _, 1),
         ConfigOk(config);
     
     
@@ -386,7 +356,7 @@ mod tests {
     use crate::util;
     
     #[test]
-    fn test_crepe() {
+    fn test_crepe_config() {
         let mut csprng = OsRng;
 
         let mut bb = MemoryBulletinBoard::<Integer, RugGroup>::new();
@@ -463,7 +433,7 @@ use crate::hashing::*;
 
 pub type TrusteeTotal = u32;
 pub type TrusteeIndex = u32;
-pub type ItemIndex = u32;
+pub type ContestIndex = u32;
 
 pub type ConfigHash = Hash;
 pub type ShareHash = Hash;
@@ -494,10 +464,10 @@ fn first_art(value: Art) -> Arts {
 pub enum Art {
     Nil,
     Config(ConfigHash, TrusteeTotal, TrusteeIndex),
-    Pk(ConfigHash, ItemIndex, PkHash),
-    Ballots(ConfigHash, ItemIndex, BallotsHash),
-    Mix(ConfigHash, ItemIndex, BallotsHash, MixHash),
-    Plaintexts(ConfigHash, ItemIndex, BallotsHash)
+    Pk(ConfigHash, ContestIndex, PkHash),
+    Ballots(ConfigHash, ContestIndex, BallotsHash),
+    Mix(ConfigHash, ContestIndex, BallotsHash, MixHash),
+    Plaintexts(ConfigHash, ContestIndex, BallotsHash)
 }
 
 impl Art {
@@ -580,7 +550,7 @@ mod tests {
         struct PkOk(ConfigHash, TrusteeIndex);
         // 5
         @output
-        struct BallotsOk(ConfigHash, ItemIndex, BallotsHash);
+        struct BallotsOk(ConfigHash, ContestIndex, BallotsHash);
 
         // 6
         @output

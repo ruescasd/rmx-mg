@@ -19,7 +19,7 @@ impl LocalStore {
             None
         }
     }
-    pub fn set_work(&self, action: &protocol::Act, work:Vec<u8>) {
+    pub fn set_work(&self, action: &protocol::Act, work: Vec<u8>) {
         let target = self.path_for_action(action);
         assert!(!target.exists());
         util::write_file_bytes(&target, work).unwrap()
