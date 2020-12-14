@@ -48,7 +48,9 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
     
     fn get_facts(&self, self_pk: SignaturePublicKey) -> Vec<Fact> {
     
-        let mut facts: Vec<Fact> = self.board.get_statements().iter()
+        let svs = self.board.get_statements();
+        println!("StatementVs {:?}", svs);
+        let mut facts: Vec<Fact> = svs.iter()
             .map(|sv| sv.verify(&self.board))
             .filter(|f| f.is_some())
             .map(|f| f.unwrap())
@@ -56,7 +58,8 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
         
         if let Some(cfg) = self.board.get_config() {
             let trustees = cfg.trustees.len();
-            let self_pos = cfg.trustees.iter()
+            // first trustee is 1
+            let self_pos = 1 + cfg.trustees.iter()
                 .position(|s| s.to_bytes() == self_pk.to_bytes())
                 .unwrap();
             let hash = hashing::hash(&cfg);
@@ -96,6 +99,7 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
     }
 }
 
+#[derive(Debug)]
 pub struct StatementV {
     pub statement: Statement,
     pub signature: Signature,
@@ -111,6 +115,7 @@ impl StatementV {
         let pk = config.trustees[self.trustee as usize];
         let verified = pk.verify(&self.statement_hash, &self.signature);
         let config_h = util::to_u8_64(&statement.2[0]);
+        println!("Calling verify on {:?}", &self);
 
         match statement.0 {
             StatementType::Config => {
@@ -270,16 +275,16 @@ crepe! {
     @output
     struct Contest(ConfigHash, u32);
     
+    Do(Act::CheckConfig(config)) <- 
+        ConfigPresent(config, _, _, self_t),
+        !ConfigSignedBy(config, self_t);
+    
     Do(Act::PostShare(config, contest)) <- 
         ConfigPresent(config, _, _, self_t),
         Contest(config, contest),
         ConfigOk(config),
         !PkShareSignedBy(config, contest, _, self_t);
     
-    Do(Act::CheckConfig(config)) <- 
-        ConfigPresent(config, _, _, self_t),
-        !ConfigSignedBy(config, self_t);
-
     Do(Act::CombineShares(config, contest, hashes)) <- 
         PkSharesOk(config, contest, hashes),
         ConfigPresent(config, _, _, 1),
@@ -335,7 +340,8 @@ mod tests {
     
     use std::fs;
     use std::path::Path;
-    use ed25519_dalek::Keypair;
+    use ed25519_dalek::{Keypair, Signer};
+    
     use uuid::Uuid;
     use rand_core::OsRng;
     use tempfile::NamedTempFile;
@@ -365,11 +371,14 @@ mod tests {
         let contests = 2;
         let ballotbox_pk = Keypair::generate(&mut csprng).public; 
         let trustees = 3;
+        let mut trustee_kps = Vec::with_capacity(trustees);
         let mut trustee_pks = Vec::with_capacity(trustees);
+        
         
         for _ in 0..trustees {
             let keypair = Keypair::generate(&mut csprng);
             trustee_pks.push(keypair.public);
+            trustee_kps.push(keypair);
         }
         let self_pk = trustee_pks[0];
         let cfg = artifact::Config {
@@ -382,12 +391,12 @@ mod tests {
         let cfg_b = bincode::serialize(&cfg).unwrap();
         let cfg_statement = Statement::from_config(&cfg);
         let cfg_statement_b = bincode::serialize(&cfg_statement).unwrap();
-        // let cfg_f = util::write_to_tmp(cfg_b).unwrap();
+        
         let action = Act::AddConfig;
         let paths = ls.set_work(&action, vec![cfg_b, cfg_statement_b]);
         
         bb.add_config(&paths[0], &paths[1]);
-        let prot = Protocol::new(bb);
+        let mut prot = Protocol::new(bb);
         let actions = prot.process_facts(self_pk);
 
         let expected = Do(
@@ -396,6 +405,19 @@ mod tests {
 
         assert!(actions.contains(&expected));
         
+        println!("==== actions ====");
+        for action in actions {
+            println!("{:?}", action.0);
+        }
+        println!("==== actions ====");
+        
+        let cfg_statement_h = hashing::hash(&cfg);
+        let signature = trustee_kps[0].sign(&cfg_statement_h);
+        let signature_b =  bincode::serialize(&signature).unwrap();
+        let tmp = util::write_to_tmp(signature_b).unwrap();
+        prot.board.add_config_sig(tmp.path(), 1);
+        
+        let actions = prot.process_facts(self_pk);
         println!("==== actions ====");
         for action in actions {
             println!("{:?}", action.0);

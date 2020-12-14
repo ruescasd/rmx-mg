@@ -88,16 +88,19 @@ pub fn shuffle_proof_us<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciph
     let mut prefix_vector = concat_bytes(es);
     prefix_vector.extend(concat_bytes(e_primes));
     prefix_vector.extend(concat_bytes(cs));
-    let prefix = prefix_vector.as_slice();
+    // let prefix = prefix_vector.as_slice();
     let mut ret = Vec::with_capacity(n);
 
     for i in 0..n {
-        let next_bytes: Vec<u8> = [
+        /* let next_bytes: Vec<u8> = [
             prefix, 
             i.to_le_bytes().to_vec().as_slice()
-        ].concat();    
+        ].concat();*/
+
+        let mut next = prefix_vector.clone();
+        next.extendl(i.to_le_bytes().to_vec());
         
-        let u: E::Exp = exp_hasher.hash_to(&next_bytes);
+        let u: E::Exp = exp_hasher.hash_to(&next);
         ret.push(u);
     }
     

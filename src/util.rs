@@ -21,7 +21,6 @@ pub fn read_file_bytes(path: &Path) -> io::Result<Vec<u8>> {
 }
 
 pub fn write_file_bytes(path: &Path, bytes: &Vec<u8>) -> io::Result<()> {
-    println!("{:?}", path);
     fs::write(path, bytes)?;
     Ok(())
 }

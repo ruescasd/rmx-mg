@@ -8,8 +8,8 @@ use crate::group::Group;
 use crate::protocol::StatementV;
 
 pub trait Names {
-    const CONFIG: &'static str = "config.json";
-    const CONFIG_STMT: &'static str = "config.stmt.json";
+    const CONFIG: &'static str = "config";
+    const CONFIG_STMT: &'static str = "config.stmt";
     const PAUSE: &'static str = "pause";
     const ERROR: &'static str = "error";
 
@@ -57,6 +57,7 @@ pub trait BulletinBoard<E: Element, G: Group<E>> {
     
     fn get_statements(&self) -> Vec<StatementV>;
     fn get_stmts(&self) -> Vec<String> {
+        println!("List {:?}", self.list());
         self.list().into_iter().filter(|s| {
             s.ends_with(".stmt")
         }).collect()

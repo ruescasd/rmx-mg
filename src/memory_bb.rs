@@ -10,6 +10,7 @@ use crate::artifact::*;
 use crate::protocol::StatementV;
 use crate::arithm::Element;
 use crate::group::Group;
+use crate::util;
 
 pub struct MemoryBulletinBoard<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> {
     data: HashMap<String, Vec<u8>>,
@@ -28,7 +29,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBullet
         }
     }
     fn put(&mut self, name: &str, data: &Path) {
-        let bytes = fs::read(data).unwrap();
+        let bytes = util::read_file_bytes(data).unwrap();
         self.data.insert(name.to_string(), bytes);
     }
    
@@ -63,6 +64,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
     }
     fn add_config(&mut self, config: &Path, stmt: &Path) {
         self.put(Self::CONFIG, config);
+        self.put(Self::CONFIG_STMT, stmt);
     }
     fn add_config_sig(&mut self, sig: &Path, trustee: u32) {
         self.put(&Self::config_sig(trustee), sig);
@@ -79,25 +81,33 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
     fn get_statements(&self) -> Vec<StatementV> {
         
         let sts = self.get_stmts();
-        sts.iter().map(|s| {
+        let mut ret = Vec::new();
+        println!("Statements {:?}", sts);
+        
+        for s in sts.iter() {
             
             let s_bytes = self.data.get(s).unwrap().to_vec();
-            let sig_bytes = self.data.get(&s.replace(".stmt", ".sig")).unwrap().to_vec();
-            let (trustee, contest) = artifact_location(s);
-
-            let stmt = bincode::deserialize(&s_bytes).unwrap();
-            let stmt_hash = hashing::hash(&stmt);
-            let sig = bincode::deserialize(&sig_bytes).unwrap();
-
-            StatementV {
-                statement: stmt,
-                signature: sig,
-                statement_hash: stmt_hash,
-                trustee: trustee,
-                contest: contest
-            }
+            let sig_bytes = self.data.get(&s.replace(".stmt", ".sig"));
+            if sig_bytes.is_some() {
             
-        }).collect()
+                let (trustee, contest) = artifact_location(s);
+
+                let stmt = bincode::deserialize(&s_bytes).unwrap();
+                let stmt_hash = hashing::hash(&stmt);
+                let sig = bincode::deserialize(&sig_bytes.unwrap().to_vec()).unwrap();
+
+                let next = StatementV {
+                    statement: stmt,
+                    signature: sig,
+                    statement_hash: stmt_hash,
+                    trustee: trustee,
+                    contest: contest
+                };
+                ret.push(next);
+            }
+        }
+
+        ret
     }
 }
 
