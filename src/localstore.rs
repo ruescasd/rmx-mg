@@ -8,7 +8,7 @@ use crate::action::Act;
 
 
 
-struct LocalStore {
+pub struct LocalStore {
     pub fs_path: PathBuf
 }
 
@@ -41,18 +41,22 @@ impl LocalStore {
             None
         }
     }
-    pub fn set_work(&self, action: &Act, work: Vec<Vec<u8>>) {
+    pub fn set_work(&self, action: &Act, work: Vec<Vec<u8>>) -> Vec<PathBuf> {
         let target = self.path_for_action(action);
+        let mut ret = Vec::new();
+        
         for (i, item) in work.iter().enumerate() {
             let with_ext = target.with_extension(i.to_string());
             assert!(!with_ext.exists());
             util::write_file_bytes(&with_ext, item).unwrap();
+            ret.push(with_ext);
         }
+        ret
     }
     fn path_for_action(&self, action: &Act) -> PathBuf {
         let hash = hashing::hash(action);
-        let base64 = encode(&hash);
-        let work_path = Path::new(&base64);
+        let encoded = hex::encode(&hash);
+        let work_path = Path::new(&encoded);
         Path::new(&self.fs_path).join(work_path)
     }
 }

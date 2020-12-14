@@ -270,6 +270,21 @@ crepe! {
     @output
     struct Contest(ConfigHash, u32);
     
+    Do(Act::PostShare(config, contest)) <- 
+        ConfigPresent(config, _, _, self_t),
+        Contest(config, contest),
+        ConfigOk(config),
+        !PkShareSignedBy(config, contest, _, self_t);
+    
+    Do(Act::CheckConfig(config)) <- 
+        ConfigPresent(config, _, _, self_t),
+        !ConfigSignedBy(config, self_t);
+
+    Do(Act::CombineShares(config, contest, hashes)) <- 
+        PkSharesOk(config, contest, hashes),
+        ConfigPresent(config, _, _, 1),
+        ConfigOk(config);
+    
     ConfigSignedUpTo(config, 1) <-
         ConfigSignedBy(config, 1);
     
@@ -287,16 +302,6 @@ crepe! {
     Contest(config, n - 1) <- Contest(config, n),
         (n > 0);
     
-    Do(Act::PostShare(config, contest)) <- 
-        ConfigPresent(config, _, _, self_t),
-        Contest(config, contest),
-        ConfigOk(config),
-        !PkShareSignedBy(config, contest, _, self_t);
-    
-    Do(Act::CheckConfig(config)) <- 
-        ConfigPresent(config, _, _, self_t),
-        !ConfigSignedBy(config, self_t);
-
     PkSharesUpTo(config, contest, 1, first) <-
         PkShareSignedBy(config, contest, share, 1),
         let first = array_make(share);
@@ -310,29 +315,6 @@ crepe! {
         PkSharesUpTo(config, contest, total_t, shares),
         ConfigPresent(config, _, total_t, _),
         ConfigOk(config);
-
-    Do(Act::CombineShares(config, contest, hashes)) <- 
-        PkSharesOk(config, contest, hashes),
-        ConfigPresent(config, _, _, 1),
-        ConfigOk(config);
-    
-    
-        /* 
-    Acc(x, 0) <- Next(0, value),
-        let x = make_array(value);
-
-    Acc(x, n + 1) <- Acc(a, n),
-        Next(n + 1, value),
-        let x = modify_array(a, n + 1, value);
-    */
-    
-    // Do(Act::CheckPk(item)) <- Present(Ar::PK, item, _), !Present(Ar::SELF_PK_SIG, item, _);
-
-    /*Do(Act::Mix(item, ballots)) <- 
-        BallotsOk(config, item, ballots),
-        AuthMe(config, 1),
-        ConfigOk(config);*/
-        
 }
 
 fn array_make(value: Hash) -> Hashes {
@@ -351,11 +333,11 @@ fn array_set(mut input: Hashes, index: u32, value: Hash) -> Hashes {
 #[cfg(test)]
 mod tests {
     
+    use std::fs;
     use std::path::Path;
-    use crepe::crepe;
+    use ed25519_dalek::Keypair;
     use uuid::Uuid;
     use rand_core::OsRng;
-    use ed25519_dalek::Keypair;
     use tempfile::NamedTempFile;
     use rug::Integer;
 
@@ -366,12 +348,17 @@ mod tests {
     use crate::protocol::*;
     use crate::action::*;
     use crate::util;
+    use crate::localstore::*;
     
     #[test]
     fn test_crepe_config() {
         let mut csprng = OsRng;
-
         let mut bb = MemoryBulletinBoard::<Integer, RugGroup>::new();
+        let local = "/tmp/local";
+        let local_path = Path::new(local);
+        fs::remove_dir_all(local_path).ok();
+        fs::create_dir(local_path).ok();
+        let ls = LocalStore::new(local.to_string());
 
         let id = Uuid::new_v4();
         let group = RugGroup::default();
@@ -393,9 +380,13 @@ mod tests {
             trustees: trustee_pks
         };
         let cfg_b = bincode::serialize(&cfg).unwrap();
-        let cfg_f = util::write_to_tmp(cfg_b).unwrap();
+        let cfg_statement = Statement::from_config(&cfg);
+        let cfg_statement_b = bincode::serialize(&cfg_statement).unwrap();
+        // let cfg_f = util::write_to_tmp(cfg_b).unwrap();
+        let action = Act::AddConfig;
+        let paths = ls.set_work(&action, vec![cfg_b, cfg_statement_b]);
         
-        bb.add_config(&cfg_f.path().to_path_buf());
+        bb.add_config(&paths[0], &paths[1]);
         let prot = Protocol::new(bb);
         let actions = prot.process_facts(self_pk);
 

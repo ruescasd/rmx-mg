@@ -167,7 +167,7 @@ mod tests {
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(util::to_u8_30(fill.to_vec()));
+        let plaintext = group.encode(util::to_u8_30(&fill.to_vec()));
         
         let c = pk.encrypt(plaintext);    
         let d = sk.decrypt(&c);
@@ -231,7 +231,7 @@ mod tests {
 
         let v: Vec<(f32, f32)> = (0..iterations).map(|i| {
             csprng.fill_bytes(&mut bytes);
-            let fixed = util::to_u8_30(bytes.to_vec());
+            let fixed = util::to_u8_30(&bytes.to_vec());
         
             (i as f32, group.encode_test(fixed).1 as f32)
         }).collect();
@@ -290,7 +290,7 @@ mod tests {
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(util::to_u8_30(fill.to_vec()));
+        let plaintext = group.encode(util::to_u8_30(&fill.to_vec()));
         
         let c = pk.encrypt(plaintext);    
         let (d, proof) = sk.decrypt_and_prove(&c);
@@ -320,7 +320,7 @@ mod tests {
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(util::to_u8_30(fill.to_vec()));
+        let plaintext = group.encode(util::to_u8_30(&fill.to_vec()));
         
         let pk1_value = &pk1.value.clone();
         let pk2_value = &pk2.value.clone();
@@ -388,7 +388,7 @@ mod tests {
         for _ in 0..10 {
             let mut fill = [0u8;30];
             csprng.fill_bytes(&mut fill);
-            let encoded = group.encode(util::to_u8_30(fill.to_vec()));
+            let encoded = group.encode(util::to_u8_30(&fill.to_vec()));
             let c = pk_combined.encrypt(encoded);
             bs.push(fill.to_vec());
             cs.push(c);
@@ -493,7 +493,7 @@ mod tests {
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(util::to_u8_30(fill.to_vec()));
+        let plaintext = group.encode(util::to_u8_30(&fill.to_vec()));
         let c = pk.encrypt(plaintext);
         let sym_key = symmetric::gen_key();
         let enc_sk = sk.to_encrypted(sym_key);
