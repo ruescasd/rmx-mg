@@ -121,7 +121,7 @@ impl Group<RistrettoPoint> for RistrettoGroup {
     fn decode(&self, element: RistrettoPoint) -> [u8; 30] {
         let compressed = element.compress();
         let slice = &compressed.as_bytes()[1..31];
-        util::to_u8_30(slice.to_vec())
+        util::to_u8_30(&slice.to_vec())
     }
     fn gen_key(&self) -> PrivateKey<RistrettoPoint, Self> {
         let secret = self.rnd_exp();

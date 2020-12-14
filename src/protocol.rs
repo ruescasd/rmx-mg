@@ -14,6 +14,7 @@ use crate::bb::*;
 use crate::util;
 use crate::arithm::Element;
 use crate::group::Group;
+use crate::action::Act;
 
 pub type TrusteeTotal = u32;
 pub type TrusteeIndex = u32;
@@ -26,9 +27,7 @@ pub type BallotsHash = Hash;
 pub type MixHash = Hash;
 pub type DecryptionHash = Hash;
 pub type PlaintextsHash = Hash;
-
-type SerializedHash = Vec<u8>;
-type Hashes = [Hash; 10];
+pub type Hashes = [Hash; 10];
 
 
 struct Protocol<E: Element, G: Group<E>, B: BulletinBoard<E, G>> {
@@ -87,7 +86,7 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
                 Fact::BallotsSigned(x) => runtime.extend(&[x]),
                 Fact::MixSignedBy(x) => runtime.extend(&[x]),
                 Fact::DecryptionSignedBy(x) => runtime.extend(&[x]),
-                Fact::PlaintextSignedBy(x) => runtime.extend(&[x])
+                Fact::PlaintextsSignedBy(x) => runtime.extend(&[x])
             }
         }).count();
 
@@ -109,48 +108,72 @@ impl StatementV {
     fn verify<E: Element, G: Group<E>, B: BulletinBoard<E, G>>(&self, board: &B) -> Option<Fact> {
         let statement = &self.statement;
         let config = board.get_config()?;
-        let config_h = hashing::hash(&config);
         let pk = config.trustees[self.trustee as usize];
         let verified = pk.verify(&self.statement_hash, &self.signature);
+        let config_h = util::to_u8_64(&statement.2[0]);
 
         match statement.0 {
             StatementType::Config => {
-                
-                let expected = Statement::config(config_h.to_vec());
-                if *statement == expected && verified.is_ok() {
-                    Some(
-                        Fact::config_signed_by(config_h, self.trustee)
-                    )
-                } else {
-                    None
-                }
+                self.ret(
+                    Fact::config_signed_by(config_h, self.trustee),
+                    verified.is_ok()
+                )
             },
             StatementType::Keyshare => {
-                let share = board.get_share(self.contest, self.trustee)?;
-                let share_h = hashing::hash(&config);
-                let expected = Statement::keyshare(config_h.to_vec(), self.contest, share_h.to_vec());
-                None
+                let share_h = util::to_u8_64(&statement.2[1]);
+                self.ret(
+                    Fact::share_signed_by(config_h, self.contest, share_h, self.trustee),
+                    verified.is_ok()
+                )
             },
             StatementType::PublicKey => {
-                None
-
+                let pk_h = util::to_u8_64(&statement.2[1]);
+                self.ret(
+                    Fact::pk_signed_by(config_h, self.contest, pk_h, self.trustee),
+                    verified.is_ok()
+                )
             },
             StatementType::Ballots => {
-                None
-
+                let ballots_h = util::to_u8_64(&statement.2[1]);
+                self.ret(
+                    Fact::ballots_signed(config_h, self.contest, ballots_h),
+                    verified.is_ok()
+                )
             },
             StatementType::Mix => {
-                None
+                let mix_h = util::to_u8_64(&statement.2[1]);
+                let ballots_h = util::to_u8_64(&statement.2[2]);
+                self.ret(
+                    Fact::mix_signed_by(config_h, self.contest, mix_h, ballots_h, self.trustee),
+                    verified.is_ok()
+                )
 
             },
             StatementType::PDecryption => {
-                None
+                let pdecryptions_h = util::to_u8_64(&statement.2[1]);
+                let ballots_h = util::to_u8_64(&statement.2[2]);
+                self.ret(
+                    Fact::decryption_signed_by(config_h, self.contest, pdecryptions_h, ballots_h, self.trustee),
+                    verified.is_ok()
+                )
 
             },
             StatementType::Plaintexts => {
-                None
-
+                let plaintexts_h = util::to_u8_64(&statement.2[1]);
+                let pdecryptions_h = util::to_u8_64(&statement.2[2]);
+                self.ret(
+                    Fact::plaintexts_signed_by(config_h, self.contest, plaintexts_h, pdecryptions_h, self.trustee),
+                    verified.is_ok()
+                )
             }
+        }
+    }
+
+    fn ret(&self, fact: Fact, verified: bool) -> Option<Fact> {
+        if verified {
+            Some(fact)
+        } else {
+            None
         }
     }
 }
@@ -163,7 +186,7 @@ enum Fact {
     BallotsSigned(BallotsSigned),
     MixSignedBy(MixSignedBy),
     DecryptionSignedBy(DecryptionSignedBy),
-    PlaintextSignedBy(PlaintextSignedBy)
+    PlaintextsSignedBy(PlaintextsSignedBy)
 }
 impl Fact {
     fn config_present(c: ConfigHash, cn: ContestIndex, trustees: TrusteeIndex, 
@@ -195,31 +218,20 @@ impl Fact {
         Fact::MixSignedBy(MixSignedBy(c, contest, mix, ballots, trustee))
     }
     fn decryption_signed_by(c: ConfigHash, contest: ContestIndex, decryption: DecryptionHash, 
-        trustee: TrusteeIndex) -> Fact {
+        ballots: BallotsHash, trustee: TrusteeIndex) -> Fact {
         
-        Fact::DecryptionSignedBy(DecryptionSignedBy(c, contest, decryption, trustee))
+        Fact::DecryptionSignedBy(DecryptionSignedBy(c, contest, decryption, ballots, trustee))
     }
-    fn plaintext_signed_by(c: ConfigHash, contest: ContestIndex, plaintexts: PlaintextsHash,
+    fn plaintexts_signed_by(c: ConfigHash, contest: ContestIndex, plaintexts: PlaintextsHash,
         decryptions: DecryptionHash, trustee: TrusteeIndex) -> Fact {
         
-        Fact::PlaintextSignedBy(
-            PlaintextSignedBy(c, contest, plaintexts, decryptions, trustee)
+        Fact::PlaintextsSignedBy(
+            PlaintextsSignedBy(c, contest, plaintexts, decryptions, trustee)
         )
     }
 }
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug)]
-pub enum Act {
-    CheckConfig(ConfigHash),
-    PostShare(ConfigHash, ContestIndex),
-    CombineShares(ConfigHash, ContestIndex, Hashes),
-    CheckPk(ConfigHash, ContestIndex, PkHash, Hashes),
-    CheckMix(ConfigHash, ContestIndex, TrusteeIndex, MixHash),
-    Mix(ConfigHash, ContestIndex, BallotsHash),
-    PartialDecrypt(ConfigHash, ContestIndex, BallotsHash),
-    CombineDecryptions(ConfigHash, ContestIndex, Hashes),
-    CheckPlaintexts(ConfigHash, ContestIndex, MixHash, Hashes)
-}
+
 
 crepe! {
     @input
@@ -235,9 +247,9 @@ crepe! {
     @input
     struct MixSignedBy(ConfigHash, ContestIndex, MixHash, BallotsHash, TrusteeIndex);
     @input
-    struct DecryptionSignedBy(ConfigHash, ContestIndex, DecryptionHash, TrusteeIndex);
+    struct DecryptionSignedBy(ConfigHash, ContestIndex, DecryptionHash, BallotsHash, TrusteeIndex);
     @input
-    struct PlaintextSignedBy(ConfigHash, ContestIndex, PlaintextsHash, DecryptionHash, 
+    struct PlaintextsSignedBy(ConfigHash, ContestIndex, PlaintextsHash, DecryptionHash, 
         TrusteeIndex);
 
     // 0
@@ -270,7 +282,7 @@ crepe! {
         ConfigPresent(config, _, total_t, _);
 
     Contest(config, contests) <-
-        ConfigPresent(config, contests, total_t, _self);
+        ConfigPresent(config, contests, _, _self);
 
     Contest(config, n - 1) <- Contest(config, n),
         (n > 0);
@@ -399,272 +411,6 @@ mod tests {
         }
         println!("==== actions ====");
 
-        /*let mut runtime = Crepe::new();
-        let cfg = [1u8; 64];
-        
-        runtime.extend(&[ConfigPresent(cfg, 2, 1)]);
-        runtime.extend(&[ConfigSignedBy(cfg, 1)]);
-        runtime.extend(&[ConfigSignedBy(cfg, 2)]);
-        
-        let facts = runtime.run();
-        let actions = facts.0;
-        let config_ok = facts.2;
-        
-        
-        println!("==== config_ok ====");
-        for c in config_ok {
-            println!("{:?}", c.0);
-        }
-        println!("==== config_ok ====");
-        println!("==== actions ====");
-        for action in actions {
-            println!("{:?}", action.0);
-        }
-        println!("==== actions ====");
-
-
-        */
     }
 }
 
-/*
-
-use crate::hashing::*;
-
-pub type TrusteeTotal = u32;
-pub type TrusteeIndex = u32;
-pub type ContestIndex = u32;
-
-pub type ConfigHash = Hash;
-pub type ShareHash = Hash;
-pub type PkHash = Hash;
-pub type BallotsHash = [u8; 64];
-pub type MixHash = [u8; 64];
-pub type DecryptionHash = [u8; 64];
-pub type PlaintextsHash = [u8; 64];
-pub type Arts = [Art;10];
-
-use strum::Display;
-use strum::EnumDiscriminants;
-
-fn add_art(mut input: Arts, index: u32, value: Art) -> Arts {
-    input[index as usize] = value;
-
-    input
-}
-
-fn first_art(value: Art) -> Arts {
-    let mut ret = [Art::Nil; 10];
-    ret[0] = value;
-
-    ret
-}
-
-#[derive(Copy, Clone, Hash, Eq, PartialEq, Debug, Display, EnumDiscriminants)]
-pub enum Art {
-    Nil,
-    Config(ConfigHash, TrusteeTotal, TrusteeIndex),
-    Pk(ConfigHash, ContestIndex, PkHash),
-    Ballots(ConfigHash, ContestIndex, BallotsHash),
-    Mix(ConfigHash, ContestIndex, BallotsHash, MixHash),
-    Plaintexts(ConfigHash, ContestIndex, BallotsHash)
-}
-
-impl Art {
-    pub fn same(&self, other: Art) -> bool {
-        let stype: ArtDiscriminants = self.into();
-        let otype: ArtDiscriminants = other.into();
-
-        stype == otype
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::protocol::*;
-    use crate::action::*;
-    use crepe::crepe;
-
-    crepe! {
-        @input
-        struct Present(Art);
-        @input
-        struct Signed(Art, TrusteeIndex);
-
-        @output
-        struct SignedConfigN(Art, TrusteeIndex);
-
-        SignedConfigN(art, 0) <- Signed(art, 0),
-            let Art::Config(hash, total, me) = art;
-
-        SignedConfigN(art1, n + 1) <- 
-            SignedConfigN(art1, n),
-            Signed(art2, n + 1),
-            let Art::Config(hash1, total1, me1) = art1,
-            let Art::Config(hash2, total2, me2) = art2,
-            (hash1 == hash2);
-
-
-
-        
-        // collects artifacts of the same type each signed by a different authority
-        // used for collecting keyshares and decryptions
-        @output
-        struct SignedM(Arts, u32);
-
-        SignedM(arts, 0) <- Signed(art, 0),
-            let arts = first_art(art);
-
-        SignedM(arts, n + 1) <- 
-            SignedM(prev, n),
-            Signed(art, n + 1),
-            let arts = add_art(prev, n + 1, art),
-            (prev[0].same(art));
-
-    /* Acc(x, n + 1) <- Acc(a, n),
-        Next(n + 1, value),
-        let x = modify_array(a, n + 1, value);
-
-        Acc(x, 0) <- Next(0, value),
-        let x = make_array(value);
-
-    Acc(x, n + 1) <- Acc(a, n),
-        Next(n + 1, value),
-        let x = modify_array(a, n + 1, value);*/
-
-        /*
-        // 0
-        @output
-        struct Do(Act);
-        // 1
-        @output
-        struct ConfigSignedUpTo(ConfigHash, TrusteeIndex);
-        // 2
-        @output
-        struct ConfigOk(ConfigHash);
-        // 3
-        @output
-        struct PkSignedUpto(ConfigHash, TrusteeIndex);
-        // 4
-        @output
-        struct PkOk(ConfigHash, TrusteeIndex);
-        // 5
-        @output
-        struct BallotsOk(ConfigHash, ContestIndex, BallotsHash);
-
-        // 6
-        @output
-        struct Acc([u32; 10], usize);
-        
-        @input
-        struct Next(usize, u32);
-        
-        ConfigSignedUpTo(config, 0) <-
-            ConfigSignedBy(config, _n);
-        ConfigSignedUpTo(config, n) <-
-            ConfigSignedBy(config, n),
-            ConfigSignedUpTo(config, n - 1);
-        
-        ConfigOk(config) <- 
-            ConfigSignedUpTo(config, n),
-            TrusteeTotal(config, n);
-
-        BallotsOk(config, item, ballots) <- 
-            BallotsSigned(config, item, ballots),
-            ConfigOk(config);
-
-        Acc(x, 0) <- Next(0, value),
-            let x = make_array(value);
-
-        Acc(x, n + 1) <- Acc(a, n),
-            Next(n + 1, value),
-            let x = modify_array(a, n + 1, value);
-
-        
-        Do(Act::CheckConfig(config)) <- Present(Ar::CONFIG, _, _), 
-            AuthMe(config, n), !ConfigSignedBy(config, n);
-
-
-        @output
-        struct Ho(u32, u32);
-        
-        Ho(z, y) <- Signed(x, y),
-            let Ar2::CONFIG(z) = x;*/
-        
-        // Do(Act::CheckPk(item)) <- Present(Ar::PK, item, _), !Present(Ar::SELF_PK_SIG, item, _);
-
-        /*Do(Act::Mix(item, ballots)) <- 
-            BallotsOk(config, item, ballots),
-            AuthMe(config, 1),
-            ConfigOk(config);*/
-            
-    }
-    
-    #[test]
-    fn test_crepe() {
-        
-        let mut runtime = Crepe::new();
-        let cfg = [1u8; 64];
-        /*
-        let config = Art::Config(cfg, 3, 1);
-        let ni = Art::Pk(cfg, 3, cfg);
-        runtime.extend(&[Signed(config, 0)]);
-        runtime.extend(&[Signed(config, 1)]);
-
-        let facts = runtime.run();
-        let actions: Vec<SignedM> = facts.0.iter().cloned().filter(|&i| i.1 == 1).collect();
-
-        println!("==== actions ====");
-        for action in actions {
-            println!("{:?}", action.0.iter().cloned().filter(|&i| i != Art::Nil).collect::<Vec<Art>>());
-        }
-        println!("==== actions ====");
-*/
-
-        /*
-        let mut runtime = Crepe::new();
-        let cfg = [1u8; 64];
-        let ballots = [2u8; 64];
-        
-        runtime.extend(&[TrusteeTotal(cfg, 2)]);
-        runtime.extend(&[AuthMe(cfg, 1)]);
-        // runtime.extend(&[ConfigSignedBy(cfg, 1)]);
-        runtime.extend(&[ConfigSignedBy(cfg, 2)]); 
-        
-        
-        // runtime.extend(&[BallotsSigned(cfg, 1, ballots)]);
-        
-        
-        runtime.extend(&[Next(0, 1), Next(1, 2)]);
-        
-        let facts = runtime.run();
-        let actions = facts.0;
-        let config_ok = facts.2;
-        let test = facts.6;
-        
-        
-        println!("==== config_ok ====");
-        for c in config_ok {
-            println!("{:?}", c.0);
-        }
-        println!("==== config_ok ====");
-        println!("==== actions ====");
-        for action in actions {
-            println!("{:?}", action.0);
-        }
-        println!("==== actions ====");
-
-
-        println!("==== test ====");
-        for t in test {
-            let v: Vec<u32> = t.0.iter().cloned().filter(|&i| i != 0).collect();
-            println!("{:?}", v);
-        }
-        println!("==== test ====");
-        // runtime.extend(&[AuthCount(2)]);
-        // runtime.extend(&[Verified(0), Verified(2), Verified(1)]);
-        */
-    }
-}
-
-*/

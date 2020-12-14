@@ -35,9 +35,9 @@ pub trait Names {
     fn decryption_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/decryption.stmt", auth, contest).to_string() }
     fn decryption_sig(contest: u32, auth: u32) -> String { format!("{}/{}/decryption.sig", auth, contest).to_string() }
 
-    fn plau32exts(contest: u32, auth: u32) -> String { format!("{}/{}/plau32exts", auth, contest).to_string() }
-    fn plau32exts_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/plau32exts.stmt", auth, contest).to_string() }
-    fn plau32exts_sig(contest: u32, auth: u32) -> String { format!("{}/{}/plau32exts.sig", auth, contest).to_string() }
+    fn plaintexts(contest: u32, auth: u32) -> String { format!("{}/{}/plaintexts", auth, contest).to_string() }
+    fn plaintexts_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/plaintexts.stmt", auth, contest).to_string() }
+    fn plaintexts_sig(contest: u32, auth: u32) -> String { format!("{}/{}/plaintexts.sig", auth, contest).to_string() }
     
     fn auth_error(auth: u32) -> String { format!("{}/error", auth).to_string() }
 }
@@ -45,22 +45,23 @@ pub trait Names {
 pub trait BulletinBoard<E: Element, G: Group<E>> {
 
     fn list(&self) -> Vec<String>;
-    fn add_config(&mut self, config: &Path);
+    fn add_config(&mut self, config: &Path, stmt: &Path);
     fn get_config(&self) -> Option<Config>;
-    
+    fn add_config_sig(&mut self, sig: &Path, trustee: u32);
     // fn add_share(&self, share: Path, stmt: Path, sig: Path, contest: u32, position: u32);
 
     fn get_share(&self, contest: u32, auth: u32) -> Option<Keyshare<E, G>>;
-
-
+    
+    
+    
+    
     fn get_statements(&self) -> Vec<StatementV>;
     fn get_stmts(&self) -> Vec<String> {
         self.list().into_iter().filter(|s| {
             s.ends_with(".stmt")
         }).collect()
     }
-    // fn add_config_sig(&self, sig: &Path, trustee: u32);
-
+    
     /*fn add_error(&self, error: Path, position: u32);
   
     fn get_config_statement(&self) -> Option<Vec<u8>>;

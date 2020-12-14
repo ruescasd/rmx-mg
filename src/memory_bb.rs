@@ -55,15 +55,17 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBullet
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> 
     BulletinBoard<E, G> for MemoryBulletinBoard<E, G> {
     
-    fn add_config(&mut self, config: &Path) {
-        // let stmt = Statement::from_config
-        self.put(Self::CONFIG, config);
-    }
     fn get_config(&self) -> Option<Config> {
         let bytes = self.data.get(Self::CONFIG)?;
         let ret: Config = bincode::deserialize(bytes).unwrap();
 
         Some(ret)
+    }
+    fn add_config(&mut self, config: &Path, stmt: &Path) {
+        self.put(Self::CONFIG, config);
+    }
+    fn add_config_sig(&mut self, sig: &Path, trustee: u32) {
+        self.put(&Self::config_sig(trustee), sig);
     }
     fn get_share(&self, contest: u32, auth: u32) -> Option<Keyshare<E, G>> {
         let bytes = self.data.get(&Self::share(contest, auth))?;

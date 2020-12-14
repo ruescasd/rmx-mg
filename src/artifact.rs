@@ -9,6 +9,7 @@ use crate::shuffler::*;
 use crate::bb::*;
 use crate::rug_b::RugGroup;
 use crate::hashing;
+use crate::protocol::ContestIndex;
 
 type Hash = Vec<u8>;
 
@@ -62,7 +63,7 @@ pub struct Plaintexts<E> {
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
-pub struct Statement(pub StatementType, pub u32, pub Vec<Hash>);
+pub struct Statement(pub StatementType, pub ContestIndex, pub Vec<Hash>);
 
 #[repr(u8)]
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Copy)]
@@ -131,10 +132,6 @@ impl Statement {
         )
     }
 }
-
-
-
-
 
 #[cfg(test)]
 mod tests {  
