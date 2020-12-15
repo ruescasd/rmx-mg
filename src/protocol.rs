@@ -56,8 +56,8 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
         
         if let Some(cfg) = self.board.get_config() {
             let trustees = cfg.trustees.len();
-            // first trustee is 1
-            let self_pos = 1 + cfg.trustees.iter()
+            
+            let self_pos = cfg.trustees.iter()
                 .position(|s| s.to_bytes() == self_pk.to_bytes())
                 .unwrap();
             let hash = hashing::hash(&cfg);
@@ -98,22 +98,21 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
 }
 
 #[derive(Debug)]
-pub struct StatementV {
-    pub statement: Statement,
-    pub signature: Signature,
-    pub statement_hash: Hash,
+pub struct SVerifier {
+    pub statement: SignedStatement,
     pub trustee: u32,
-    pub contest: u32,
+    pub contest: u32
 }
 
-impl StatementV {
+impl SVerifier {
     fn verify<E: Element, G: Group<E>, B: BulletinBoard<E, G>>(&self, board: &B) -> Option<Fact> {
-        let statement = &self.statement;
+        let statement = &self.statement.0;
         let config = board.get_config()?;
         let pk = config.trustees[self.trustee as usize];
-        let verified = pk.verify(&self.statement_hash, &self.signature);
+        let statement_hash = hashing::hash(&self.statement.0);
+        let verified = pk.verify(&statement_hash, &self.statement.1);
         let config_h = util::to_u8_64(&statement.2[0]);
-        println!("Calling verify on {:?}", &self);
+        println!("Calling verify on {:?}, {}", &self, verified.is_ok());
 
         match statement.0 {
             StatementType::Config => {
@@ -285,11 +284,11 @@ crepe! {
     
     Do(Act::CombineShares(config, contest, hashes)) <- 
         PkSharesOk(config, contest, hashes),
-        ConfigPresent(config, _, _, 1),
+        ConfigPresent(config, _, _, 0),
         ConfigOk(config);
     
-    ConfigSignedUpTo(config, 1) <-
-        ConfigSignedBy(config, 1);
+    ConfigSignedUpTo(config, 0) <-
+        ConfigSignedBy(config, 0);
     
     ConfigSignedUpTo(config, trustee + 1) <- 
         ConfigSignedUpTo(config, trustee),
@@ -305,8 +304,8 @@ crepe! {
     Contest(config, n - 1) <- Contest(config, n),
         (n > 0);
     
-    PkSharesUpTo(config, contest, 1, first) <-
-        PkShareSignedBy(config, contest, share, 1),
+    PkSharesUpTo(config, contest, 0, first) <-
+        PkShareSignedBy(config, contest, share, 0),
         let first = array_make(share);
 
     PkSharesUpTo(config, contest, trustee + 1, shares) <- 
@@ -410,7 +409,7 @@ mod tests {
         let action = Act::CheckConfig(cfg_h);
         let stmt_path = ls.set_config_stmt(&action, &ss);
 
-        prot.board.add_config_stmt(&stmt_path, 1);
+        prot.board.add_config_stmt(&stmt_path, 0);
         
         let actions = prot.process_facts(self_pk);
         println!("==== actions ====");

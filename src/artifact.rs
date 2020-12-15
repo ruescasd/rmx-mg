@@ -64,20 +64,25 @@ pub struct Plaintexts<E> {
     pub plaintexts: Vec<E>
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SignedStatement(pub Statement, pub Signature);
 
 impl SignedStatement {
     pub fn config(config: &Config, pk: &Keypair) -> SignedStatement {
         let config_h = hashing::hash(config);
         let stmt = Statement::config(config_h.to_vec());
-        let signature = pk.sign(&config_h);
+        let stmt_h = hashing::hash(&stmt);
+        let signature = pk.sign(&stmt_h);
+        SignedStatement(stmt, signature)
+    }
+    pub fn keyshare(config: &Config, share_h: hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
+        let config_h = hashing::hash(config);
+        let stmt = Statement::keyshare(config_h.to_vec(), contest, share_h.to_vec());
+        let stmt_h = hashing::hash(&stmt);
+        let signature = pk.sign(&stmt_h);
         SignedStatement(stmt, signature)
     }
 }
-
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
-pub struct Statement(pub StatementType, pub ContestIndex, pub Vec<Hash>);
 
 #[repr(u8)]
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug, Clone, Copy)]
@@ -91,11 +96,10 @@ pub enum StatementType {
     Plaintexts
 }
 
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+pub struct Statement(pub StatementType, pub ContestIndex, pub Vec<Hash>);
+
 impl Statement {
-    pub fn from_config(config: &Config) -> Statement {
-        let hash = hashing::hash(config);
-        Statement::config(hash.to_vec())
-    }
     pub fn config(config: Hash) -> Statement {
         Statement(
             StatementType::Config,

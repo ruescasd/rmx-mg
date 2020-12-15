@@ -5,7 +5,7 @@ use crate::hashing::{HashBytes, Hash};
 use crate::artifact::*;
 use crate::arithm::Element;
 use crate::group::Group;
-use crate::protocol::StatementV;
+use crate::protocol::SVerifier;
 
 pub trait Names {
     const CONFIG: &'static str = "config";
@@ -57,7 +57,7 @@ pub trait BulletinBoard<E: Element, G: Group<E>> {
     
     
     
-    fn get_statements(&self) -> Vec<StatementV>;
+    fn get_statements(&self) -> Vec<SVerifier>;
     fn get_stmts(&self) -> Vec<String> {
         println!("List {:?}", self.list());
         self.list().into_iter().filter(|s| {

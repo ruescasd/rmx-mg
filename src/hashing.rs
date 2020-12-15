@@ -13,11 +13,11 @@ use crate::shuffler::{YChallengeInput, TValues};
 pub type Hash = [u8; 64];
 
 trait ConcatWithLength  {
-    fn extendl(&mut self, add: Vec<u8>);
+    fn extendl(&mut self, add: &Vec<u8>);
 }
 
 impl ConcatWithLength for Vec<u8> {
-    fn extendl(&mut self, add: Vec<u8>) {
+    fn extendl(&mut self, add: &Vec<u8>) {
         let length = add.len() as u64;
         self.extend(&length.to_le_bytes());
         self.extend(add);
@@ -98,7 +98,7 @@ pub fn shuffle_proof_us<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciph
         ].concat();*/
 
         let mut next = prefix_vector.clone();
-        next.extendl(i.to_le_bytes().to_vec());
+        next.extendl(&i.to_le_bytes().to_vec());
         
         let u: E::Exp = exp_hasher.hash_to(&next);
         ret.push(u);
@@ -301,6 +301,14 @@ impl HashBytes for SignaturePublicKey {
     }
 }
 
+use ed25519_dalek::Signature;
+
+impl HashBytes for Signature {
+    fn get_bytes(&self) -> Vec<u8> {
+        self.to_bytes().to_vec()
+    }
+}
+
 use crate::artifact::Statement;
 
 impl HashBytes for Statement {
@@ -313,6 +321,17 @@ impl HashBytes for Statement {
             bytes.extend(b);
         }
 
+        bytes
+    }
+}
+
+use crate::artifact::SignedStatement;
+
+impl HashBytes for SignedStatement {
+    fn get_bytes(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = self.0.get_bytes();
+        bytes.extendl(&self.1.get_bytes());
+        
         bytes
     }
 }
@@ -404,15 +423,15 @@ impl HashBytes for Act {
         match self {
             Act::CheckConfig(h) => {
                 let mut v = vec![1u8];
-                v.extendl(h.to_vec());
+                v.extendl(&h.to_vec());
                 v
             },
             Act::CheckPk(h, i, pk, s) => {
                 let mut v = vec![2u8];
-                v.extendl(h.to_vec());
-                v.extendl(i.to_le_bytes().to_vec());
-                v.extendl(pk.to_vec());
-                v.extendl(concat_bytes_iter(s));
+                v.extendl(&h.to_vec());
+                v.extendl(&i.to_le_bytes().to_vec());
+                v.extendl(&pk.to_vec());
+                v.extendl(&concat_bytes_iter(s));
                 v
             },
             _ => vec![]

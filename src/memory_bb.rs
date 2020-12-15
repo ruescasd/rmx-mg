@@ -7,7 +7,7 @@ use crate::hashing::{HashBytes, Hash};
 use crate::hashing;
 use crate::bb::*;
 use crate::artifact::*;
-use crate::protocol::StatementV;
+use crate::protocol::SVerifier;
 use crate::arithm::Element;
 use crate::group::Group;
 use crate::util;
@@ -78,7 +78,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
     fn list(&self) -> Vec<String> {
         self.data.iter().map(|(a, _)| a.clone()).collect()
     }
-    fn get_statements(&self) -> Vec<StatementV> {
+    fn get_statements(&self) -> Vec<SVerifier> {
         
         let sts = self.get_stmts();
         let mut ret = Vec::new();
@@ -87,24 +87,15 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
         for s in sts.iter() {
             
             let s_bytes = self.data.get(s).unwrap().to_vec();
-            let sig_bytes = self.data.get(&s.replace(".stmt", ".sig"));
-            if sig_bytes.is_some() {
-            
-                let (trustee, contest) = artifact_location(s);
+            let (trustee, contest) = artifact_location(s);
+            let stmt: SignedStatement = bincode::deserialize(&s_bytes).unwrap();
 
-                let stmt = bincode::deserialize(&s_bytes).unwrap();
-                let stmt_hash = hashing::hash(&stmt);
-                let sig = bincode::deserialize(&sig_bytes.unwrap().to_vec()).unwrap();
-
-                let next = StatementV {
-                    statement: stmt,
-                    signature: sig,
-                    statement_hash: stmt_hash,
-                    trustee: trustee,
-                    contest: contest
-                };
-                ret.push(next);
-            }
+            let next = SVerifier {
+                statement: stmt,
+                trustee: trustee,
+                contest: contest
+            };
+            ret.push(next);
         }
 
         ret
