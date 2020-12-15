@@ -1,5 +1,6 @@
 use ed25519_dalek::PublicKey as SignaturePublicKey;
 use ed25519_dalek::Signature;
+use ed25519_dalek::{Keypair, Signer};
 use serde::{Deserialize, Serialize};
 use crepe::crepe;
 
@@ -64,9 +65,14 @@ pub struct Plaintexts<E> {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SignedStatement {
-    pub statement: Statement,
-    pub signature: Signature
+pub struct SignedStatement(Statement, Signature);
+
+impl SignedStatement {
+    pub fn config(config: hashing::Hash, pk: &Keypair) -> SignedStatement {
+        let stmt = Statement::config(config.to_vec());
+        let signature = pk.sign(&config);
+        SignedStatement(stmt, signature)
+    }
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]

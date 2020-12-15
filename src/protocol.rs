@@ -405,12 +405,13 @@ mod tests {
         println!("==== actions ====");
         
         let cfg_h = hashing::hash(&cfg);
-        let signature = trustee_kps[0].sign(&cfg_h);
+        /*let signature = trustee_kps[0].sign(&cfg_h);
         let stmt = Statement::config(cfg_h.to_vec());
         let ss = SignedStatement {
             statement: stmt,
             signature: signature
-        };
+        };*/
+        let ss = SignedStatement::config(cfg_h, &trustee_kps[0]);
         let action = Act::CheckConfig(cfg_h);
         let stmt_path = ls.set_config_stmt(&action, &ss);
 
