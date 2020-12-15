@@ -27,6 +27,7 @@ pub type MixHash = Hash;
 pub type DecryptionHash = Hash;
 pub type PlaintextsHash = Hash;
 pub type Hashes = [Hash; 10];
+type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesOk>, HashSet<PkSharesUpTo>, HashSet<ConfigSignedUpTo>, HashSet<Contest>);
 
 struct Protocol<E: Element, G: Group<E>, B: BulletinBoard<E, G>> {
     board: B,
@@ -47,7 +48,7 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
     fn get_facts(&self, self_pk: SignaturePublicKey) -> Vec<Fact> {
     
         let svs = self.board.get_statements();
-        println!("StatementVs {:?}", svs);
+        println!("SVerifiers: {}", svs.len());
         let mut facts: Vec<Fact> = svs.iter()
             .map(|sv| sv.verify(&self.board))
             .filter(|f| f.is_some())
@@ -75,10 +76,12 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
         facts
     }
     
-    fn process_facts(&self, self_pk: SignaturePublicKey) -> HashSet<Do> {
+    fn process_facts(&self, self_pk: SignaturePublicKey) -> OutputFacts {
         let mut runtime = Crepe::new();
+        println!("======== Input facts [");
         let facts = self.get_facts(self_pk);
         facts.into_iter().map(|f| {
+            println!("* Input fact {:?}", f);
             match f {
                 Fact::ConfigPresent(x) => runtime.extend(&[x]),
                 Fact::ConfigSignedBy(x) => runtime.extend(&[x]),
@@ -90,10 +93,99 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
                 Fact::PlaintextsSignedBy(x) => runtime.extend(&[x])
             }
         }).count();
+        println!("] \n");
 
-        let output = runtime.run();
+        println!("======== Output facts [");
+        let output: OutputF = runtime.run();
+        let ret = OutputFacts::new(output);
+        print_facts(&ret);
+        println!("] \n");
 
-        output.0
+        ret
+    }
+}
+
+struct OutputFacts {
+    all_actions: Vec<Act>,
+    check_config: Vec<Act>,
+    post_share: Vec<Act>,
+    combine_shares: Vec<Act>,
+    check_pk: Vec<Act>,
+    check_mix: Vec<Act>,
+    mix: Vec<Act>,
+    partial_decrypt: Vec<Act>,
+    combine_decriptions: Vec<Act>,
+    check_plaintexts: Vec<Act>,
+    config_ok: HashSet<ConfigOk>
+}
+
+impl OutputFacts {
+    
+    pub fn new(f: OutputF) -> OutputFacts {
+        let mut all_actions = vec![];
+        let mut check_config = vec![];
+        let mut post_share = vec![];
+        let mut combine_shares = vec![];
+        let mut check_pk = vec![];
+        let mut check_mix = vec![];
+        let mut mix = vec![];
+        let mut partial_decrypt = vec![];
+        let mut combine_decriptions = vec![];
+        let mut check_plaintexts = vec![];
+        
+        let actions = f.0;
+        for a in actions {
+            match a.0 {
+                Act::AddConfig => (),
+                Act::CheckConfig(..) => check_config.push(a.0),
+                Act::PostShare(..) => post_share.push(a.0),
+                Act::CombineShares(..) => combine_shares.push(a.0),
+                Act::CheckPk(..) => check_pk.push(a.0),
+                Act::CheckMix(..) => check_mix.push(a.0),
+                Act::Mix(..) => mix.push(a.0),
+                Act::PartialDecrypt(..) => partial_decrypt.push(a.0),
+                Act::CombineDecryptions(..) => combine_decriptions.push(a.0),
+                Act::CheckPlaintexts(..) => check_plaintexts.push(a.0)
+            }  
+            all_actions.push(a.0);
+        }
+
+        let config_ok = f.1;
+
+        OutputFacts{
+            all_actions,
+            check_config,
+            post_share,
+            combine_shares,
+            check_pk,
+            check_mix,
+            mix,
+            partial_decrypt,
+            combine_decriptions,
+            check_plaintexts,
+            config_ok
+        }
+    }
+}
+
+fn print_facts(facts: &OutputFacts) {
+    let next = &facts.config_ok;
+    if next.len() > 0 {
+        for f in next {
+            println!("* ConfigOk {:?}", f.0[0..5].to_vec());
+        }
+        
+    } else {
+        println!("* No ConfigOk");
+    }
+    let next = &facts.all_actions;
+    if next.len() > 0 {
+        for f in next {
+            println!("* Action {:?}", f);
+        }
+        
+    } else {
+        println!("* No Actions");
     }
 }
 
@@ -112,7 +204,9 @@ impl SVerifier {
         let statement_hash = hashing::hash(&self.statement.0);
         let verified = pk.verify(&statement_hash, &self.statement.1);
         let config_h = util::to_u8_64(&statement.2[0]);
-        println!("Calling verify on {:?}, {}", &self, verified.is_ok());
+        println!("* Verify returns: [{}] on [{:?}] from trustee [{}] for contest [{}]", verified.is_ok(), 
+            &self.statement.0.0, &self.trustee, &self.contest
+        );
 
         match statement.0 {
             StatementType::Config => {
@@ -259,16 +353,17 @@ crepe! {
     struct Do(Act);
     // 1
     @output
-    struct ConfigSignedUpTo(ConfigHash, u32);
+    struct ConfigOk(ConfigHash);
     // 2
     @output
-    struct ConfigOk(ConfigHash);
+    struct PkSharesOk(ConfigHash, ContestIndex, Hashes);
     // 3
     @output
     struct PkSharesUpTo(ConfigHash, ContestIndex, TrusteeIndex, Hashes);
     // 4
     @output
-    struct PkSharesOk(ConfigHash, ContestIndex, Hashes);
+    struct ConfigSignedUpTo(ConfigHash, u32);
+    // 5
     @output
     struct Contest(ConfigHash, u32);
     
@@ -295,10 +390,10 @@ crepe! {
         ConfigSignedBy(config, trustee + 1);
     
     ConfigOk(config) <- 
-        ConfigSignedUpTo(config, total_t),
-        ConfigPresent(config, _, total_t, _);
+        ConfigPresent(config, _, total_t, _),
+        ConfigSignedUpTo(config, total_t - 1);
 
-    Contest(config, contests) <-
+    Contest(config, contests - 1) <-
         ConfigPresent(config, contests, _, _self);
 
     Contest(config, n - 1) <- Contest(config, n),
@@ -332,6 +427,22 @@ fn array_set(mut input: Hashes, index: u32, value: Hash) -> Hashes {
     input
 }
 
+use std::fmt;
+impl fmt::Debug for Fact {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Fact::ConfigPresent(x) => write!(f, "ConfigPresent: [contests={} trustees={} self={}] {:?}", x.1, x.2, x.3, x.0[0..5].to_vec()),
+            Fact::ConfigSignedBy(x) => write!(f, "ConfigSignedBy: [{}] for config: {:?}", x.1, x.0[0..5].to_vec()),
+            Fact::PkShareSignedBy(x) => write!(f, "PkShareSignedBy {:?}", x.0),
+            Fact::PkSignedBy(x) => write!(f, "PkSignedBy {:?}", x.0),
+            Fact::BallotsSigned(x) => write!(f, "BallotsSigned {:?}", x.0),
+            Fact::MixSignedBy(x) => write!(f, "MixSignedBy {:?}", x.0),
+            Fact::DecryptionSignedBy(x) => write!(f, "DecryptionSignedBy {:?}", x.0),
+            Fact::PlaintextsSignedBy(x) => write!(f, "PlaintextsSignedBy{:?}", x.0)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     
@@ -357,17 +468,23 @@ mod tests {
     fn test_crepe_config() {
         let mut csprng = OsRng;
         let mut bb = MemoryBulletinBoard::<Integer, RugGroup>::new();
-        let local = "/tmp/local";
-        let local_path = Path::new(local);
-        fs::remove_dir_all(local_path).ok();
-        fs::create_dir(local_path).ok();
-        let ls = LocalStore::new(local.to_string());
+        let local1 = "/tmp/local";
+        let local_path1 = Path::new(local1);
+        fs::remove_dir_all(local_path1).ok();
+        fs::create_dir(local_path1).ok();
+        let ls1 = LocalStore::new(local1.to_string());
+
+        let local2 = "/tmp/local2";
+        let local_path2 = Path::new(local2);
+        fs::remove_dir_all(local_path2).ok();
+        fs::create_dir(local_path2).ok();
+        let ls2 = LocalStore::new(local2.to_string());
 
         let id = Uuid::new_v4();
         let group = RugGroup::default();
         let contests = 2;
         let ballotbox_pk = Keypair::generate(&mut csprng).public; 
-        let trustees = 3;
+        let trustees = 2;
         let mut trustee_kps = Vec::with_capacity(trustees);
         let mut trustee_pks = Vec::with_capacity(trustees);
         
@@ -385,39 +502,31 @@ mod tests {
             trustees: trustee_pks
         };
         
-        let cfg_path = ls.set_config(&cfg);
+        let cfg_path = ls1.set_config(&cfg);
         bb.add_config(&cfg_path);
         
         let mut prot = Protocol::new(bb);
-        let actions = prot.process_facts(self_pk);
+        let actions = prot.process_facts(self_pk).check_config;
 
-        let expected = Do(
-            Act::CheckConfig(hashing::hash(&cfg))
-        );
-
-        assert!(actions.contains(&expected));
-        
-        println!("==== actions ====");
-        for action in actions {
-            println!("{:?}", action.0);
-        }
-        println!("==== actions ====");
-        
+        let expected = Act::CheckConfig(hashing::hash(&cfg));
+            
+        assert!(actions[0] == expected);
         
         let ss = SignedStatement::config(&cfg, &trustee_kps[0]);
-        let cfg_h = hashing::hash(&cfg);
-        let action = Act::CheckConfig(cfg_h);
-        let stmt_path = ls.set_config_stmt(&action, &ss);
+        let stmt_path = ls1.set_config_stmt(&expected, &ss);
 
         prot.board.add_config_stmt(&stmt_path, 0);
         
-        let actions = prot.process_facts(self_pk);
-        println!("==== actions ====");
-        for action in actions {
-            println!("{:?}", action.0);
-        }
-        println!("==== actions ====");
+        let actions = prot.process_facts(self_pk).all_actions;
+        assert!(actions.len() == 0);
 
+        let ss = SignedStatement::config(&cfg, &trustee_kps[1]);
+        let stmt_path = ls2.set_config_stmt(&expected, &ss);
+
+        prot.board.add_config_stmt(&stmt_path, 1);
+        let actions = prot.process_facts(self_pk).post_share;
+
+        assert!(actions.len() as u32 == contests)
     }
 }
 

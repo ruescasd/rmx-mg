@@ -59,7 +59,6 @@ pub trait BulletinBoard<E: Element, G: Group<E>> {
     
     fn get_statements(&self) -> Vec<SVerifier>;
     fn get_stmts(&self) -> Vec<String> {
-        println!("List {:?}", self.list());
         self.list().into_iter().filter(|s| {
             s.ends_with(".stmt")
         }).collect()
