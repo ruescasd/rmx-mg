@@ -1,4 +1,3 @@
-pub type Signature = [u8; 64];
 
 
 #[cfg(test)]

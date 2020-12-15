@@ -13,41 +13,43 @@ pub trait Names {
     const PAUSE: &'static str = "pause";
     const ERROR: &'static str = "error";
 
-    fn config_sig(auth: u32) -> String { format!("{}/config.sig", auth).to_string() }
+    fn config_stmt(auth: u32) -> String { format!("{}/config.stmt", auth).to_string() }
 
     fn share(contest: u32, auth: u32) -> String { format!("{}/{}/share", auth, contest).to_string() }
     fn share_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/share.stmt", auth, contest).to_string() }
-    fn share_sig(contest: u32, auth: u32) -> String { format!("{}/{}/share.sig", auth, contest).to_string() }
+    
 
     fn public_key(contest: u32, auth: u32) -> String { format!("{}/{}/public_key", auth, contest).to_string() }
     fn public_key_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/public_key.stmt", auth, contest).to_string() }
-    fn public_key_sig(contest: u32, auth: u32) -> String { format!("{}/{}/public_key.sig", auth, contest).to_string() }
+    
 
     fn ballots(contest: u32) -> String { format!("{}/ballots", contest).to_string() }
     fn ballots_stmt(contest: u32) -> String { format!("{}/ballots_stmt", contest).to_string() }
-    fn ballots_sig(contest: u32) -> String { format!("{}/ballots_sig", contest).to_string() }
+    
     
     fn mix(contest: u32, auth: u32) -> String { format!("{}/{}/mix", auth, contest).to_string() }
     fn mix_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/mix.stmt", auth, contest).to_string() }
-    fn mix_sig(contest: u32, auth: u32, signing_auth: u32) -> String { format!("{}/{}/mix.{}.sig", signing_auth, contest, auth).to_string() }
+    
 
     fn decryption(contest: u32, auth: u32) -> String { format!("{}/{}/decryption", auth, contest).to_string() }
     fn decryption_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/decryption.stmt", auth, contest).to_string() }
-    fn decryption_sig(contest: u32, auth: u32) -> String { format!("{}/{}/decryption.sig", auth, contest).to_string() }
+    
 
     fn plaintexts(contest: u32, auth: u32) -> String { format!("{}/{}/plaintexts", auth, contest).to_string() }
     fn plaintexts_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/plaintexts.stmt", auth, contest).to_string() }
-    fn plaintexts_sig(contest: u32, auth: u32) -> String { format!("{}/{}/plaintexts.sig", auth, contest).to_string() }
+    
     
     fn auth_error(auth: u32) -> String { format!("{}/error", auth).to_string() }
 }
 
+use crate::localstore::*;
+
 pub trait BulletinBoard<E: Element, G: Group<E>> {
 
     fn list(&self) -> Vec<String>;
-    fn add_config(&mut self, config: &Path, stmt: &Path);
+    fn add_config(&mut self, config: &ConfigPath);
     fn get_config(&self) -> Option<Config>;
-    fn add_config_sig(&mut self, sig: &Path, trustee: u32);
+    fn add_config_stmt(&mut self, stmt: &ConfigStmtPath, trustee: u32);
     // fn add_share(&self, share: Path, stmt: Path, sig: Path, contest: u32, position: u32);
 
     fn get_share(&self, contest: u32, auth: u32) -> Option<Keyshare<E, G>>;

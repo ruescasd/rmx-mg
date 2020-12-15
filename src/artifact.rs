@@ -1,4 +1,5 @@
 use ed25519_dalek::PublicKey as SignaturePublicKey;
+use ed25519_dalek::Signature;
 use serde::{Deserialize, Serialize};
 use crepe::crepe;
 
@@ -60,6 +61,12 @@ pub struct PartialDecryption<E: Element> {
 #[derive(Serialize, Deserialize)]
 pub struct Plaintexts<E> {
     pub plaintexts: Vec<E>
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct SignedStatement {
+    pub statement: Statement,
+    pub signature: Signature
 }
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]

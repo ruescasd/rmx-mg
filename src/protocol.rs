@@ -19,7 +19,6 @@ use crate::action::Act;
 pub type TrusteeTotal = u32;
 pub type TrusteeIndex = u32;
 pub type ContestIndex = u32;
-
 pub type ConfigHash = Hash;
 pub type ShareHash = Hash;
 pub type PkHash = Hash;
@@ -28,7 +27,6 @@ pub type MixHash = Hash;
 pub type DecryptionHash = Hash;
 pub type PlaintextsHash = Hash;
 pub type Hashes = [Hash; 10];
-
 
 struct Protocol<E: Element, G: Group<E>, B: BulletinBoard<E, G>> {
     board: B,
@@ -374,7 +372,6 @@ mod tests {
         let mut trustee_kps = Vec::with_capacity(trustees);
         let mut trustee_pks = Vec::with_capacity(trustees);
         
-        
         for _ in 0..trustees {
             let keypair = Keypair::generate(&mut csprng);
             trustee_pks.push(keypair.public);
@@ -388,14 +385,10 @@ mod tests {
             ballotbox: ballotbox_pk, 
             trustees: trustee_pks
         };
-        let cfg_b = bincode::serialize(&cfg).unwrap();
-        let cfg_statement = Statement::from_config(&cfg);
-        let cfg_statement_b = bincode::serialize(&cfg_statement).unwrap();
         
-        let action = Act::AddConfig;
-        let paths = ls.set_work(&action, vec![cfg_b, cfg_statement_b]);
+        let cfg_path = ls.set_config(&cfg);
+        bb.add_config(&cfg_path);
         
-        bb.add_config(&paths[0], &paths[1]);
         let mut prot = Protocol::new(bb);
         let actions = prot.process_facts(self_pk);
 
@@ -411,11 +404,17 @@ mod tests {
         }
         println!("==== actions ====");
         
-        let cfg_statement_h = hashing::hash(&cfg);
-        let signature = trustee_kps[0].sign(&cfg_statement_h);
-        let signature_b =  bincode::serialize(&signature).unwrap();
-        let tmp = util::write_to_tmp(signature_b).unwrap();
-        prot.board.add_config_sig(tmp.path(), 1);
+        let cfg_h = hashing::hash(&cfg);
+        let signature = trustee_kps[0].sign(&cfg_h);
+        let stmt = Statement::config(cfg_h.to_vec());
+        let ss = SignedStatement {
+            statement: stmt,
+            signature: signature
+        };
+        let action = Act::CheckConfig(cfg_h);
+        let stmt_path = ls.set_config_stmt(&action, &ss);
+
+        prot.board.add_config_stmt(&stmt_path, 1);
         
         let actions = prot.process_facts(self_pk);
         println!("==== actions ====");

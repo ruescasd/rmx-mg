@@ -11,6 +11,7 @@ use crate::protocol::StatementV;
 use crate::arithm::Element;
 use crate::group::Group;
 use crate::util;
+use crate::localstore::*;
 
 pub struct MemoryBulletinBoard<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> {
     data: HashMap<String, Vec<u8>>,
@@ -62,12 +63,11 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
 
         Some(ret)
     }
-    fn add_config(&mut self, config: &Path, stmt: &Path) {
-        self.put(Self::CONFIG, config);
-        self.put(Self::CONFIG_STMT, stmt);
+    fn add_config(&mut self, path: &ConfigPath) {
+        self.put(Self::CONFIG, &path.0);
     }
-    fn add_config_sig(&mut self, sig: &Path, trustee: u32) {
-        self.put(&Self::config_sig(trustee), sig);
+    fn add_config_stmt(&mut self, path: &ConfigStmtPath, trustee: u32) {
+        self.put(&Self::config_stmt(trustee), &path.0);
     }
     fn get_share(&self, contest: u32, auth: u32) -> Option<Keyshare<E, G>> {
         let bytes = self.data.get(&Self::share(contest, auth))?;

@@ -5,8 +5,10 @@ use crate::hashing;
 use crate::protocol;
 use crate::util;
 use crate::action::Act;
+use crate::artifact::*;
 
-
+pub struct ConfigPath(pub PathBuf);
+pub struct ConfigStmtPath(pub PathBuf);
 
 pub struct LocalStore {
     pub fs_path: PathBuf
@@ -19,6 +21,20 @@ impl LocalStore {
         LocalStore {
             fs_path: target.to_path_buf()
         }
+    }
+    
+    pub fn set_config(&self, config: &Config) -> ConfigPath {
+        let cfg_b = bincode::serialize(&config).unwrap();
+        ConfigPath (
+            self.set_work(&Act::AddConfig, vec![cfg_b]).remove(0)
+        )
+    }
+    pub fn set_config_stmt(&self, act: &Act, config_stmt: &SignedStatement) -> ConfigStmtPath {
+        assert!(matches!(act, Act::CheckConfig(_)));
+        let stmt_b = bincode::serialize(&config_stmt).unwrap();
+        ConfigStmtPath (
+            self.set_work(act, vec![stmt_b]).remove(0)
+        )
     }
     
     pub fn get_work(&self, action: &Act, hash: hashing::Hash) -> Option<Vec<PathBuf>> {
@@ -41,7 +57,7 @@ impl LocalStore {
             None
         }
     }
-    pub fn set_work(&self, action: &Act, work: Vec<Vec<u8>>) -> Vec<PathBuf> {
+    fn set_work(&self, action: &Act, work: Vec<Vec<u8>>) -> Vec<PathBuf> {
         let target = self.path_for_action(action);
         let mut ret = Vec::new();
         
