@@ -65,12 +65,13 @@ pub struct Plaintexts<E> {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SignedStatement(Statement, Signature);
+pub struct SignedStatement(pub Statement, pub Signature);
 
 impl SignedStatement {
-    pub fn config(config: hashing::Hash, pk: &Keypair) -> SignedStatement {
-        let stmt = Statement::config(config.to_vec());
-        let signature = pk.sign(&config);
+    pub fn config(config: &Config, pk: &Keypair) -> SignedStatement {
+        let config_h = hashing::hash(config);
+        let stmt = Statement::config(config_h.to_vec());
+        let signature = pk.sign(&config_h);
         SignedStatement(stmt, signature)
     }
 }
