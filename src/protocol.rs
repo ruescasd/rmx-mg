@@ -406,7 +406,8 @@ mod tests {
         
         
         let ss = SignedStatement::config(&cfg, &trustee_kps[0]);
-        let action = Act::CheckConfig(ss.0.2[0].to_vec());
+        let cfg_h = hashing::hash(&cfg);
+        let action = Act::CheckConfig(cfg_h);
         let stmt_path = ls.set_config_stmt(&action, &ss);
 
         prot.board.add_config_stmt(&stmt_path, 1);
