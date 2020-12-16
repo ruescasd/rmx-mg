@@ -9,12 +9,15 @@ use crate::protocol;
 use crate::util;
 use crate::action::Act;
 use crate::artifact::*;
+use crate::elgamal::PublicKey;
 use crate::arithm::Element;
 use crate::group::Group;
 
 pub struct ConfigPath(pub PathBuf);
 pub struct ConfigStmtPath(pub PathBuf);
 pub struct KeysharePath(pub PathBuf, pub PathBuf);
+pub struct PkPath(pub PathBuf, pub PathBuf);
+pub struct PkStmtPath(pub PathBuf);
 
 pub struct LocalStore<E: Element, G: Group<E>> {
     pub fs_path: PathBuf,
@@ -44,6 +47,7 @@ impl<E: Element + Serialize + DeserializeOwned,
     }
     pub fn set_config_stmt(&self, act: &Act, stmt: &SignedStatement) -> ConfigStmtPath {
         assert!(matches!(act, Act::CheckConfig(_)));
+        assert!(matches!(stmt.statement.stype, StatementType::Config));
         let stmt_b = bincode::serialize(&stmt).unwrap();
         ConfigStmtPath (
             self.set_work(act, vec![stmt_b]).remove(0)
@@ -51,6 +55,7 @@ impl<E: Element + Serialize + DeserializeOwned,
     }
     pub fn set_share(&self, act: &Act, share: Keyshare<E, G>, stmt: &SignedStatement) -> KeysharePath {
         assert!(matches!(act, Act::PostShare(..)));
+        assert!(matches!(stmt.statement.stype, StatementType::Keyshare));
         let share_b = bincode::serialize(&share).unwrap();
         let stmt_b = bincode::serialize(&stmt).unwrap();
         let mut paths = self.set_work(act, vec![share_b, stmt_b]);
@@ -58,6 +63,26 @@ impl<E: Element + Serialize + DeserializeOwned,
         let stmt_p = paths.remove(0);
         
         KeysharePath (share_p, stmt_p)
+    }
+    pub fn set_pk(&self, act: &Act, pk: PublicKey<E, G>, stmt: &SignedStatement) -> PkPath {
+        assert!(matches!(act, Act::CombineShares(..)));
+        assert!(matches!(stmt.statement.stype, StatementType::PublicKey));
+        let pk_b = bincode::serialize(&pk).unwrap();
+        let stmt_b = bincode::serialize(&stmt).unwrap();
+        let mut paths = self.set_work(act, vec![pk_b, stmt_b]);
+        let pk_p = paths.remove(0);
+        let stmt_p = paths.remove(0);
+        
+        PkPath(pk_p, stmt_p)
+    }
+    pub fn set_pk_stmt(&self, act: &Act, stmt: &SignedStatement) -> PkStmtPath {
+        assert!(matches!(act, Act::CheckPk(..)));
+        assert!(matches!(stmt.statement.stype, StatementType::PublicKey));
+        let stmt_b = bincode::serialize(&stmt).unwrap();
+        let mut paths = self.set_work(act, vec![stmt_b]);
+        let stmt_p = paths.remove(0);
+        
+        PkStmtPath(stmt_p)
     }
     
     pub fn get_work(&self, action: &Act, hash: hashing::Hash) -> Option<Vec<PathBuf>> {

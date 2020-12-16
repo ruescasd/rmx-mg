@@ -79,6 +79,15 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
 
         Some(ret)
     }
+    fn set_pk(&mut self, path: &PkPath, contest: u32) {
+        // 0: trustee 0 combines shares into pk
+        self.put(&Self::public_key(contest, 0), &path.0);
+        self.put(&Self::public_key_stmt(contest, 0), &path.1);
+    }
+    fn set_pk_stmt(&mut self, path: &PkStmtPath, contest: u32, trustee: u32) {
+        self.put(&Self::public_key_stmt(contest, trustee), &path.0);
+    }
+
     fn list(&self) -> Vec<String> {
         self.data.iter().map(|(a, _)| a.clone()).collect()
     }

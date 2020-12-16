@@ -30,7 +30,8 @@ pub type DecryptionHash = Hash;
 pub type PlaintextsHash = Hash;
 pub type Hashes = [Hash; 10];
 type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesOk>, HashSet<PkOk>, 
-    HashSet<PkSharesUpTo>, HashSet<ConfigSignedUpTo>, HashSet<Contest>);
+    HashSet<PkSharesUpTo>, HashSet<ConfigSignedUpTo>, HashSet<Contest>,
+    HashSet<PkSignedUpTo>);
 
 struct Protocol<E: Element, G: Group<E>, B: BulletinBoard<E, G>> {
     board: B,
@@ -105,7 +106,8 @@ struct OutputFacts {
     combine_decryptions: Vec<Act>,
     check_plaintexts: Vec<Act>,
     config_ok: HashSet<ConfigOk>,
-    pk_shares_ok: HashSet<PkSharesOk>
+    pk_shares_ok: HashSet<PkSharesOk>,
+    pk_ok: HashSet<PkOk>
 }
 
 impl OutputFacts {
@@ -140,6 +142,7 @@ impl OutputFacts {
 
         let config_ok = f.1;
         let pk_shares_ok = f.2;
+        let pk_ok = f.3;
 
         OutputFacts{
             all_actions,
@@ -153,7 +156,8 @@ impl OutputFacts {
             combine_decryptions,
             check_plaintexts,
             config_ok,
-            pk_shares_ok
+            pk_shares_ok,
+            pk_ok
         }
     }
 
@@ -166,6 +170,10 @@ impl OutputFacts {
         let next = &self.pk_shares_ok;
         for f in next {
             println!("* PkSharesOk {:?}", short(&f.0));
+        }
+        let next = &self.pk_ok;
+        for f in next {
+            println!("* PkOk {:?}", short(&f.0));
         }
         let next = &self.all_actions; 
         for f in next {
@@ -203,17 +211,17 @@ pub struct SVerifier {
 
 impl SVerifier {
     fn verify<E: Element, G: Group<E>, B: BulletinBoard<E, G>>(&self, board: &B) -> Option<InputFact> {
-        let statement = &self.statement.0;
+        let statement = &self.statement.statement;
         let config = board.get_config()?;
         let pk = config.trustees[self.trustee as usize];
-        let statement_hash = hashing::hash(&self.statement.0);
-        let verified = pk.verify(&statement_hash, &self.statement.1);
-        let config_h = util::to_u8_64(&statement.2[0]);
+        let statement_hash = hashing::hash(statement);
+        let verified = pk.verify(&statement_hash, &self.statement.signature);
+        let config_h = util::to_u8_64(&statement.hashes[0]);
         println!("* Verify returns: [{}] on [{:?}] from trustee [{}] for contest [{}]", verified.is_ok(), 
-            &self.statement.0.0, &self.trustee, &self.contest
+            &self.statement.statement.stype, &self.trustee, &self.contest
         );
 
-        match statement.0 {
+        match statement.stype {
             StatementType::Config => {
                 self.ret(
                     InputFact::config_signed_by(config_h, self.trustee),
@@ -221,29 +229,29 @@ impl SVerifier {
                 )
             },
             StatementType::Keyshare => {
-                let share_h = util::to_u8_64(&statement.2[1]);
+                let share_h = util::to_u8_64(&statement.hashes[1]);
                 self.ret(
                     InputFact::share_signed_by(config_h, self.contest, share_h, self.trustee),
                     verified.is_ok()
                 )
             },
             StatementType::PublicKey => {
-                let pk_h = util::to_u8_64(&statement.2[1]);
+                let pk_h = util::to_u8_64(&statement.hashes[1]);
                 self.ret(
                     InputFact::pk_signed_by(config_h, self.contest, pk_h, self.trustee),
                     verified.is_ok()
                 )
             },
             StatementType::Ballots => {
-                let ballots_h = util::to_u8_64(&statement.2[1]);
+                let ballots_h = util::to_u8_64(&statement.hashes[1]);
                 self.ret(
                     InputFact::ballots_signed(config_h, self.contest, ballots_h),
                     verified.is_ok()
                 )
             },
             StatementType::Mix => {
-                let mix_h = util::to_u8_64(&statement.2[1]);
-                let ballots_h = util::to_u8_64(&statement.2[2]);
+                let mix_h = util::to_u8_64(&statement.hashes[1]);
+                let ballots_h = util::to_u8_64(&statement.hashes[2]);
                 self.ret(
                     InputFact::mix_signed_by(config_h, self.contest, mix_h, ballots_h, self.trustee),
                     verified.is_ok()
@@ -251,8 +259,8 @@ impl SVerifier {
 
             },
             StatementType::PDecryption => {
-                let pdecryptions_h = util::to_u8_64(&statement.2[1]);
-                let ballots_h = util::to_u8_64(&statement.2[2]);
+                let pdecryptions_h = util::to_u8_64(&statement.hashes[1]);
+                let ballots_h = util::to_u8_64(&statement.hashes[2]);
                 self.ret(
                     InputFact::decryption_signed_by(config_h, self.contest, pdecryptions_h, ballots_h, self.trustee),
                     verified.is_ok()
@@ -260,8 +268,8 @@ impl SVerifier {
 
             },
             StatementType::Plaintexts => {
-                let plaintexts_h = util::to_u8_64(&statement.2[1]);
-                let pdecryptions_h = util::to_u8_64(&statement.2[2]);
+                let plaintexts_h = util::to_u8_64(&statement.hashes[1]);
+                let pdecryptions_h = util::to_u8_64(&statement.hashes[2]);
                 self.ret(
                     InputFact::plaintexts_signed_by(config_h, self.contest, plaintexts_h, pdecryptions_h, self.trustee),
                     verified.is_ok()
@@ -332,6 +340,9 @@ impl InputFact {
     }
 }
 
+#[derive(Copy, Clone, Hash, Eq, PartialEq)]
+struct Sha512(Hash);
+
 crepe! {
     @input
     struct ConfigPresent(ConfigHash, ContestIndex, TrusteeIndex, TrusteeIndex);
@@ -351,6 +362,9 @@ crepe! {
     struct PlaintextsSignedBy(ConfigHash, ContestIndex, PlaintextsHash, DecryptionHash, 
         TrusteeIndex);
 
+    @input
+    struct Test(Sha512);
+
     // 0
     @output
     struct Do(Act);
@@ -368,10 +382,13 @@ crepe! {
     struct PkSharesUpTo(ConfigHash, ContestIndex, TrusteeIndex, Hashes);
     // 5
     @output
-    struct ConfigSignedUpTo(ConfigHash, u32);
+    struct ConfigSignedUpTo(ConfigHash, TrusteeIndex);
     // 6
     @output
-    struct Contest(ConfigHash, u32);
+    struct Contest(ConfigHash, ContestIndex);
+    // 7
+    @output
+    struct PkSignedUpTo(ConfigHash, ContestIndex, PkHash, TrusteeIndex);
     
     Do(Act::CheckConfig(config)) <- 
         ConfigPresent(config, _, _, self_t),
@@ -421,6 +438,18 @@ crepe! {
         PkSharesUpTo(config, contest, total_t - 1, shares),
         ConfigOk(config);
 
+    PkOk(config, contest, pk_hash) <-
+        ConfigPresent(config, _, total_t, _),
+        PkSignedUpTo(config, contest, pk_hash, total_t - 1),
+        ConfigOk(config);
+    
+    PkSignedUpTo(config, contest, pk_hash, 0) <-
+        PkSignedBy(config, contest, pk_hash, 0);
+
+    PkSignedUpTo(config, contest, pk_hash, trustee + 1) <-
+        PkSignedUpTo(config, contest, pk_hash, trustee),
+        PkSignedBy(config, contest, pk_hash, trustee + 1);
+
     Contest(config, contests - 1) <-
         ConfigPresent(config, contests, _, _self);
 
@@ -451,12 +480,15 @@ impl fmt::Debug for InputFact {
                 "ConfigSignedBy: [{}] for config: {:?}", x.1, short(&x.0)),
             InputFact::PkShareSignedBy(x) => write!(f, 
                 "PkShareSignedBy [contest={} trustee={}] for share: {:?}, for config: {:?}", 
-                x.1, x.3, x.2[0..5].to_vec(), short(&x.0)),
-            InputFact::PkSignedBy(x) => write!(f, "PkSignedBy {:?}", x.0),
-            InputFact::BallotsSigned(x) => write!(f, "BallotsSigned {:?}", x.0),
-            InputFact::MixSignedBy(x) => write!(f, "MixSignedBy {:?}", x.0),
-            InputFact::DecryptionSignedBy(x) => write!(f, "DecryptionSignedBy {:?}", x.0),
-            InputFact::PlaintextsSignedBy(x) => write!(f, "PlaintextsSignedBy{:?}", x.0)
+                x.1, x.3, short(&x.2), short(&x.0)),
+            InputFact::PkSignedBy(x) => write!(f, 
+                "PkSignedBy [contest={} trustee={}] for pk: {:?}, for config: {:?}", 
+                x.1, x.3, short(&x.2), short(&x.0)),
+            
+            InputFact::BallotsSigned(x) => write!(f, "BallotsSigned {:?}", short(&x.0)),
+            InputFact::MixSignedBy(x) => write!(f, "MixSignedBy {:?}", short(&x.0)),
+            InputFact::DecryptionSignedBy(x) => write!(f, "DecryptionSignedBy {:?}", short(&x.0)),
+            InputFact::PlaintextsSignedBy(x) => write!(f, "PlaintextsSignedBy{:?}", short(&x.0))
         }
     }
 }
@@ -516,6 +548,7 @@ mod tests {
             trustee_keymakers.push(km);
         }
         let self_pk = trustee_pks[0];
+        let other_pk = trustee_pks[1];
         let cfg = artifact::Config {
             id: id.as_bytes().clone(),
             rug_group: Some(group),
@@ -586,6 +619,33 @@ mod tests {
         assert!(output.pk_shares_ok.len() == 1);
         assert!(output.combine_shares.len() == 1);
         assert!(output.post_share.len() == 1);
+
+        let share1 = prot.board.get_share(0, 0).unwrap();
+        let share2 = prot.board.get_share(0, 1).unwrap();
+        let gr = &cfg.rug_group.clone().unwrap();
+        assert!(Keymaker::verify_share(gr, &share1.share, &share1.proof));
+        assert!(Keymaker::verify_share(gr, &share2.share, &share2.proof));
+        
+        let pk = Keymaker::combine_pks(gr, vec![share1.share, share2.share]);
+        let pk_h = hashing::hash(&pk);
+        let ss1 = SignedStatement::public_key(&cfg, pk_h, 0, &trustee_kps[0]);
+        let act = output.combine_shares[0];
+        let pk_path = ls1.set_pk(&act, pk, &ss1);
+        prot.board.set_pk(&pk_path, 0);
+
+        let output = prot.process_facts(self_pk);
+        assert!(output.combine_shares.len() == 0);
+        assert!(output.check_pk.len() == 0);
+
+        let output = prot.process_facts(other_pk);
+        assert!(output.check_pk.len() == 1);
+        let act = output.check_pk[0];
+
+        let ss2 = SignedStatement::public_key(&cfg, pk_h, 0, &trustee_kps[1]);
+        let pk_stmt_path = ls2.set_pk_stmt(&act, &ss2);
+        prot.board.set_pk_stmt(&pk_stmt_path, 0, 1);
+
+        let output = prot.process_facts(self_pk);
     }
 }
 

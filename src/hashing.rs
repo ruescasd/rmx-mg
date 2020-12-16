@@ -313,11 +313,11 @@ use crate::artifact::Statement;
 
 impl HashBytes for Statement {
     fn get_bytes(&self) -> Vec<u8> {
-        let discriminant = self.0 as u8;
+        let discriminant = self.stype as u8;
         let mut bytes: Vec<u8> = vec![discriminant];
-        bytes.extend(&self.1.to_le_bytes());
+        bytes.extend(&self.contest.to_le_bytes());
         
-        for b in self.2.iter() {
+        for b in self.hashes.iter() {
             bytes.extend(b);
         }
 
@@ -329,8 +329,8 @@ use crate::artifact::SignedStatement;
 
 impl HashBytes for SignedStatement {
     fn get_bytes(&self) -> Vec<u8> {
-        let mut bytes: Vec<u8> = self.0.get_bytes();
-        bytes.extendl(&self.1.get_bytes());
+        let mut bytes: Vec<u8> = self.statement.get_bytes();
+        bytes.extendl(&self.signature.get_bytes());
         
         bytes
     }
