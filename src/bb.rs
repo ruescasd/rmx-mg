@@ -50,11 +50,8 @@ pub trait BulletinBoard<E: Element, G: Group<E>> {
     fn add_config(&mut self, config: &ConfigPath);
     fn get_config(&self) -> Option<Config>;
     fn add_config_stmt(&mut self, stmt: &ConfigStmtPath, trustee: u32);
-    // fn add_share(&self, share: Path, stmt: Path, sig: Path, contest: u32, position: u32);
-
+    fn add_share(&mut self, path: &KeysharePath, contest: u32, trustee: u32);
     fn get_share(&self, contest: u32, auth: u32) -> Option<Keyshare<E, G>>;
-    
-    
     
     
     fn get_statements(&self) -> Vec<SVerifier>;

@@ -421,13 +421,29 @@ impl HashBytes for Hash {
 impl HashBytes for Act {
     fn get_bytes(&self) -> Vec<u8> {
         match self {
+            Act::AddConfig => {
+                vec![]
+            },
             Act::CheckConfig(h) => {
                 let mut v = vec![1u8];
                 v.extendl(&h.to_vec());
                 v
             },
-            Act::CheckPk(h, i, pk, s) => {
+            Act::PostShare(h, i) => {
                 let mut v = vec![2u8];
+                v.extendl(&h.to_vec());
+                v.extendl(&i.to_le_bytes().to_vec());
+                v
+            },
+            Act::CombineShares(h, i, s) => {
+                let mut v = vec![2u8];
+                v.extendl(&h.to_vec());
+                v.extendl(&i.to_le_bytes().to_vec());
+                v.extendl(&concat_bytes_iter(s));
+                v
+            },
+            Act::CheckPk(h, i, pk, s) => {
+                let mut v = vec![3u8];
                 v.extendl(&h.to_vec());
                 v.extendl(&i.to_le_bytes().to_vec());
                 v.extendl(&pk.to_vec());

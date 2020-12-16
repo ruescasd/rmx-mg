@@ -1,25 +1,38 @@
 use std::path::{Path,PathBuf};
+use std::marker::PhantomData;
 use base64::{encode, decode};
+use serde::Serialize;
+use serde::de::DeserializeOwned;
 
 use crate::hashing;
 use crate::protocol;
 use crate::util;
 use crate::action::Act;
 use crate::artifact::*;
+use crate::arithm::Element;
+use crate::group::Group;
 
 pub struct ConfigPath(pub PathBuf);
 pub struct ConfigStmtPath(pub PathBuf);
+pub struct KeysharePath(pub PathBuf, pub PathBuf);
 
-pub struct LocalStore {
-    pub fs_path: PathBuf
+pub struct LocalStore<E: Element, G: Group<E>> {
+    pub fs_path: PathBuf,
+    phantom_e: PhantomData<E>,
+    phantom_g: PhantomData<G>
 }
 
-impl LocalStore {
-    pub fn new(fs_path: String) -> LocalStore {
+impl<E: Element + Serialize + DeserializeOwned, 
+    G: Group<E> + Serialize + DeserializeOwned> 
+    LocalStore<E, G> {
+    
+    pub fn new(fs_path: String) -> LocalStore<E, G> {
         let target = Path::new(&fs_path);
         assert!(target.exists() && target.is_dir());
         LocalStore {
-            fs_path: target.to_path_buf()
+            fs_path: target.to_path_buf(),
+            phantom_e: PhantomData,
+            phantom_g: PhantomData
         }
     }
     
@@ -29,12 +42,22 @@ impl LocalStore {
             self.set_work(&Act::AddConfig, vec![cfg_b]).remove(0)
         )
     }
-    pub fn set_config_stmt(&self, act: &Act, config_stmt: &SignedStatement) -> ConfigStmtPath {
+    pub fn set_config_stmt(&self, act: &Act, stmt: &SignedStatement) -> ConfigStmtPath {
         assert!(matches!(act, Act::CheckConfig(_)));
-        let stmt_b = bincode::serialize(&config_stmt).unwrap();
+        let stmt_b = bincode::serialize(&stmt).unwrap();
         ConfigStmtPath (
             self.set_work(act, vec![stmt_b]).remove(0)
         )
+    }
+    pub fn set_share(&self, act: &Act, share: Keyshare<E, G>, stmt: &SignedStatement) -> KeysharePath {
+        assert!(matches!(act, Act::PostShare(..)));
+        let share_b = bincode::serialize(&share).unwrap();
+        let stmt_b = bincode::serialize(&stmt).unwrap();
+        let mut paths = self.set_work(act, vec![share_b, stmt_b]);
+        let share_p = paths.remove(0);
+        let stmt_p = paths.remove(0);
+        
+        KeysharePath (share_p, stmt_p)
     }
     
     pub fn get_work(&self, action: &Act, hash: hashing::Hash) -> Option<Vec<PathBuf>> {
@@ -57,6 +80,7 @@ impl LocalStore {
             None
         }
     }
+
     fn set_work(&self, action: &Act, work: Vec<Vec<u8>>) -> Vec<PathBuf> {
         let target = self.path_for_action(action);
         let mut ret = Vec::new();
@@ -69,11 +93,15 @@ impl LocalStore {
         }
         ret
     }
+    
     fn path_for_action(&self, action: &Act) -> PathBuf {
         let hash = hashing::hash(action);
         let encoded = hex::encode(&hash);
         let work_path = Path::new(&encoded);
-        Path::new(&self.fs_path).join(work_path)
+        let ret = Path::new(&self.fs_path).join(work_path);
+        // println!("action {:?}, returning path {:?}", action, ret);
+
+        ret
     }
 }
 

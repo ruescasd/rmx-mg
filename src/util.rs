@@ -96,3 +96,12 @@ pub fn random_rug_ballots<G: Group<Integer>>(n: usize, group: &G) -> Ballots<Int
         ciphertexts: cs
     }
 }
+
+pub fn s(input: &[u8; 64]) -> Vec<u8> {
+    input[0..5].to_vec()
+}
+pub fn sm(input: &[[u8; 64]; 10]) -> Vec<Vec<u8>> {
+    input.iter().cloned().filter(|&a| a != [0u8; 64])
+        .map(|a| a[0..5].to_vec())        
+        .collect()
+}

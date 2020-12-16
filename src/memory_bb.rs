@@ -69,6 +69,10 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
     fn add_config_stmt(&mut self, path: &ConfigStmtPath, trustee: u32) {
         self.put(&Self::config_stmt(trustee), &path.0);
     }
+    fn add_share(&mut self, path: &KeysharePath, contest: u32, trustee: u32) {
+        self.put(&Self::share(contest, trustee), &path.0);
+        self.put(&Self::share_stmt(contest, trustee), &path.1);
+    }
     fn get_share(&self, contest: u32, auth: u32) -> Option<Keyshare<E, G>> {
         let bytes = self.data.get(&Self::share(contest, auth))?;
         let ret: Keyshare<E, G> = bincode::deserialize(bytes).unwrap();

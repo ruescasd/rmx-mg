@@ -15,6 +15,7 @@ use crate::util;
 use crate::arithm::Element;
 use crate::group::Group;
 use crate::action::Act;
+use crate::util::{s, sm};
 
 pub type TrusteeTotal = u32;
 pub type TrusteeIndex = u32;
@@ -27,7 +28,8 @@ pub type MixHash = Hash;
 pub type DecryptionHash = Hash;
 pub type PlaintextsHash = Hash;
 pub type Hashes = [Hash; 10];
-type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesOk>, HashSet<PkSharesUpTo>, HashSet<ConfigSignedUpTo>, HashSet<Contest>);
+type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesOk>, HashSet<PkOk>, 
+    HashSet<PkSharesUpTo>, HashSet<ConfigSignedUpTo>, HashSet<Contest>);
 
 struct Protocol<E: Element, G: Group<E>, B: BulletinBoard<E, G>> {
     board: B,
@@ -45,11 +47,11 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
         }
     }
     
-    fn get_facts(&self, self_pk: SignaturePublicKey) -> Vec<Fact> {
+    fn get_facts(&self, self_pk: SignaturePublicKey) -> Vec<InputFact> {
     
         let svs = self.board.get_statements();
         println!("SVerifiers: {}", svs.len());
-        let mut facts: Vec<Fact> = svs.iter()
+        let mut facts: Vec<InputFact> = svs.iter()
             .map(|sv| sv.verify(&self.board))
             .filter(|f| f.is_some())
             .map(|f| f.unwrap())
@@ -64,7 +66,7 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
             let hash = hashing::hash(&cfg);
             let contests = cfg.contests;
 
-            let f = Fact::config_present(
+            let f = InputFact::config_present(
                 hash,
                 contests,
                 trustees as u32,
@@ -78,28 +80,13 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
     
     fn process_facts(&self, self_pk: SignaturePublicKey) -> OutputFacts {
         let mut runtime = Crepe::new();
-        println!("======== Input facts [");
         let facts = self.get_facts(self_pk);
-        facts.into_iter().map(|f| {
-            println!("* Input fact {:?}", f);
-            match f {
-                Fact::ConfigPresent(x) => runtime.extend(&[x]),
-                Fact::ConfigSignedBy(x) => runtime.extend(&[x]),
-                Fact::PkShareSignedBy(x) => runtime.extend(&[x]),
-                Fact::PkSignedBy(x) => runtime.extend(&[x]),
-                Fact::BallotsSigned(x) => runtime.extend(&[x]),
-                Fact::MixSignedBy(x) => runtime.extend(&[x]),
-                Fact::DecryptionSignedBy(x) => runtime.extend(&[x]),
-                Fact::PlaintextsSignedBy(x) => runtime.extend(&[x])
-            }
-        }).count();
-        println!("] \n");
-
-        println!("======== Output facts [");
-        let output: OutputF = runtime.run();
+        load_facts(facts, &mut runtime);
+        
+        let output = runtime.run();
         let ret = OutputFacts::new(output);
-        print_facts(&ret);
-        println!("] \n");
+        
+        ret.print();
 
         ret
     }
@@ -116,11 +103,11 @@ struct OutputFacts {
     partial_decrypt: Vec<Act>,
     combine_decriptions: Vec<Act>,
     check_plaintexts: Vec<Act>,
-    config_ok: HashSet<ConfigOk>
+    config_ok: HashSet<ConfigOk>,
+    pk_shares_ok: HashSet<PkSharesOk>
 }
 
 impl OutputFacts {
-    
     pub fn new(f: OutputF) -> OutputFacts {
         let mut all_actions = vec![];
         let mut check_config = vec![];
@@ -151,6 +138,7 @@ impl OutputFacts {
         }
 
         let config_ok = f.1;
+        let pk_shares_ok = f.2;
 
         OutputFacts{
             all_actions,
@@ -163,30 +151,46 @@ impl OutputFacts {
             partial_decrypt,
             combine_decriptions,
             check_plaintexts,
-            config_ok
+            config_ok,
+            pk_shares_ok
         }
     }
-}
 
-fn print_facts(facts: &OutputFacts) {
-    let next = &facts.config_ok;
-    if next.len() > 0 {
+    fn print(&self) {
+        println!("======== Output facts [");
+        let next = &self.config_ok;
         for f in next {
-            println!("* ConfigOk {:?}", f.0[0..5].to_vec());
+            println!("* ConfigOk {:?}", s(&f.0));
         }
-        
-    } else {
-        println!("* No ConfigOk");
-    }
-    let next = &facts.all_actions;
-    if next.len() > 0 {
+        let next = &self.pk_shares_ok;
+        for f in next {
+            println!("* PkSharesOk {:?}", s(&f.0));
+        }
+        let next = &self.all_actions; 
         for f in next {
             println!("* Action {:?}", f);
         }
-        
-    } else {
-        println!("* No Actions");
+            
+        println!("] \n");
     }
+}
+
+fn load_facts(facts: Vec<InputFact>, runtime: &mut Crepe) {
+    println!("======== Input facts [");
+    facts.into_iter().map(|f| {
+        println!("* Input fact {:?}", f);
+        match f {
+            InputFact::ConfigPresent(x) => runtime.extend(&[x]),
+            InputFact::ConfigSignedBy(x) => runtime.extend(&[x]),
+            InputFact::PkShareSignedBy(x) => runtime.extend(&[x]),
+            InputFact::PkSignedBy(x) => runtime.extend(&[x]),
+            InputFact::BallotsSigned(x) => runtime.extend(&[x]),
+            InputFact::MixSignedBy(x) => runtime.extend(&[x]),
+            InputFact::DecryptionSignedBy(x) => runtime.extend(&[x]),
+            InputFact::PlaintextsSignedBy(x) => runtime.extend(&[x])
+        }
+    }).count();
+    println!("] \n");
 }
 
 #[derive(Debug)]
@@ -197,7 +201,7 @@ pub struct SVerifier {
 }
 
 impl SVerifier {
-    fn verify<E: Element, G: Group<E>, B: BulletinBoard<E, G>>(&self, board: &B) -> Option<Fact> {
+    fn verify<E: Element, G: Group<E>, B: BulletinBoard<E, G>>(&self, board: &B) -> Option<InputFact> {
         let statement = &self.statement.0;
         let config = board.get_config()?;
         let pk = config.trustees[self.trustee as usize];
@@ -211,28 +215,28 @@ impl SVerifier {
         match statement.0 {
             StatementType::Config => {
                 self.ret(
-                    Fact::config_signed_by(config_h, self.trustee),
+                    InputFact::config_signed_by(config_h, self.trustee),
                     verified.is_ok()
                 )
             },
             StatementType::Keyshare => {
                 let share_h = util::to_u8_64(&statement.2[1]);
                 self.ret(
-                    Fact::share_signed_by(config_h, self.contest, share_h, self.trustee),
+                    InputFact::share_signed_by(config_h, self.contest, share_h, self.trustee),
                     verified.is_ok()
                 )
             },
             StatementType::PublicKey => {
                 let pk_h = util::to_u8_64(&statement.2[1]);
                 self.ret(
-                    Fact::pk_signed_by(config_h, self.contest, pk_h, self.trustee),
+                    InputFact::pk_signed_by(config_h, self.contest, pk_h, self.trustee),
                     verified.is_ok()
                 )
             },
             StatementType::Ballots => {
                 let ballots_h = util::to_u8_64(&statement.2[1]);
                 self.ret(
-                    Fact::ballots_signed(config_h, self.contest, ballots_h),
+                    InputFact::ballots_signed(config_h, self.contest, ballots_h),
                     verified.is_ok()
                 )
             },
@@ -240,7 +244,7 @@ impl SVerifier {
                 let mix_h = util::to_u8_64(&statement.2[1]);
                 let ballots_h = util::to_u8_64(&statement.2[2]);
                 self.ret(
-                    Fact::mix_signed_by(config_h, self.contest, mix_h, ballots_h, self.trustee),
+                    InputFact::mix_signed_by(config_h, self.contest, mix_h, ballots_h, self.trustee),
                     verified.is_ok()
                 )
 
@@ -249,7 +253,7 @@ impl SVerifier {
                 let pdecryptions_h = util::to_u8_64(&statement.2[1]);
                 let ballots_h = util::to_u8_64(&statement.2[2]);
                 self.ret(
-                    Fact::decryption_signed_by(config_h, self.contest, pdecryptions_h, ballots_h, self.trustee),
+                    InputFact::decryption_signed_by(config_h, self.contest, pdecryptions_h, ballots_h, self.trustee),
                     verified.is_ok()
                 )
 
@@ -258,14 +262,14 @@ impl SVerifier {
                 let plaintexts_h = util::to_u8_64(&statement.2[1]);
                 let pdecryptions_h = util::to_u8_64(&statement.2[2]);
                 self.ret(
-                    Fact::plaintexts_signed_by(config_h, self.contest, plaintexts_h, pdecryptions_h, self.trustee),
+                    InputFact::plaintexts_signed_by(config_h, self.contest, plaintexts_h, pdecryptions_h, self.trustee),
                     verified.is_ok()
                 )
             }
         }
     }
 
-    fn ret(&self, fact: Fact, verified: bool) -> Option<Fact> {
+    fn ret(&self, fact: InputFact, verified: bool) -> Option<InputFact> {
         if verified {
             Some(fact)
         } else {
@@ -274,7 +278,7 @@ impl SVerifier {
     }
 }
 
-enum Fact {
+enum InputFact {
     ConfigPresent(ConfigPresent),
     ConfigSignedBy(ConfigSignedBy),
     PkShareSignedBy(PkShareSignedBy),
@@ -284,44 +288,44 @@ enum Fact {
     DecryptionSignedBy(DecryptionSignedBy),
     PlaintextsSignedBy(PlaintextsSignedBy)
 }
-impl Fact {
+impl InputFact {
     fn config_present(c: ConfigHash, cn: ContestIndex, trustees: TrusteeIndex, 
-        self_index: TrusteeIndex) -> Fact {
+        self_index: TrusteeIndex) -> InputFact {
         
-        Fact::ConfigPresent(ConfigPresent(c, cn, trustees, self_index))
+        InputFact::ConfigPresent(ConfigPresent(c, cn, trustees, self_index))
     }
-    fn config_signed_by(c: ConfigHash, trustee: TrusteeIndex) -> Fact {
-        Fact::ConfigSignedBy(ConfigSignedBy(c, trustee))
+    fn config_signed_by(c: ConfigHash, trustee: TrusteeIndex) -> InputFact {
+        InputFact::ConfigSignedBy(ConfigSignedBy(c, trustee))
     }
     fn share_signed_by(c: ConfigHash, contest: ContestIndex, share: ShareHash,
-        trustee: TrusteeIndex) -> Fact {
+        trustee: TrusteeIndex) -> InputFact {
         
-        Fact::PkShareSignedBy(PkShareSignedBy(c, contest, share, trustee))
+        InputFact::PkShareSignedBy(PkShareSignedBy(c, contest, share, trustee))
     }
     fn pk_signed_by(c: ConfigHash, contest: ContestIndex, pk: PkHash, 
-        trustee: TrusteeIndex) -> Fact {
+        trustee: TrusteeIndex) -> InputFact {
         
-        Fact::PkSignedBy(PkSignedBy(c, contest, pk, trustee))
+        InputFact::PkSignedBy(PkSignedBy(c, contest, pk, trustee))
     }
     fn ballots_signed(c: ConfigHash, contest: ContestIndex, 
-        ballots: BallotsHash) -> Fact {
+        ballots: BallotsHash) -> InputFact {
         
-        Fact::BallotsSigned(BallotsSigned(c, contest, ballots))
+        InputFact::BallotsSigned(BallotsSigned(c, contest, ballots))
     }
     fn mix_signed_by(c: ConfigHash, contest: ContestIndex, mix: MixHash, 
-        ballots: BallotsHash, trustee: TrusteeIndex) -> Fact {
+        ballots: BallotsHash, trustee: TrusteeIndex) -> InputFact {
         
-        Fact::MixSignedBy(MixSignedBy(c, contest, mix, ballots, trustee))
+        InputFact::MixSignedBy(MixSignedBy(c, contest, mix, ballots, trustee))
     }
     fn decryption_signed_by(c: ConfigHash, contest: ContestIndex, decryption: DecryptionHash, 
-        ballots: BallotsHash, trustee: TrusteeIndex) -> Fact {
+        ballots: BallotsHash, trustee: TrusteeIndex) -> InputFact {
         
-        Fact::DecryptionSignedBy(DecryptionSignedBy(c, contest, decryption, ballots, trustee))
+        InputFact::DecryptionSignedBy(DecryptionSignedBy(c, contest, decryption, ballots, trustee))
     }
     fn plaintexts_signed_by(c: ConfigHash, contest: ContestIndex, plaintexts: PlaintextsHash,
-        decryptions: DecryptionHash, trustee: TrusteeIndex) -> Fact {
+        decryptions: DecryptionHash, trustee: TrusteeIndex) -> InputFact {
         
-        Fact::PlaintextsSignedBy(
+        InputFact::PlaintextsSignedBy(
             PlaintextsSignedBy(c, contest, plaintexts, decryptions, trustee)
         )
     }
@@ -359,11 +363,14 @@ crepe! {
     struct PkSharesOk(ConfigHash, ContestIndex, Hashes);
     // 3
     @output
-    struct PkSharesUpTo(ConfigHash, ContestIndex, TrusteeIndex, Hashes);
+    struct PkOk(ConfigHash, ContestIndex, PkHash);
     // 4
     @output
-    struct ConfigSignedUpTo(ConfigHash, u32);
+    struct PkSharesUpTo(ConfigHash, ContestIndex, TrusteeIndex, Hashes);
     // 5
+    @output
+    struct ConfigSignedUpTo(ConfigHash, u32);
+    // 6
     @output
     struct Contest(ConfigHash, u32);
     
@@ -380,7 +387,15 @@ crepe! {
     Do(Act::CombineShares(config, contest, hashes)) <- 
         PkSharesOk(config, contest, hashes),
         ConfigPresent(config, _, _, 0),
-        ConfigOk(config);
+        ConfigOk(config),
+        !PkSignedBy(config, contest, _, 0);
+
+    Do(Act::CheckPk(config, contest, pk_hash, hashes)) <- 
+        ConfigPresent(config, _, _, self_t),
+        ConfigOk(config),
+        PkSharesOk(config, contest, hashes),
+        PkSignedBy(config, contest, pk_hash, 0),
+        !PkSignedBy(config, contest, pk_hash, self_t);
     
     ConfigSignedUpTo(config, 0) <-
         ConfigSignedBy(config, 0);
@@ -405,12 +420,12 @@ crepe! {
 
     PkSharesUpTo(config, contest, trustee + 1, shares) <- 
         PkSharesUpTo(config, contest, trustee, input_shares),
-        PkShareSignedBy(config, contest, share, 1),
+        PkShareSignedBy(config, contest, share, trustee + 1),
         let shares = array_set(input_shares, trustee + 1, share);
 
     PkSharesOk(config, contest, shares) <-
-        PkSharesUpTo(config, contest, total_t, shares),
         ConfigPresent(config, _, total_t, _),
+        PkSharesUpTo(config, contest, total_t - 1, shares),
         ConfigOk(config);
 }
 
@@ -428,17 +443,21 @@ fn array_set(mut input: Hashes, index: u32, value: Hash) -> Hashes {
 }
 
 use std::fmt;
-impl fmt::Debug for Fact {
+impl fmt::Debug for InputFact {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Fact::ConfigPresent(x) => write!(f, "ConfigPresent: [contests={} trustees={} self={}] {:?}", x.1, x.2, x.3, x.0[0..5].to_vec()),
-            Fact::ConfigSignedBy(x) => write!(f, "ConfigSignedBy: [{}] for config: {:?}", x.1, x.0[0..5].to_vec()),
-            Fact::PkShareSignedBy(x) => write!(f, "PkShareSignedBy {:?}", x.0),
-            Fact::PkSignedBy(x) => write!(f, "PkSignedBy {:?}", x.0),
-            Fact::BallotsSigned(x) => write!(f, "BallotsSigned {:?}", x.0),
-            Fact::MixSignedBy(x) => write!(f, "MixSignedBy {:?}", x.0),
-            Fact::DecryptionSignedBy(x) => write!(f, "DecryptionSignedBy {:?}", x.0),
-            Fact::PlaintextsSignedBy(x) => write!(f, "PlaintextsSignedBy{:?}", x.0)
+            InputFact::ConfigPresent(x) => write!(f, 
+                "ConfigPresent: [contests={} trustees={} self={}] {:?}", x.1, x.2, x.3, s(&x.0)),
+            InputFact::ConfigSignedBy(x) => write!(f, 
+                "ConfigSignedBy: [{}] for config: {:?}", x.1, s(&x.0)),
+            InputFact::PkShareSignedBy(x) => write!(f, 
+                "PkShareSignedBy [contest={} trustee={}] for share: {:?}, for config: {:?}", 
+                x.1, x.3, x.2[0..5].to_vec(), s(&x.0)),
+            InputFact::PkSignedBy(x) => write!(f, "PkSignedBy {:?}", x.0),
+            InputFact::BallotsSigned(x) => write!(f, "BallotsSigned {:?}", x.0),
+            InputFact::MixSignedBy(x) => write!(f, "MixSignedBy {:?}", x.0),
+            InputFact::DecryptionSignedBy(x) => write!(f, "DecryptionSignedBy {:?}", x.0),
+            InputFact::PlaintextsSignedBy(x) => write!(f, "PlaintextsSignedBy{:?}", x.0)
         }
     }
 }
@@ -457,6 +476,7 @@ mod tests {
 
     use crate::hashing;
     use crate::artifact;
+    use crate::keymaker::Keymaker;
     use crate::rug_b::*;
     use crate::memory_bb::*;
     use crate::protocol::*;
@@ -472,13 +492,13 @@ mod tests {
         let local_path1 = Path::new(local1);
         fs::remove_dir_all(local_path1).ok();
         fs::create_dir(local_path1).ok();
-        let ls1 = LocalStore::new(local1.to_string());
+        let ls1: LocalStore<Integer, RugGroup> = LocalStore::new(local1.to_string());
 
         let local2 = "/tmp/local2";
         let local_path2 = Path::new(local2);
         fs::remove_dir_all(local_path2).ok();
         fs::create_dir(local_path2).ok();
-        let ls2 = LocalStore::new(local2.to_string());
+        let ls2: LocalStore<Integer, RugGroup> = LocalStore::new(local2.to_string());
 
         let id = Uuid::new_v4();
         let group = RugGroup::default();
@@ -487,11 +507,14 @@ mod tests {
         let trustees = 2;
         let mut trustee_kps = Vec::with_capacity(trustees);
         let mut trustee_pks = Vec::with_capacity(trustees);
+        let mut trustee_keymakers: Vec<Keymaker<Integer, RugGroup>> = Vec::with_capacity(trustees);
         
         for _ in 0..trustees {
             let keypair = Keypair::generate(&mut csprng);
+            let km = Keymaker::gen(&group);
             trustee_pks.push(keypair.public);
             trustee_kps.push(keypair);
+            trustee_keymakers.push(km);
         }
         let self_pk = trustee_pks[0];
         let cfg = artifact::Config {
@@ -508,7 +531,8 @@ mod tests {
         let mut prot = Protocol::new(bb);
         let actions = prot.process_facts(self_pk).check_config;
 
-        let expected = Act::CheckConfig(hashing::hash(&cfg));
+        let cfg_h = hashing::hash(&cfg);
+        let expected = Act::CheckConfig(cfg_h);
             
         assert!(actions[0] == expected);
         
@@ -526,7 +550,39 @@ mod tests {
         prot.board.add_config_stmt(&stmt_path, 1);
         let actions = prot.process_facts(self_pk).post_share;
 
-        assert!(actions.len() as u32 == contests)
+        assert!(actions.len() as u32 == contests);
+
+        let km1 = &trustee_keymakers[0];
+        let km2 = &trustee_keymakers[1];
+        
+        let (pk1, proof1) = km1.share();
+        let (pk2, proof2) = km2.share();
+        let esk1 = km1.get_encrypted_sk();
+        let esk2 = km2.get_encrypted_sk();
+        
+        let share1 = Keyshare {
+            share: pk1,
+            proof: proof1,
+            encrypted_sk: esk1
+        };
+        let share2 = Keyshare {
+            share: pk2,
+            proof: proof2,
+            encrypted_sk: esk2
+        };
+
+        let share1_h = hashing::hash(&share1);
+        let share2_h = hashing::hash(&share2);
+        let act = Act::PostShare(cfg_h, 0);
+        let ss1 = SignedStatement::keyshare(&cfg, share1_h, 0, &trustee_kps[0]);
+        let ss2 = SignedStatement::keyshare(&cfg, share2_h, 0, &trustee_kps[1]);
+        let share1_path = ls1.set_share(&act, share1, &ss1);
+        let share2_path = ls2.set_share(&act, share2, &ss2);
+
+        prot.board.add_share(&share1_path, 0, 0);
+        prot.board.add_share(&share2_path, 0, 1);
+
+        let actions = prot.process_facts(self_pk).post_share;
     }
 }
 
