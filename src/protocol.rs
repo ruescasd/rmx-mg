@@ -15,7 +15,8 @@ use crate::util;
 use crate::arithm::Element;
 use crate::group::Group;
 use crate::action::Act;
-use crate::util::{s, sm};
+use crate::util::short;
+use std::fmt::Debug;
 
 pub type TrusteeTotal = u32;
 pub type TrusteeIndex = u32;
@@ -101,7 +102,7 @@ struct OutputFacts {
     check_mix: Vec<Act>,
     mix: Vec<Act>,
     partial_decrypt: Vec<Act>,
-    combine_decriptions: Vec<Act>,
+    combine_decryptions: Vec<Act>,
     check_plaintexts: Vec<Act>,
     config_ok: HashSet<ConfigOk>,
     pk_shares_ok: HashSet<PkSharesOk>
@@ -117,7 +118,7 @@ impl OutputFacts {
         let mut check_mix = vec![];
         let mut mix = vec![];
         let mut partial_decrypt = vec![];
-        let mut combine_decriptions = vec![];
+        let mut combine_decryptions = vec![];
         let mut check_plaintexts = vec![];
         
         let actions = f.0;
@@ -131,7 +132,7 @@ impl OutputFacts {
                 Act::CheckMix(..) => check_mix.push(a.0),
                 Act::Mix(..) => mix.push(a.0),
                 Act::PartialDecrypt(..) => partial_decrypt.push(a.0),
-                Act::CombineDecryptions(..) => combine_decriptions.push(a.0),
+                Act::CombineDecryptions(..) => combine_decryptions.push(a.0),
                 Act::CheckPlaintexts(..) => check_plaintexts.push(a.0)
             }  
             all_actions.push(a.0);
@@ -149,7 +150,7 @@ impl OutputFacts {
             check_mix,
             mix,
             partial_decrypt,
-            combine_decriptions,
+            combine_decryptions,
             check_plaintexts,
             config_ok,
             pk_shares_ok
@@ -160,11 +161,11 @@ impl OutputFacts {
         println!("======== Output facts [");
         let next = &self.config_ok;
         for f in next {
-            println!("* ConfigOk {:?}", s(&f.0));
+            println!("* ConfigOk {:?}", short(&f.0));
         }
         let next = &self.pk_shares_ok;
         for f in next {
-            println!("* PkSharesOk {:?}", s(&f.0));
+            println!("* PkSharesOk {:?}", short(&f.0));
         }
         let next = &self.all_actions; 
         for f in next {
@@ -331,8 +332,6 @@ impl InputFact {
     }
 }
 
-
-
 crepe! {
     @input
     struct ConfigPresent(ConfigHash, ContestIndex, TrusteeIndex, TrusteeIndex);
@@ -407,12 +406,6 @@ crepe! {
     ConfigOk(config) <- 
         ConfigPresent(config, _, total_t, _),
         ConfigSignedUpTo(config, total_t - 1);
-
-    Contest(config, contests - 1) <-
-        ConfigPresent(config, contests, _, _self);
-
-    Contest(config, n - 1) <- Contest(config, n),
-        (n > 0);
     
     PkSharesUpTo(config, contest, 0, first) <-
         PkShareSignedBy(config, contest, share, 0),
@@ -427,6 +420,12 @@ crepe! {
         ConfigPresent(config, _, total_t, _),
         PkSharesUpTo(config, contest, total_t - 1, shares),
         ConfigOk(config);
+
+    Contest(config, contests - 1) <-
+        ConfigPresent(config, contests, _, _self);
+
+    Contest(config, n - 1) <- Contest(config, n),
+        (n > 0);
 }
 
 fn array_make(value: Hash) -> Hashes {
@@ -447,12 +446,12 @@ impl fmt::Debug for InputFact {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             InputFact::ConfigPresent(x) => write!(f, 
-                "ConfigPresent: [contests={} trustees={} self={}] {:?}", x.1, x.2, x.3, s(&x.0)),
+                "ConfigPresent: [contests={} trustees={} self={}] {:?}", x.1, x.2, x.3, short(&x.0)),
             InputFact::ConfigSignedBy(x) => write!(f, 
-                "ConfigSignedBy: [{}] for config: {:?}", x.1, s(&x.0)),
+                "ConfigSignedBy: [{}] for config: {:?}", x.1, short(&x.0)),
             InputFact::PkShareSignedBy(x) => write!(f, 
                 "PkShareSignedBy [contest={} trustee={}] for share: {:?}, for config: {:?}", 
-                x.1, x.3, x.2[0..5].to_vec(), s(&x.0)),
+                x.1, x.3, x.2[0..5].to_vec(), short(&x.0)),
             InputFact::PkSignedBy(x) => write!(f, "PkSignedBy {:?}", x.0),
             InputFact::BallotsSigned(x) => write!(f, "BallotsSigned {:?}", x.0),
             InputFact::MixSignedBy(x) => write!(f, "MixSignedBy {:?}", x.0),
@@ -582,7 +581,11 @@ mod tests {
         prot.board.add_share(&share1_path, 0, 0);
         prot.board.add_share(&share2_path, 0, 1);
 
-        let actions = prot.process_facts(self_pk).post_share;
+        let output = prot.process_facts(self_pk);
+
+        assert!(output.pk_shares_ok.len() == 1);
+        assert!(output.combine_shares.len() == 1);
+        assert!(output.post_share.len() == 1);
     }
 }
 
