@@ -1,5 +1,5 @@
 [package]
-name = "rmxmg"
+name = "rmx"
 version = "0.1.0"
 authors = ["ruescasd <fastness@gmail.com>"]
 edition = "2018"

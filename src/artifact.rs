@@ -1,4 +1,4 @@
-use ed25519_dalek::PublicKey as SignaturePublicKey;
+use ed25519_dalek::PublicKey as SPublicKey;
 use ed25519_dalek::Signature;
 use ed25519_dalek::{Keypair, Signer};
 use serde::{Deserialize, Serialize};
@@ -20,8 +20,8 @@ pub struct Config {
     pub id: [u8; 16],
     pub rug_group: Option<RugGroup>,
     pub contests: u32, 
-    pub ballotbox: SignaturePublicKey, 
-    pub trustees: Vec<SignaturePublicKey>
+    pub ballotbox: SPublicKey, 
+    pub trustees: Vec<SPublicKey>
 }
 
 #[derive(Serialize, Deserialize)]

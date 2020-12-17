@@ -1,7 +1,7 @@
-use rmxmg::util;
-use rmxmg::ristretto_b::*;
-use rmxmg::rug_b::*;
-use rmxmg::group::*;
+use rmx::util;
+use rmx::ristretto_b::*;
+use rmx::rug_b::*;
+use rmx::group::*;
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
 use rug::Integer;

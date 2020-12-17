@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::marker::PhantomData;
 
 use serde::{Deserialize, Serialize};
-use ed25519_dalek::PublicKey as SignaturePublicKey;
+use ed25519_dalek::PublicKey as SPublicKey;
 use ed25519_dalek::{Verifier, Signature};
 
 use crepe::crepe;
@@ -33,15 +33,16 @@ type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesOk>, HashSet<PkO
     HashSet<PkSharesUpTo>, HashSet<ConfigSignedUpTo>, HashSet<Contest>,
     HashSet<PkSignedUpTo>);
 
-struct Protocol<E: Element, G: Group<E>, B: BulletinBoard<E, G>> {
-    board: B,
+
+pub struct Protocol<E: Element, G: Group<E>, B: BulletinBoard<E, G>> {
+    pub board: B,
     phantom_e: PhantomData<E>,
     phantom_g: PhantomData<G>
 }
 
 impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
 
-    fn new(board: B) -> Protocol<E, G, B> {
+    pub fn new(board: B) -> Protocol<E, G, B> {
         Protocol {
             board: board,
             phantom_e: PhantomData,
@@ -49,7 +50,7 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
         }
     }
     
-    fn get_facts(&self, self_pk: SignaturePublicKey) -> Vec<InputFact> {
+    fn get_facts(&self, self_pk: SPublicKey) -> Vec<InputFact> {
     
         let svs = self.board.get_statements();
         println!("SVerifiers: {}", svs.len());
@@ -80,13 +81,13 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
         facts
     }
     
-    fn process_facts(&self, self_pk: SignaturePublicKey) -> OutputFacts {
+    pub fn process_facts(&self, self_pk: SPublicKey) -> Facts {
         let mut runtime = Crepe::new();
-        let facts = self.get_facts(self_pk);
-        load_facts(facts, &mut runtime);
+        let input_facts = self.get_facts(self_pk);
+        load_facts(&input_facts, &mut runtime);
         
         let output = runtime.run();
-        let ret = OutputFacts::new(output);
+        let ret = Facts::new(input_facts, output);
         
         ret.print();
 
@@ -94,24 +95,25 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
     }
 }
 
-struct OutputFacts {
-    all_actions: Vec<Act>,
-    check_config: Vec<Act>,
-    post_share: Vec<Act>,
-    combine_shares: Vec<Act>,
-    check_pk: Vec<Act>,
-    check_mix: Vec<Act>,
-    mix: Vec<Act>,
-    partial_decrypt: Vec<Act>,
-    combine_decryptions: Vec<Act>,
-    check_plaintexts: Vec<Act>,
+pub struct Facts {
+    pub(self) input_facts: Vec<InputFact>,
+    pub all_actions: Vec<Act>,
+    pub check_config: Vec<Act>,
+    pub post_share: Vec<Act>,
+    pub combine_shares: Vec<Act>,
+    pub check_pk: Vec<Act>,
+    pub check_mix: Vec<Act>,
+    pub mix: Vec<Act>,
+    pub partial_decrypt: Vec<Act>,
+    pub combine_decryptions: Vec<Act>,
+    pub check_plaintexts: Vec<Act>,
     config_ok: HashSet<ConfigOk>,
     pk_shares_ok: HashSet<PkSharesOk>,
     pk_ok: HashSet<PkOk>
 }
 
-impl OutputFacts {
-    pub fn new(f: OutputF) -> OutputFacts {
+impl Facts {
+    fn new(input_facts: Vec<InputFact>, f: OutputF) -> Facts {
         let mut all_actions = vec![];
         let mut check_config = vec![];
         let mut post_share = vec![];
@@ -144,7 +146,8 @@ impl OutputFacts {
         let pk_shares_ok = f.2;
         let pk_ok = f.3;
 
-        OutputFacts{
+        Facts{
+            input_facts,
             all_actions,
             check_config,
             post_share,
@@ -182,21 +185,33 @@ impl OutputFacts {
             
         println!("] \n");
     }
+
+    pub fn pk_shares_len(&self) -> usize {
+        self.pk_shares_ok.len()
+    }
+    pub fn pk_ok_len(&self) -> usize {
+        self.pk_ok.len()
+    }
+    pub fn config_ok(&self) -> bool {
+        self.config_ok.len() == 1
+    }
+
+    
 }
 
-fn load_facts(facts: Vec<InputFact>, runtime: &mut Crepe) {
+fn load_facts(facts: &Vec<InputFact>, runtime: &mut Crepe) {
     println!("======== Input facts [");
     facts.into_iter().map(|f| {
         println!("* Input fact {:?}", f);
         match f {
-            InputFact::ConfigPresent(x) => runtime.extend(&[x]),
-            InputFact::ConfigSignedBy(x) => runtime.extend(&[x]),
-            InputFact::PkShareSignedBy(x) => runtime.extend(&[x]),
-            InputFact::PkSignedBy(x) => runtime.extend(&[x]),
-            InputFact::BallotsSigned(x) => runtime.extend(&[x]),
-            InputFact::MixSignedBy(x) => runtime.extend(&[x]),
-            InputFact::DecryptionSignedBy(x) => runtime.extend(&[x]),
-            InputFact::PlaintextsSignedBy(x) => runtime.extend(&[x])
+            InputFact::ConfigPresent(x) => runtime.extend(&[*x]),
+            InputFact::ConfigSignedBy(x) => runtime.extend(&[*x]),
+            InputFact::PkShareSignedBy(x) => runtime.extend(&[*x]),
+            InputFact::PkSignedBy(x) => runtime.extend(&[*x]),
+            InputFact::BallotsSigned(x) => runtime.extend(&[*x]),
+            InputFact::MixSignedBy(x) => runtime.extend(&[*x]),
+            InputFact::DecryptionSignedBy(x) => runtime.extend(&[*x]),
+            InputFact::PlaintextsSignedBy(x) => runtime.extend(&[*x])
         }
     }).count();
     println!("] \n");
@@ -649,3 +664,179 @@ mod tests {
     }
 }
 
+
+use serde::de::DeserializeOwned;
+
+
+use std::fs;
+use std::path::Path;
+use ed25519_dalek::{Keypair, Signer};
+
+use uuid::Uuid;
+use rand_core::OsRng;
+use tempfile::NamedTempFile;
+use rug::Integer;
+
+use crate::artifact;
+use crate::keymaker::Keymaker;
+use crate::rug_b::*;
+use crate::memory_bb::*;
+use crate::action::*;
+use crate::localstore::*;
+
+
+pub struct Trustee<E: Element + Serialize + DeserializeOwned, 
+    G: Group<E> + Serialize + DeserializeOwned> {
+
+    pub keypair: Keypair,
+    pub keymaker: Keymaker<E, G>,
+    pub localstore: LocalStore<E, G>
+}
+
+impl<E: Element + Serialize + DeserializeOwned, 
+    G: Group<E> + Serialize + DeserializeOwned> 
+    Trustee<E, G> {
+    
+    pub fn new(group: &G, local_store: String) -> Trustee<E, G> {
+        let mut csprng = OsRng;
+        let local_path = Path::new(&local_store);
+        fs::remove_dir_all(local_path).ok();
+        fs::create_dir(local_path).ok();
+        let localstore = LocalStore::new(local_store);
+        let keypair = Keypair::generate(&mut csprng);
+        let keymaker = Keymaker::gen(group);
+
+        Trustee {
+            keypair,
+            keymaker,
+            localstore
+        }
+    }
+
+    pub fn add_config<B: BulletinBoard<E, G>>(&self, cfg: &Config, board: &mut B) {
+        let cfg_path = self.localstore.set_config(&cfg);
+        board.add_config(&cfg_path);
+    }
+    
+    pub fn run<B: BulletinBoard<E, G>>(&self, facts: Facts, board: &mut B) {
+        let actions = facts.all_actions;
+        let self_index =
+        if let InputFact::ConfigPresent(ConfigPresent(_, _, _, self_t)) = facts.input_facts[facts.input_facts.len() - 1] {
+            Some(self_t)
+        }
+        else {
+            None
+        };
+        
+        for action in actions {
+            match action {
+                Act::AddConfig => {
+
+                }
+                Act::CheckConfig(cfg) => {
+                    println!("I Should check the config now!");
+                    let cfg = board.get_config().unwrap();
+                    let ss = SignedStatement::config(&cfg, &self.keypair);
+                    let stmt_path = self.localstore.set_config_stmt(&action, &ss);
+                    board.add_config_stmt(&stmt_path, self_index.unwrap());
+                    
+                    // prot.board.add_config_stmt(&stmt_path, 0);*/
+                }
+                Act::PostShare(cfg, cnt) => {
+                    
+                }
+                Act::CombineShares(cfg, cnt, hs) => {
+                    
+                }
+                Act::CheckPk(cfg, cnt, h1, hs) => {
+                    
+                }
+                Act::CheckMix(cfg, cnt, t, h1, h2) => {
+                    
+                }
+                Act::Mix(cfg, cnt, h1) => {
+                    
+                }
+                Act::PartialDecrypt(cfg, cnt, h1) => {
+                    
+                }
+                Act::CombineDecryptions(cfg, cnt, hs) => {
+                    
+                }
+                Act::CheckPlaintexts(cfg, cnt, h1, hs) => {
+                    
+                }
+            }
+        }
+    }
+}
+
+pub struct Protocol2 <E: Element + Serialize + DeserializeOwned, 
+    G: Group<E> + Serialize + DeserializeOwned,
+    B: BulletinBoard<E, G>> {
+    
+    trustee: Trustee<E, G>,
+    phantom_b: PhantomData<B>
+}
+
+impl<E: Element + Serialize + DeserializeOwned, 
+    G: Group<E> + Serialize + DeserializeOwned,
+    B: BulletinBoard<E, G>> 
+    Protocol2<E, G, B> {
+
+    pub fn new(trustee: Trustee<E, G>) -> Protocol2<E, G, B> {
+        Protocol2 {
+            trustee,
+            phantom_b: PhantomData
+        }
+    }
+    
+    fn get_facts(&self, board: &B) -> Vec<InputFact> {
+    
+        let self_pk = self.trustee.keypair.public;
+        let svs = board.get_statements();
+        println!("SVerifiers: {}", svs.len());
+        let mut facts: Vec<InputFact> = svs.iter()
+            .map(|sv| sv.verify(board))
+            .filter(|f| f.is_some())
+            .map(|f| f.unwrap())
+            .collect();
+        
+        if let Some(cfg) = board.get_config() {
+            let trustees = cfg.trustees.len();
+            
+            let self_pos = cfg.trustees.iter()
+                .position(|s| s.to_bytes() == self_pk.to_bytes())
+                .unwrap();
+            let hash = hashing::hash(&cfg);
+            let contests = cfg.contests;
+
+            let f = InputFact::config_present(
+                hash,
+                contests,
+                trustees as u32,
+                self_pos as u32
+            );
+            facts.push(f);
+        };
+
+        facts
+    }
+    
+    pub fn process_facts(&self, board: &B) -> Facts {
+        let mut runtime = Crepe::new();
+        let input_facts = self.get_facts(board);
+        load_facts(&input_facts, &mut runtime);
+        
+        let output = runtime.run();
+        Facts::new(input_facts, output)
+    }
+
+    pub fn step(&self, board: &mut B) {
+        let output = self.process_facts(&board);
+
+        output.print();
+
+        self.trustee.run(output, board);
+    }
+}

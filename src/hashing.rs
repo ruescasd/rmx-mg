@@ -293,9 +293,9 @@ impl<E: Element, G: Group<E>> HashBytes for PublicKey<E, G> {
     }
 }
 
-use ed25519_dalek::PublicKey as SignaturePublicKey;
+use ed25519_dalek::PublicKey as SPublicKey;
 
-impl HashBytes for SignaturePublicKey {
+impl HashBytes for SPublicKey {
     fn get_bytes(&self) -> Vec<u8> {
         self.as_bytes().to_vec()
     }
@@ -450,7 +450,7 @@ impl HashBytes for Act {
                 v.extendl(&concat_bytes_iter(s));
                 v
             },
-            _ => vec![]
+            _ => panic!()
         }
     }
 }
