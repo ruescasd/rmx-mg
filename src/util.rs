@@ -105,3 +105,8 @@ pub(crate) fn shortm(input: &[[u8; 64]; 10]) -> Vec<Vec<u8>> {
         .map(|a| a[0..5].to_vec())        
         .collect()
 }
+
+pub(crate) fn clear_zeroes(input: &[[u8; 64]; 10]) -> Vec<[u8; 64]> {
+    input.iter().cloned().filter(|&a| a != [0u8; 64])  
+        .collect()
+}

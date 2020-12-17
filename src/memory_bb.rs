@@ -34,8 +34,8 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBullet
         self.data.insert(name.to_string(), bytes);
     }
    
-    fn get<A: HashBytes + DeserializeOwned>(&self, target: &Path, hash: Hash) -> Result<A, String> {
-        let key = target.to_str().unwrap().to_string();
+    fn get<A: HashBytes + DeserializeOwned>(&self, target: String, hash: Hash) -> Result<A, String> {
+        let key = target;
         let bytes = self.data.get(&key).ok_or("Not found")?;
 
         let artifact = bincode::deserialize::<A>(bytes)
@@ -57,9 +57,14 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBullet
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> 
     BulletinBoard<E, G> for MemoryBulletinBoard<E, G> {
     
-    fn get_config(&self) -> Option<Config> {
+    fn get_config_unsafe(&self) -> Option<Config> {
         let bytes = self.data.get(Self::CONFIG)?;
         let ret: Config = bincode::deserialize(bytes).unwrap();
+
+        Some(ret)
+    }
+    fn get_config(&self, hash: Hash) -> Option<Config> {
+        let ret = self.get(Self::CONFIG.to_string(), hash).ok()?;
 
         Some(ret)
     }
@@ -73,9 +78,11 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
         self.put(&Self::share(contest, trustee), &path.0);
         self.put(&Self::share_stmt(contest, trustee), &path.1);
     }
-    fn get_share(&self, contest: u32, auth: u32) -> Option<Keyshare<E, G>> {
-        let bytes = self.data.get(&Self::share(contest, auth))?;
-        let ret: Keyshare<E, G> = bincode::deserialize(bytes).unwrap();
+    fn get_share(&self, contest: u32, auth: u32, hash: Hash) -> Option<Keyshare<E, G>> {
+        let key = Self::share(contest, auth).to_string();
+        let ret = self.get(key, hash).ok()?;
+        // let bytes = self.data.get(&Self::share(contest, auth))?;
+        // let ret: Keyshare<E, G> = bincode::deserialize(bytes).unwrap();
 
         Some(ret)
     }
@@ -172,18 +179,18 @@ mod tests {
         let cfg_b = bincode::serialize(&cfg).unwrap();
         
         let tmp_file = NamedTempFile::new().unwrap();
-        let target = Path::new("test");
+        let target = "test";
         let path = tmp_file.path();
         std::fs::write(path, &cfg_b).unwrap();
         bb.put("test", path);
         
         let hash = hashing::hash(&cfg);
-        let mut cfg_result = bb.get::<artifact::Config>(target, hash);
+        let mut cfg_result = bb.get::<artifact::Config>(target.to_string(), hash);
         assert!(cfg_result.is_ok());
 
         cfg.id = Uuid::new_v4().as_bytes().clone();
         let bad_hash = hashing::hash(&cfg);
-        cfg_result = bb.get::<artifact::Config>(target, bad_hash);
+        cfg_result = bb.get::<artifact::Config>(target.to_string(), bad_hash);
         assert!(cfg_result.is_err());
     }
 }

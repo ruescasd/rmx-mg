@@ -48,10 +48,11 @@ pub trait BulletinBoard<E: Element, G: Group<E>> {
 
     fn list(&self) -> Vec<String>;
     fn add_config(&mut self, config: &ConfigPath);
-    fn get_config(&self) -> Option<Config>;
+    fn get_config_unsafe(&self) -> Option<Config>;
+    fn get_config(&self, hash: Hash) -> Option<Config>;
     fn add_config_stmt(&mut self, stmt: &ConfigStmtPath, trustee: u32);
     fn add_share(&mut self, path: &KeysharePath, contest: u32, trustee: u32);
-    fn get_share(&self, contest: u32, auth: u32) -> Option<Keyshare<E, G>>;
+    fn get_share(&self, contest: u32, auth: u32, hash: Hash) -> Option<Keyshare<E, G>>;
     fn set_pk(&mut self, path: &PkPath, contest: u32);
     fn set_pk_stmt(&mut self, path: &PkStmtPath, contest: u32, trustee: u32);
     

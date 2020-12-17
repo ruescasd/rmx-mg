@@ -71,9 +71,8 @@ pub struct SignedStatement {
 }
 
 impl SignedStatement {
-    pub fn config(config: &Config, pk: &Keypair) -> SignedStatement {
-        let config_h = hashing::hash(config);
-        let statement = Statement::config(config_h.to_vec());
+    pub fn config(cfg_h: &hashing::Hash, pk: &Keypair) -> SignedStatement {
+        let statement = Statement::config(cfg_h.to_vec());
         let stmt_h = hashing::hash(&statement);
         let signature = pk.sign(&stmt_h);
         SignedStatement {
@@ -81,9 +80,8 @@ impl SignedStatement {
             signature
         }
     }
-    pub fn keyshare(config: &Config, share_h: hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
-        let config_h = hashing::hash(config);
-        let statement = Statement::keyshare(config_h.to_vec(), contest, share_h.to_vec());
+    pub fn keyshare(cfg_h: &hashing::Hash, share_h: &hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
+        let statement = Statement::keyshare(cfg_h.to_vec(), contest, share_h.to_vec());
         let stmt_h = hashing::hash(&statement);
         let signature = pk.sign(&stmt_h);
         SignedStatement {

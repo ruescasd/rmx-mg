@@ -69,10 +69,16 @@ fn demo() {
         MemoryBulletinBoard<Integer, RugGroup>
     > = Protocol2::new(trustee2);
 
+    // check config
     prot1.step(&mut bb);
     prot2.step(&mut bb);
     
+    // post share
     prot1.step(&mut bb);
+    prot2.step(&mut bb);
+
+    prot1.step(&mut bb);
+    prot2.step(&mut bb);
 
     
     
