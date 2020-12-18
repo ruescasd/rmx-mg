@@ -44,6 +44,18 @@ pub trait Names {
 
 use crate::localstore::*;
 
+/*trait BasicBulletinBoard {
+    fn list(&self) -> Vec<String>;
+    fn get_stmts(&self) -> Vec<String> {
+        self.list().into_iter().filter(|s| {
+            s.ends_with(".stmt")
+        }).collect()
+    }
+    fn get_config_unsafe(&self) -> Option<Config>;
+    fn get<A: HashBytes + DeserializeOwned>(&self, target: String, hash: Hash) -> Result<A, String>;
+    fn put(&mut self, name: &str, data: &Path);
+}*/
+
 pub trait BulletinBoard<E: Element, G: Group<E>> {
 
     fn list(&self) -> Vec<String>;
@@ -56,13 +68,13 @@ pub trait BulletinBoard<E: Element, G: Group<E>> {
     fn set_pk(&mut self, path: &PkPath, contest: u32);
     fn set_pk_stmt(&mut self, path: &PkStmtPath, contest: u32, trustee: u32);
     
-    
-    fn get_statements(&self) -> Vec<SVerifier>;
     fn get_stmts(&self) -> Vec<String> {
         self.list().into_iter().filter(|s| {
             s.ends_with(".stmt")
         }).collect()
     }
+    fn get_statements(&self) -> Vec<SVerifier>;
+    
     
     /*fn add_error(&self, error: Path, position: u32);
   

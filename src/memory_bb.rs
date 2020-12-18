@@ -2,6 +2,7 @@ use serde::de::DeserializeOwned;
 use std::collections::HashMap;
 use std::path::Path;
 use std::fs;
+use std::marker::PhantomData;
 
 use crate::hashing::{HashBytes, Hash};
 use crate::hashing;
@@ -13,10 +14,53 @@ use crate::group::Group;
 use crate::util;
 use crate::localstore::*;
 
+struct MBasicBulletinBoard{
+    data: HashMap<String, Vec<u8>>
+}
+impl MBasicBulletinBoard {
+    pub fn new() -> MBasicBulletinBoard {
+        MBasicBulletinBoard {
+            data: HashMap::new()
+        }
+    }
+    fn list(&self) -> Vec<String> {
+        self.data.iter().map(|(a, _)| a.clone()).collect()
+    }
+    fn get_stmts(&self) -> Vec<String> {
+        self.list().into_iter().filter(|s| {
+            s.ends_with(".stmt")
+        }).collect()
+    }
+    fn get<A: HashBytes + DeserializeOwned>(&self, target: String, hash: Hash) -> Result<A, String> {
+        let key = target;
+        let bytes = self.data.get(&key).ok_or("Not found")?;
+
+        let artifact = bincode::deserialize::<A>(bytes)
+            .map_err(|e| std::format!("serde error {}", e))?;
+
+        let hashed = hashing::hash(&artifact);
+        
+        if hashed == hash {
+            Ok(artifact)
+        }
+        else {
+            Err("Hash mismatch".to_string())
+        }
+    }
+    fn put(&mut self, name: &str, data: &Path) {
+        let bytes = util::read_file_bytes(data).unwrap();
+        self.data.insert(name.to_string(), bytes);
+    }
+    fn get_unsafe(&self, target: &str) -> Option<&Vec<u8>> {
+        self.data.get(target)
+    }
+}
+
 pub struct MemoryBulletinBoard<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> {
-    data: HashMap<String, Vec<u8>>,
-    bogus: Option<E>,
-    bogus2: Option<G>
+    // data: HashMap<String, Vec<u8>>,
+    phantom_e: PhantomData<E>,
+    phantom_g: PhantomData<G>,
+    basic: MBasicBulletinBoard
 }
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Names for MemoryBulletinBoard
 <E, G>{}
@@ -24,12 +68,20 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Names for Me
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBulletinBoard<E, G> {
     pub fn new() -> MemoryBulletinBoard<E, G> {
         MemoryBulletinBoard {
-            data: HashMap::new(),
-            bogus: None,
-            bogus2: None
+            // data: HashMap::new(),
+            phantom_e: PhantomData,
+            phantom_g: PhantomData,
+            basic: MBasicBulletinBoard::new() 
         }
     }
     fn put(&mut self, name: &str, data: &Path) {
+        self.basic.put(name, data);
+    }
+    fn get<A: HashBytes + DeserializeOwned>(&self, target: String, hash: Hash) -> Result<A, String> {
+        self.basic.get(target, hash)
+    }
+    
+    /* fn put(&mut self, name: &str, data: &Path) {
         let bytes = util::read_file_bytes(data).unwrap();
         self.data.insert(name.to_string(), bytes);
     }
@@ -49,8 +101,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBullet
         else {
             Err("Hash mismatch".to_string())
         }
-    }
-    
+    }*/    
 }
 
 
@@ -58,7 +109,8 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
     BulletinBoard<E, G> for MemoryBulletinBoard<E, G> {
     
     fn get_config_unsafe(&self) -> Option<Config> {
-        let bytes = self.data.get(Self::CONFIG)?;
+        // let bytes = self.data.get(Self::CONFIG)?;
+        let bytes = self.basic.get_unsafe(Self::CONFIG)?;
         let ret: Config = bincode::deserialize(bytes).unwrap();
 
         Some(ret)
@@ -96,7 +148,8 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
     }
 
     fn list(&self) -> Vec<String> {
-        self.data.iter().map(|(a, _)| a.clone()).collect()
+        // self.data.iter().map(|(a, _)| a.clone()).collect()
+        self.basic.list()
     }
     fn get_statements(&self) -> Vec<SVerifier> {
         
@@ -106,7 +159,8 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
         
         for s in sts.iter() {
             
-            let s_bytes = self.data.get(s).unwrap().to_vec();
+            // let s_bytes = self.data.get(s).unwrap().to_vec();
+            let s_bytes = self.basic.get_unsafe(s).unwrap().to_vec();
             let (trustee, contest) = artifact_location(s);
             let stmt: SignedStatement = bincode::deserialize(&s_bytes).unwrap();
 

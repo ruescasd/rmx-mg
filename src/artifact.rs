@@ -10,8 +10,11 @@ use crate::group::*;
 use crate::shuffler::*;
 use crate::bb::*;
 use crate::rug_b::RugGroup;
+use crate::ristretto_b::RistrettoGroup;
 use crate::hashing;
 use crate::protocol::ContestIndex;
+use rug::Integer;
+use curve25519_dalek::ristretto::RistrettoPoint;
 
 type Hash = Vec<u8>;
 
@@ -23,6 +26,15 @@ pub struct Config {
     pub ballotbox: SPublicKey, 
     pub trustees: Vec<SPublicKey>
 }
+
+/*impl Config {
+    pub fn get_group<Integer>(&self) -> Group<Integer> {
+        self.rug_group.unwrap()
+    }
+    pub fn get_groups<RistrettoPoint>(&self) -> Group<RistrettoPoint> {
+        RistrettoGroup
+    }
+}*/
 
 #[derive(Serialize, Deserialize)]
 pub struct Keyshare<E: Element, G: Group<E>> {

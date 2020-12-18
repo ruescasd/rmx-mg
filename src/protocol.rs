@@ -583,7 +583,7 @@ mod tests {
             
         assert!(actions[0] == expected);
         
-        let ss = SignedStatement::config(&cfg, &trustee_kps[0]);
+        let ss = SignedStatement::config(&cfg_h, &trustee_kps[0]);
         let stmt_path = ls1.set_config_stmt(&expected, &ss);
 
         prot.board.add_config_stmt(&stmt_path, 0);
@@ -591,7 +591,7 @@ mod tests {
         let actions = prot.process_facts(self_pk).all_actions;
         assert!(actions.len() == 0);
 
-        let ss = SignedStatement::config(&cfg, &trustee_kps[1]);
+        let ss = SignedStatement::config(&cfg_h, &trustee_kps[1]);
         let stmt_path = ls2.set_config_stmt(&expected, &ss);
 
         prot.board.add_config_stmt(&stmt_path, 1);
