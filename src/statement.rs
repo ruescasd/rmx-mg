@@ -1,14 +1,6 @@
-use std::marker::PhantomData;
-
-use ed25519_dalek::PublicKey as SPublicKey;
 use ed25519_dalek::Signature;
 use ed25519_dalek::{Keypair, Signer};
 use serde::{Deserialize, Serialize};
-
-use crate::arithm::*;
-use crate::elgamal::*;
-use crate::group::*;
-use crate::shuffler::*;
 
 use crate::hashing;
 use crate::protocol::ContestIndex;
