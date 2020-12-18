@@ -5,18 +5,13 @@ use ed25519_dalek::Signature;
 use ed25519_dalek::{Keypair, Signer};
 use serde::{Deserialize, Serialize};
 
-
 use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
 use crate::shuffler::*;
-use crate::bb::*;
-
 
 use crate::hashing;
 use crate::protocol::ContestIndex;
-
-
 
 type VHash = Vec<u8>;
 
@@ -207,10 +202,11 @@ impl Statement {
 #[cfg(test)]
 mod tests {  
     use uuid::Uuid;
-    use crate::rug_b::*;
-    use crate::artifact::*;
+    use rug::Integer;
     use rand_core::OsRng;
     use ed25519_dalek::Keypair;
+    use crate::rug_b::*;
+    use crate::artifact::*;
 
     #[test]
     fn test_config_serde() {

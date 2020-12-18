@@ -185,7 +185,7 @@ mod tests {
     use rand_core::OsRng;
     use ed25519_dalek::Keypair;
     use tempfile::NamedTempFile;
-    use std::path::Path;
+    
     use rug::Integer;
 
     use crate::hashing;

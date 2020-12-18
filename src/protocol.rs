@@ -514,11 +514,11 @@ mod tests {
     
     use std::fs;
     use std::path::Path;
-    use ed25519_dalek::{Keypair, Signer};
+    use ed25519_dalek::{Keypair};
     
     use uuid::Uuid;
     use rand_core::OsRng;
-    use tempfile::NamedTempFile;
+    
     use rug::Integer;
 
     use crate::hashing;
@@ -528,7 +528,7 @@ mod tests {
     use crate::memory_bb::*;
     use crate::protocol::*;
     use crate::action::*;
-    use crate::util;
+    
     use crate::localstore::*;
     
     #[test]
@@ -662,7 +662,7 @@ mod tests {
         let pk_stmt_path = ls2.set_pk_stmt(&act, &ss2);
         prot.board.set_pk_stmt(&pk_stmt_path, 0, 1);
 
-        let output = prot.process_facts(self_pk);
+        let _output = prot.process_facts(self_pk);
     }
 }
 

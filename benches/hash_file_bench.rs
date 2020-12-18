@@ -1,13 +1,13 @@
-use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, BenchmarkId};
+use criterion::{criterion_group, criterion_main, Criterion};
 use std::{
     fs::File,
-    io::{self, BufRead, BufReader, Read, Write},
+    io::{BufRead, BufReader, Read, Write},
 };
 use sha2::{Sha512, Digest};
 use rmx::util;
 use rmx::ristretto_b::*;
-use rmx::rug_b::*;
-use rmx::group::*;
+
+
 
 fn create_file() {
     // 1M = 62M
@@ -23,8 +23,8 @@ fn create_file() {
 }
 
 fn hash_file() {
-    const path: &'static str = "/tmp/big_file2";
-    let file = File::open(path).unwrap();
+    const PATH: &'static str = "/tmp/big_file2";
+    let file = File::open(PATH).unwrap();
     let mut reader = BufReader::with_capacity(4096 * 512, file);
     // create a Sha256 object
     let mut hasher = Sha512::new();
@@ -49,8 +49,8 @@ fn hash_file() {
 }
 
 fn hash_file_nobuf() {
-    const path: &'static str = "/tmp/big_file";
-    let mut file = File::open(path).unwrap();
+    const PATH: &'static str = "/tmp/big_file";
+    let mut file = File::open(PATH).unwrap();
     // create a Sha256 object
     let mut hasher = Sha512::new();
     let mut buffer = Vec::new();
