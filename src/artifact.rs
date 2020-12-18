@@ -18,7 +18,7 @@ use crate::protocol::ContestIndex;
 use rug::Integer;
 use curve25519_dalek::ristretto::RistrettoPoint;
 
-type Hash = Vec<u8>;
+type VHash = Vec<u8>;
 
 /*#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct Config {
@@ -122,6 +122,15 @@ impl SignedStatement {
             signature
         }
     }
+    pub fn ballots(cfg_h: &hashing::Hash, pk_h: hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
+        let statement = Statement::public_key(cfg_h.to_vec(), contest, pk_h.to_vec());
+        let stmt_h = hashing::hash(&statement);
+        let signature = pk.sign(&stmt_h);
+        SignedStatement {
+            statement,
+            signature
+        }
+    }
 }
 
 #[repr(u8)]
@@ -140,53 +149,53 @@ pub enum StatementType {
 pub struct Statement {
     pub stype: StatementType, 
     pub contest: ContestIndex, 
-    pub hashes: Vec<Hash>
+    pub hashes: Vec<VHash>
 }
 
 impl Statement {
-    pub fn config(config: Hash) -> Statement {
+    pub fn config(config: VHash) -> Statement {
         Statement {
             stype: StatementType::Config,
             contest: 0,
             hashes: vec![config]
         }
     }
-    pub fn keyshare(config: Hash, contest: u32, share: Hash) -> Statement {
+    pub fn keyshare(config: VHash, contest: u32, share: VHash) -> Statement {
         Statement {
             stype: StatementType::Keyshare,
             contest: contest,
             hashes: vec![config, share]
         }
     }
-    pub fn public_key(config: Hash, contest: u32, public_key: Hash) -> Statement {
+    pub fn public_key(config: VHash, contest: u32, public_key: VHash) -> Statement {
         Statement {
             stype: StatementType::PublicKey,
             contest: contest,
             hashes: vec![config, public_key]
         }
     }
-    pub fn ballots(config: Hash, contest: u32, ballots: Hash) -> Statement {
+    pub fn ballots(config: VHash, contest: u32, ballots: VHash) -> Statement {
         Statement {
             stype: StatementType::Ballots,
             contest: contest,
             hashes: vec![config, ballots]
         }
     }
-    pub fn mix(config: Hash, contest: u32, mix: Hash, ballots: Hash) -> Statement {
+    pub fn mix(config: VHash, contest: u32, mix: VHash, ballots: VHash) -> Statement {
         Statement {
             stype: StatementType::Mix,
             contest: contest,
             hashes: vec![config, mix, ballots]
         }
     }
-    pub fn partial_decryption(config: Hash, contest: u32, partial_decryptions: Hash, ballots: Hash) -> Statement {
+    pub fn partial_decryption(config: VHash, contest: u32, partial_decryptions: VHash, ballots: VHash) -> Statement {
         Statement {
             stype: StatementType::PDecryption,
             contest: contest,
             hashes: vec![config, partial_decryptions, ballots]
         }
     }
-    pub fn plaintexts(config: Hash, contest: u32, plaintexts: Hash, partial_decryptions: Hash) -> Statement {
+    pub fn plaintexts(config: VHash, contest: u32, plaintexts: VHash, partial_decryptions: VHash) -> Statement {
         Statement {
             stype: StatementType::Plaintexts,
             contest: contest,

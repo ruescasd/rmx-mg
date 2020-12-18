@@ -99,6 +99,9 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBullet
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> 
     BulletinBoard<E, G> for MemoryBulletinBoard<E, G> {
     
+    fn add_config(&mut self, path: &ConfigPath) {
+        self.put(Self::CONFIG, &path.0);
+    }
     fn get_config_unsafe(&self) -> Option<Config<E, G>> {
         let bytes = self.basic.get_unsafe(Self::CONFIG)?;
         let ret: Config<E, G> = bincode::deserialize(bytes).unwrap();
@@ -109,9 +112,6 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
         let ret = self.get(Self::CONFIG.to_string(), hash).ok()?;
 
         Some(ret)
-    }
-    fn add_config(&mut self, path: &ConfigPath) {
-        self.put(Self::CONFIG, &path.0);
     }
     fn add_config_stmt(&mut self, path: &ConfigStmtPath, trustee: u32) {
         self.put(&Self::config_stmt(trustee), &path.0);

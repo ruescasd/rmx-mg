@@ -25,7 +25,7 @@ pub fn write_file_bytes(path: &Path, bytes: &Vec<u8>) -> io::Result<()> {
     Ok(())
 }
 
-pub fn write_to_tmp(bytes: Vec<u8>) -> io::Result<NamedTempFile> {
+pub fn write_tmp(bytes: Vec<u8>) -> io::Result<NamedTempFile> {
     let tmp_file = NamedTempFile::new().unwrap();
     let path = tmp_file.path();
     fs::write(path, bytes)?;

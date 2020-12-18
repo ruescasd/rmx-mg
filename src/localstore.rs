@@ -18,6 +18,13 @@ pub struct ConfigStmtPath(pub PathBuf);
 pub struct KeysharePath(pub PathBuf, pub PathBuf);
 pub struct PkPath(pub PathBuf, pub PathBuf);
 pub struct PkStmtPath(pub PathBuf);
+pub struct BallotsPath(pub PathBuf, pub PathBuf);
+pub struct MixPath(pub PathBuf, pub PathBuf);
+pub struct MixStmtPath(pub PathBuf);
+pub struct PDecryptionsPath(pub PathBuf, pub PathBuf);
+pub struct PDecryptionsStmtPath(pub PathBuf);
+pub struct PlaintextsPath(pub PathBuf, pub PathBuf);
+pub struct PlaintextsStmtPath(pub PathBuf);
 
 pub struct LocalStore<E: Element, G: Group<E>> {
     pub fs_path: PathBuf,

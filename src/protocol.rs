@@ -715,10 +715,10 @@ impl<E: Element + Serialize + DeserializeOwned,
         }
     }
 
-    pub fn add_config<B: BulletinBoard<E, G>>(&self, cfg: &Config<E, G>, board: &mut B) {
+    /* pub fn add_config<B: BulletinBoard<E, G>>(&self, cfg: &Config<E, G>, board: &mut B) {
         let cfg_path = self.localstore.set_config(&cfg);
         board.add_config(&cfg_path);
-    }
+    } */
     
     pub fn run<B: BulletinBoard<E, G>>(&self, facts: Facts, board: &mut B) {
         let actions = facts.all_actions;
