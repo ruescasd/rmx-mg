@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 use std::marker::PhantomData;
 
-use serde::{Deserialize, Serialize};
+use serde::{Serialize};
 use ed25519_dalek::PublicKey as SPublicKey;
-use ed25519_dalek::{Verifier, Signature};
+use ed25519_dalek::{Verifier};
 
 use crepe::crepe;
 
@@ -672,18 +672,18 @@ use serde::de::DeserializeOwned;
 
 use std::fs;
 use std::path::Path;
-use ed25519_dalek::{Keypair, Signer};
+use ed25519_dalek::{Keypair};
 
-use uuid::Uuid;
+
 use rand_core::OsRng;
-use tempfile::NamedTempFile;
-use rug::Integer;
 
-use crate::artifact;
+
+
+
 use crate::keymaker::Keymaker;
-use crate::rug_b::*;
-use crate::memory_bb::*;
-use crate::action::*;
+
+
+
 use crate::localstore::*;
 
 
@@ -784,19 +784,19 @@ impl<E: Element + Serialize + DeserializeOwned,
                     board.set_pk_stmt(&pk_stmt_path, cnt, self_index.unwrap());
                     // prot.board.set_pk_stmt(&pk_stmt_path, 0, 1);
                 }
-                Act::CheckMix(cfg, cnt, t, h1, h2) => {
+                Act::CheckMix(_cfg, _cnt, _t, _h1, _h2) => {
                     
                 }
-                Act::Mix(cfg, cnt, h1) => {
+                Act::Mix(_cfg, _cnt, _h1) => {
                     
                 }
-                Act::PartialDecrypt(cfg, cnt, h1) => {
+                Act::PartialDecrypt(_cfg, _cnt, _h1) => {
                     
                 }
-                Act::CombineDecryptions(cfg, cnt, hs) => {
+                Act::CombineDecryptions(_cfg, _cnt, _hs) => {
                     
                 }
-                Act::CheckPlaintexts(cfg, cnt, h1, hs) => {
+                Act::CheckPlaintexts(_cfg, _cnt, _h1, _hs) => {
                     
                 }
             }

@@ -1,28 +1,28 @@
-use std::fs;
-use std::path::Path;
+
+
 use std::marker::PhantomData;
 
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-use ed25519_dalek::{Keypair, Signer};
+
+
+use ed25519_dalek::{Keypair};
 
 use uuid::Uuid;
 use rand_core::OsRng;
-use tempfile::NamedTempFile;
+
 use rug::Integer;
 
-use rmx::hashing;
+
 use rmx::artifact::*;
-use rmx::keymaker::Keymaker;
+
 use rmx::rug_b::*;
 use rmx::bb::BulletinBoard;
 use rmx::memory_bb::*;
 use rmx::protocol::*;
-use rmx::action::*;
+
 use rmx::util;
 use rmx::localstore::*;
-use rmx::arithm::Element;
-use rmx::group::Group;
+
+
 
 use ed25519_dalek::PublicKey as SPublicKey;
 
@@ -64,13 +64,13 @@ fn demo() {
     bb.add_config(&ConfigPath(tmp_file.path().to_path_buf()));
     
     // trustee1.add_config(&cfg, &mut bb);
-    let mut prot1: Protocol2 <
+    let prot1: Protocol2 <
         Integer, 
         RugGroup, 
         MemoryBulletinBoard<Integer, RugGroup>
     > = Protocol2::new(trustee1);
 
-    let mut prot2: Protocol2 <
+    let prot2: Protocol2 <
         Integer, 
         RugGroup, 
         MemoryBulletinBoard<Integer, RugGroup>

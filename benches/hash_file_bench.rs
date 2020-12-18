@@ -4,10 +4,10 @@ use std::{
     io::{self, BufRead, BufReader, Read, Write},
 };
 use sha2::{Sha512, Digest};
-use rmxmg::util;
-use rmxmg::ristretto_b::*;
-use rmxmg::rug_b::*;
-use rmxmg::group::*;
+use rmx::util;
+use rmx::ristretto_b::*;
+use rmx::rug_b::*;
+use rmx::group::*;
 
 fn create_file() {
     // 1M = 62M

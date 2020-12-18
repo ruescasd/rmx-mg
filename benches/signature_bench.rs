@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, BenchmarkId};
+use criterion::{criterion_group, criterion_main, Criterion};
 
 use rand_core::{OsRng};
 use ed25519_dalek::Keypair;

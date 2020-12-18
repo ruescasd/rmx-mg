@@ -4,14 +4,14 @@ use rug::Integer;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use rmxmg::arithm::*;
-use rmxmg::group::*;
-use rmxmg::elgamal::*;
-use rmxmg::ristretto_b::*;
-use rmxmg::rug_b::*;
-use rmxmg::hashing;
-use rmxmg::hashing::{HashBytes, HashTo};
-use rmxmg::shuffler::*;
+use rmx::arithm::*;
+use rmx::group::*;
+use rmx::elgamal::*;
+use rmx::ristretto_b::*;
+use rmx::rug_b::*;
+use rmx::hashing;
+use rmx::hashing::{HashBytes, HashTo};
+use rmx::shuffler::*;
 
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, BenchmarkId};
 

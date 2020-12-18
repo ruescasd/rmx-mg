@@ -1,11 +1,11 @@
 use std::path::{Path,PathBuf};
 use std::marker::PhantomData;
-use base64::{encode, decode};
+
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::hashing;
-use crate::protocol;
+
 use crate::util;
 use crate::action::Act;
 use crate::artifact::*;
@@ -92,7 +92,7 @@ impl<E: Element + Serialize + DeserializeOwned,
         PkStmtPath(stmt_p)
     }
     
-    pub fn get_work(&self, action: &Act, hash: hashing::Hash) -> Option<Vec<PathBuf>> {
+    pub fn get_work(&self, action: &Act, _hash: hashing::Hash) -> Option<Vec<PathBuf>> {
         let target = self.path_for_action(action);
         let mut ret = Vec::new();
         for i in 0..10 {

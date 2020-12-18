@@ -4,19 +4,19 @@ use ed25519_dalek::PublicKey as SPublicKey;
 use ed25519_dalek::Signature;
 use ed25519_dalek::{Keypair, Signer};
 use serde::{Deserialize, Serialize};
-use crepe::crepe;
+
 
 use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
 use crate::shuffler::*;
 use crate::bb::*;
-use crate::rug_b::RugGroup;
-use crate::ristretto_b::RistrettoGroup;
+
+
 use crate::hashing;
 use crate::protocol::ContestIndex;
-use rug::Integer;
-use curve25519_dalek::ristretto::RistrettoPoint;
+
+
 
 type VHash = Vec<u8>;
 

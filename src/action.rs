@@ -24,13 +24,13 @@ impl fmt::Debug for Act {
             Act::AddConfig => write!(f, "AddConfig"),
             Act::CheckConfig(cfg) => write!(f, "CheckConfig {:?}", short(cfg)),
             Act::PostShare(cfg, cnt) => write!(f, "PostShare contest=[{}] for config: {:?}", cnt, short(cfg)),
-            Act::CombineShares(cfg, cnt, hs) => write!(f, "CombineShares contest=[{}] shares: {:?}", cnt, shortm(hs)),
-            Act::CheckPk(cfg, cnt, h1, hs) => write!(f, "CheckPk contest=[{}], pk {:?} shares: {:?}", cnt, short(h1), shortm(hs)),
-            Act::CheckMix(cfg, cnt, t, h1, h2) => write!(f, "CheckMix"),
-            Act::Mix(cfg, cnt, h1) => write!(f, "Mix"),
-            Act::PartialDecrypt(cfg, cnt, h1) => write!(f, "PartialDecrypt"),
-            Act::CombineDecryptions(cfg, cnt, hs) => write!(f, "CombineDecryptions"),
-            Act::CheckPlaintexts(cfg, cnt, h1, hs) => write!(f, "CheckPlaintexts")
+            Act::CombineShares(_cfg, cnt, hs) => write!(f, "CombineShares contest=[{}] shares: {:?}", cnt, shortm(hs)),
+            Act::CheckPk(_cfg, cnt, h1, hs) => write!(f, "CheckPk contest=[{}], pk {:?} shares: {:?}", cnt, short(h1), shortm(hs)),
+            Act::CheckMix(_cfg, _cnt, _t, _h1, _h2) => write!(f, "CheckMix"),
+            Act::Mix(_cfg, _cnt, _h1) => write!(f, "Mix"),
+            Act::PartialDecrypt(_cfg, _cnt, _h1) => write!(f, "PartialDecrypt"),
+            Act::CombineDecryptions(_cfg, _cnt, _hs) => write!(f, "CombineDecryptions"),
+            Act::CheckPlaintexts(_cfg, _cnt, _h1, _hs) => write!(f, "CheckPlaintexts")
         }
     }
 }

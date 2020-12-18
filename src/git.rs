@@ -9,7 +9,7 @@ use walkdir::{DirEntry, WalkDir};
 use serde::{Deserialize, Serialize};
 use serde::de::DeserializeOwned;
 
-use std::sync::Mutex;
+
 use crate::hashing::{Hash, HashBytes};
 use crate::hashing;
 
@@ -99,7 +99,7 @@ impl GitBulletinBoard {
         files
     }
 
-    fn get<A: HashBytes + DeserializeOwned>(&self, target: 
+    fn get<A: HashBytes + DeserializeOwned>(&self, _target: 
         &Path, hash: Hash) -> Result<A, bincode::Error> {
 
         // let bytes = self.0.get(&key)
