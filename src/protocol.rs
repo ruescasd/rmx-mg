@@ -10,6 +10,7 @@ use crepe::crepe;
 use crate::hashing::*;
 use crate::hashing;
 use crate::artifact::*;
+use crate::elgamal::PublicKey;
 use crate::bb::*;
 use crate::util;
 use crate::arithm::Element;
@@ -521,7 +522,7 @@ mod tests {
     use rug::Integer;
 
     use crate::hashing;
-    use crate::artifact;
+    use crate::artifact::Config;
     use crate::keymaker::Keymaker;
     use crate::rug_b::*;
     use crate::memory_bb::*;
@@ -564,12 +565,13 @@ mod tests {
         }
         let self_pk = trustee_pks[0];
         let other_pk = trustee_pks[1];
-        let cfg = artifact::Config {
+        let cfg = Config {
             id: id.as_bytes().clone(),
-            rug_group: Some(group),
+            group: group,
             contests: contests, 
             ballotbox: ballotbox_pk, 
-            trustees: trustee_pks
+            trustees: trustee_pks,
+            phantom_e: PhantomData
         };
         
         let cfg_path = ls1.set_config(&cfg);
@@ -637,13 +639,13 @@ mod tests {
 
         let share1 = prot.board.get_share(0, 0, share1_h).unwrap();
         let share2 = prot.board.get_share(0, 1, share2_h).unwrap();
-        let gr = &cfg.rug_group.clone().unwrap();
+        let gr = &cfg.group.clone();
         assert!(Keymaker::verify_share(gr, &share1.share, &share1.proof));
         assert!(Keymaker::verify_share(gr, &share2.share, &share2.proof));
         
         let pk = Keymaker::combine_pks(gr, vec![share1.share, share2.share]);
         let pk_h = hashing::hash(&pk);
-        let ss1 = SignedStatement::public_key(&cfg, pk_h, 0, &trustee_kps[0]);
+        let ss1 = SignedStatement::public_key(&cfg_h, pk_h, 0, &trustee_kps[0]);
         let act = output.combine_shares[0];
         let pk_path = ls1.set_pk(&act, pk, &ss1);
         prot.board.set_pk(&pk_path, 0);
@@ -656,7 +658,7 @@ mod tests {
         assert!(output.check_pk.len() == 1);
         let act = output.check_pk[0];
 
-        let ss2 = SignedStatement::public_key(&cfg, pk_h, 0, &trustee_kps[1]);
+        let ss2 = SignedStatement::public_key(&cfg_h, pk_h, 0, &trustee_kps[1]);
         let pk_stmt_path = ls2.set_pk_stmt(&act, &ss2);
         prot.board.set_pk_stmt(&pk_stmt_path, 0, 1);
 
@@ -713,7 +715,7 @@ impl<E: Element + Serialize + DeserializeOwned,
         }
     }
 
-    pub fn add_config<B: BulletinBoard<E, G>>(&self, cfg: &Config, board: &mut B) {
+    pub fn add_config<B: BulletinBoard<E, G>>(&self, cfg: &Config<E, G>, board: &mut B) {
         let cfg_path = self.localstore.set_config(&cfg);
         board.add_config(&cfg_path);
     }
@@ -749,21 +751,38 @@ impl<E: Element + Serialize + DeserializeOwned,
                     
                     board.add_share(&share_path, cnt, self_index.unwrap());
                 }
-                Act::CombineShares(cfg, cnt, hs) => {
+                Act::CombineShares(cfg_h, cnt, hs) => {
                     println!("I Should combine shares now! (contest=[{}], self=[{}])", cnt, self_index.unwrap());
-                    let cfg = board.get_config(cfg).unwrap();
+                    let cfg = board.get_config(cfg_h).unwrap();
                     let hashes = util::clear_zeroes(&hs);
                     assert!(hashes.len() as u32 == trustees.unwrap());
-                    let mut shares = Vec::with_capacity(hashes.len());
-                    for (i, h) in hashes.into_iter().enumerate() {
-                        let next = board.get_share(cnt, i as u32, h).unwrap();
-                        // assert!(Keymaker::verify_share(&cfg.rug_group.unwrap(), &next.share, &next.proof));
+                    /* let mut shares = Vec::with_capacity(hashes.len());
+                    for (i, h) in hashes.iter().enumerate() {
+                        let next = board.get_share(cnt, i as u32, *h).unwrap();
+                        println!("*** Verifying proof!");
+                        assert!(Keymaker::verify_share(&cfg.group, &next.share, &next.proof));
                         shares.push(next.share);
                     }
-                    // Keymaker::combine_pks(cfg.group)
-                }
-                Act::CheckPk(cfg, cnt, h1, hs) => {
+                    let pk = Keymaker::combine_pks(&cfg.group, shares);
+                    */
+                    let pk = self.get_pk(board, hashes, &cfg.group, cnt).unwrap();
+                    let pk_h = hashing::hash(&pk);
+                    let ss = SignedStatement::public_key(&cfg_h, pk_h, cnt, &self.keypair);
                     
+                    let pk_path = self.localstore.set_pk(&action, pk, &ss);
+                    board.set_pk(&pk_path, cnt);
+                }
+                Act::CheckPk(cfg_h, cnt, h1, hs) => {
+                    println!("I Should check pk now! (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    let cfg = board.get_config(cfg_h).unwrap();
+                    let hashes = util::clear_zeroes(&hs);
+                    let pk = self.get_pk(board, hashes, &cfg.group, cnt).unwrap();
+                    let pk_h = hashing::hash(&pk);
+                    assert!(pk_h == h1);
+                    let ss = SignedStatement::public_key(&cfg_h, h1, cnt, &self.keypair);
+                    let pk_stmt_path = self.localstore.set_pk_stmt(&action, &ss);
+                    board.set_pk_stmt(&pk_stmt_path, cnt, self_index.unwrap());
+                    // prot.board.set_pk_stmt(&pk_stmt_path, 0, 1);
                 }
                 Act::CheckMix(cfg, cnt, t, h1, h2) => {
                     
@@ -792,6 +811,30 @@ impl<E: Element + Serialize + DeserializeOwned,
             share,
             proof,
             encrypted_sk
+        }
+    }
+
+    fn get_pk<B: BulletinBoard<E, G>>(&self, board: &B, hs: Vec<Hash>, group: &G, 
+        cnt: u32) -> Option<PublicKey<E, G>> {
+        
+        let mut shares = Vec::with_capacity(hs.len());
+        for (i, h) in hs.iter().enumerate() {
+            let next = board.get_share(cnt, i as u32, *h).unwrap();
+            println!("*** Verifying proof!");
+            let ok = Keymaker::verify_share(group, &next.share, &next.proof);
+            if ok {
+                shares.push(next.share);
+            }
+            else { 
+                break;
+            }
+        }
+        if shares.len() == hs.len() {
+            let pk = Keymaker::combine_pks(group, shares);
+            Some(pk)
+        }
+        else {
+            None
         }
     }
 }

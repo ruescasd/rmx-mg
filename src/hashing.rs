@@ -338,10 +338,10 @@ impl HashBytes for SignedStatement {
 
 use crate::artifact::Config;
 
-impl HashBytes for Config {
+impl<E: Element, G: Group<E>> HashBytes for Config<E, G> {
     fn get_bytes(&self) -> Vec<u8> {
         let mut bytes = self.id.to_vec();
-        bytes.extend(self.rug_group.get_bytes());
+        bytes.extend(self.group.get_bytes());
         bytes.extend(&self.contests.to_le_bytes());
         bytes.extend(self.ballotbox.get_bytes());
         bytes.extend(concat_bytes(&self.trustees));

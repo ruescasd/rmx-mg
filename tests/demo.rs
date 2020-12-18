@@ -1,5 +1,7 @@
 use std::fs;
 use std::path::Path;
+use std::marker::PhantomData;
+
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use ed25519_dalek::{Keypair, Signer};
@@ -24,7 +26,7 @@ use rmx::group::Group;
 
 use ed25519_dalek::PublicKey as SPublicKey;
 
-pub fn gen_config(group: Option<RugGroup>, contests: u32, trustee_pks: Vec<SPublicKey>) -> Config {
+pub fn gen_config(group: RugGroup, contests: u32, trustee_pks: Vec<SPublicKey>) -> Config<Integer, RugGroup> {
     let mut csprng = OsRng;
 
     let id = Uuid::new_v4();    
@@ -32,10 +34,11 @@ pub fn gen_config(group: Option<RugGroup>, contests: u32, trustee_pks: Vec<SPubl
 
     let cfg = Config {
         id: id.as_bytes().clone(),
-        rug_group: group,
+        group: group,
         contests: contests, 
         ballotbox: ballotbox_pk, 
-        trustees: trustee_pks
+        trustees: trustee_pks,
+        phantom_e: PhantomData
     };
 
     cfg
@@ -55,7 +58,7 @@ fn demo() {
     trustee_pks.push(trustee1.keypair.public);
     trustee_pks.push(trustee2.keypair.public);
 
-    let cfg = gen_config(Some(group), 2, trustee_pks);
+    let cfg = gen_config(group, 2, trustee_pks);
     trustee1.add_config(&cfg, &mut bb);
     let mut prot1: Protocol2 <
         Integer, 
@@ -77,10 +80,13 @@ fn demo() {
     prot1.step(&mut bb);
     prot2.step(&mut bb);
 
+    // combines shares
     prot1.step(&mut bb);
+    // check pk
     prot2.step(&mut bb);
 
-    
+    prot1.step(&mut bb);
+    prot2.step(&mut bb);
     
     
     

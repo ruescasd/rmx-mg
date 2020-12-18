@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use ed25519_dalek::PublicKey as SPublicKey;
 use ed25519_dalek::Signature;
 use ed25519_dalek::{Keypair, Signer};
@@ -18,13 +20,23 @@ use curve25519_dalek::ristretto::RistrettoPoint;
 
 type Hash = Vec<u8>;
 
-#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+/*#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct Config {
     pub id: [u8; 16],
     pub rug_group: Option<RugGroup>,
     pub contests: u32, 
     pub ballotbox: SPublicKey, 
     pub trustees: Vec<SPublicKey>
+}*/
+
+#[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
+pub struct Config<E: Element, G: Group<E>> {
+    pub id: [u8; 16],
+    pub group: G,
+    pub contests: u32, 
+    pub ballotbox: SPublicKey, 
+    pub trustees: Vec<SPublicKey>,
+    pub phantom_e: PhantomData<E>
 }
 
 /*impl Config {
@@ -101,9 +113,8 @@ impl SignedStatement {
             signature
         }
     }
-    pub fn public_key(config: &Config, pk_h: hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
-        let config_h = hashing::hash(config);
-        let statement = Statement::public_key(config_h.to_vec(), contest, pk_h.to_vec());
+    pub fn public_key(cfg_h: &hashing::Hash, pk_h: hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
+        let statement = Statement::public_key(cfg_h.to_vec(), contest, pk_h.to_vec());
         let stmt_h = hashing::hash(&statement);
         let signature = pk.sign(&stmt_h);
         SignedStatement {
@@ -209,14 +220,15 @@ mod tests {
         }
         let cfg = Config {
             id: id.as_bytes().clone(),
-            rug_group: Some(group),
+            group: group,
             contests: contests, 
             ballotbox: ballotbox_pk, 
-            trustees: trustee_pks
+            trustees: trustee_pks,
+            phantom_e: PhantomData
         };
 
         let cfg_b = bincode::serialize(&cfg).unwrap();
-        let cfg_d: Config = bincode::deserialize(&cfg_b).unwrap();
+        let cfg_d: Config<Integer, RugGroup> = bincode::deserialize(&cfg_b).unwrap();
 
         assert_eq!(cfg, cfg_d);
     }

@@ -39,7 +39,7 @@ impl<E: Element + Serialize + DeserializeOwned,
         }
     }
     
-    pub fn set_config(&self, config: &Config) -> ConfigPath {
+    pub fn set_config(&self, config: &Config<E, G>) -> ConfigPath {
         let cfg_b = bincode::serialize(&config).unwrap();
         ConfigPath (
             self.set_work(&Act::AddConfig, vec![cfg_b]).remove(0)

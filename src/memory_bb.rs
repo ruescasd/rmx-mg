@@ -4,6 +4,11 @@ use std::path::Path;
 use std::fs;
 use std::marker::PhantomData;
 
+use rug::Integer;
+use curve25519_dalek::ristretto::RistrettoPoint;
+use crate::rug_b::RugGroup;
+use crate::ristretto_b::RistrettoGroup;
+
 use crate::hashing::{HashBytes, Hash};
 use crate::hashing;
 use crate::bb::*;
@@ -17,6 +22,7 @@ use crate::localstore::*;
 struct MBasicBulletinBoard{
     data: HashMap<String, Vec<u8>>
 }
+
 impl MBasicBulletinBoard {
     pub fn new() -> MBasicBulletinBoard {
         MBasicBulletinBoard {
@@ -25,11 +31,6 @@ impl MBasicBulletinBoard {
     }
     fn list(&self) -> Vec<String> {
         self.data.iter().map(|(a, _)| a.clone()).collect()
-    }
-    fn get_stmts(&self) -> Vec<String> {
-        self.list().into_iter().filter(|s| {
-            s.ends_with(".stmt")
-        }).collect()
     }
     fn get<A: HashBytes + DeserializeOwned>(&self, target: String, hash: Hash) -> Result<A, String> {
         let key = target;
@@ -54,24 +55,37 @@ impl MBasicBulletinBoard {
     fn get_unsafe(&self, target: &str) -> Option<&Vec<u8>> {
         self.data.get(target)
     }
+    fn get_config_type(&self, target: &str) -> Option<bool> {
+        let bytes = self.data.get(target)?;
+        let config_rug = bincode::deserialize::<Config<Integer, RugGroup>>(bytes);
+        let config_ristretto = bincode::deserialize::<Config<RistrettoPoint, RistrettoGroup>>(bytes);
+        if config_rug.is_ok() {
+            Some(true)
+        }
+        else if config_ristretto.is_ok() {
+            Some(false)
+        }
+        else {
+            None
+        }
+    }
 }
 
-pub struct MemoryBulletinBoard<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> {
-    // data: HashMap<String, Vec<u8>>,
+pub struct MemoryBulletinBoard<E: Element + DeserializeOwned, 
+    G: Group<E> + DeserializeOwned> {
+    
+    basic: MBasicBulletinBoard,
     phantom_e: PhantomData<E>,
     phantom_g: PhantomData<G>,
-    basic: MBasicBulletinBoard
+    
 }
-impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Names for MemoryBulletinBoard
-<E, G>{}
 
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBulletinBoard<E, G> {
     pub fn new() -> MemoryBulletinBoard<E, G> {
         MemoryBulletinBoard {
-            // data: HashMap::new(),
+            basic: MBasicBulletinBoard::new(),
             phantom_e: PhantomData,
-            phantom_g: PhantomData,
-            basic: MBasicBulletinBoard::new() 
+            phantom_g: PhantomData
         }
     }
     fn put(&mut self, name: &str, data: &Path) {
@@ -80,42 +94,18 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBullet
     fn get<A: HashBytes + DeserializeOwned>(&self, target: String, hash: Hash) -> Result<A, String> {
         self.basic.get(target, hash)
     }
-    
-    /* fn put(&mut self, name: &str, data: &Path) {
-        let bytes = util::read_file_bytes(data).unwrap();
-        self.data.insert(name.to_string(), bytes);
-    }
-   
-    fn get<A: HashBytes + DeserializeOwned>(&self, target: String, hash: Hash) -> Result<A, String> {
-        let key = target;
-        let bytes = self.data.get(&key).ok_or("Not found")?;
-
-        let artifact = bincode::deserialize::<A>(bytes)
-            .map_err(|e| std::format!("serde error {}", e))?;
-
-        let hashed = hashing::hash(&artifact);
-        
-        if hashed == hash {
-            Ok(artifact)
-        }
-        else {
-            Err("Hash mismatch".to_string())
-        }
-    }*/    
 }
-
 
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> 
     BulletinBoard<E, G> for MemoryBulletinBoard<E, G> {
     
-    fn get_config_unsafe(&self) -> Option<Config> {
-        // let bytes = self.data.get(Self::CONFIG)?;
+    fn get_config_unsafe(&self) -> Option<Config<E, G>> {
         let bytes = self.basic.get_unsafe(Self::CONFIG)?;
-        let ret: Config = bincode::deserialize(bytes).unwrap();
+        let ret: Config<E, G> = bincode::deserialize(bytes).unwrap();
 
         Some(ret)
     }
-    fn get_config(&self, hash: Hash) -> Option<Config> {
+    fn get_config(&self, hash: Hash) -> Option<Config<E, G>> {
         let ret = self.get(Self::CONFIG.to_string(), hash).ok()?;
 
         Some(ret)
@@ -133,8 +123,6 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
     fn get_share(&self, contest: u32, auth: u32, hash: Hash) -> Option<Keyshare<E, G>> {
         let key = Self::share(contest, auth).to_string();
         let ret = self.get(key, hash).ok()?;
-        // let bytes = self.data.get(&Self::share(contest, auth))?;
-        // let ret: Keyshare<E, G> = bincode::deserialize(bytes).unwrap();
 
         Some(ret)
     }
@@ -148,7 +136,6 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
     }
 
     fn list(&self) -> Vec<String> {
-        // self.data.iter().map(|(a, _)| a.clone()).collect()
         self.basic.list()
     }
     fn get_statements(&self) -> Vec<SVerifier> {
@@ -158,8 +145,6 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
         println!("Statements {:?}", sts);
         
         for s in sts.iter() {
-            
-            // let s_bytes = self.data.get(s).unwrap().to_vec();
             let s_bytes = self.basic.get_unsafe(s).unwrap().to_vec();
             let (trustee, contest) = artifact_location(s);
             let stmt: SignedStatement = bincode::deserialize(&s_bytes).unwrap();
@@ -175,6 +160,9 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
         ret
     }
 }
+
+impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> 
+    Names for MemoryBulletinBoard <E, G>{}
 
 fn artifact_location(path: &str) -> (u32, u32) {
     let p = Path::new(&path);
@@ -201,7 +189,7 @@ mod tests {
     use rug::Integer;
 
     use crate::hashing;
-    use crate::artifact;
+    use crate::artifact::Config;
     use crate::rug_b::*;
     use crate::memory_bb::*;
         
@@ -221,12 +209,13 @@ mod tests {
             let keypair = Keypair::generate(&mut csprng);
             trustee_pks.push(keypair.public);
         }
-        let mut cfg = artifact::Config {
+        let mut cfg = Config {
             id: id.as_bytes().clone(),
-            rug_group: Some(group),
+            group: group,
             contests: contests, 
             ballotbox: ballotbox_pk, 
-            trustees: trustee_pks
+            trustees: trustee_pks,
+            phantom_e: PhantomData
         };
 
         let mut bb = MemoryBulletinBoard::<Integer, RugGroup>::new();
@@ -239,12 +228,12 @@ mod tests {
         bb.put("test", path);
         
         let hash = hashing::hash(&cfg);
-        let mut cfg_result = bb.get::<artifact::Config>(target.to_string(), hash);
+        let mut cfg_result = bb.get::<Config<Integer, RugGroup>>(target.to_string(), hash);
         assert!(cfg_result.is_ok());
 
         cfg.id = Uuid::new_v4().as_bytes().clone();
         let bad_hash = hashing::hash(&cfg);
-        cfg_result = bb.get::<artifact::Config>(target.to_string(), bad_hash);
+        cfg_result = bb.get::<Config<Integer, RugGroup>>(target.to_string(), bad_hash);
         assert!(cfg_result.is_err());
     }
 }
