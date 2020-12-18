@@ -13,7 +13,7 @@ mod git;
 pub mod bb;
 pub mod protocol;
 pub mod artifact;
-mod rng;
+pub mod statement;
 mod symmetric;
 pub mod localstore;
 pub mod action;

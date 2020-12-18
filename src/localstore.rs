@@ -9,6 +9,7 @@ use crate::hashing;
 use crate::util;
 use crate::action::Act;
 use crate::artifact::*;
+use crate::statement::*;
 use crate::elgamal::PublicKey;
 use crate::arithm::Element;
 use crate::group::Group;

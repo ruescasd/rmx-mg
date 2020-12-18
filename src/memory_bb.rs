@@ -13,6 +13,7 @@ use crate::hashing::{HashBytes, Hash};
 use crate::hashing;
 use crate::bb::*;
 use crate::artifact::*;
+use crate::statement::*;
 use crate::protocol::SVerifier;
 use crate::arithm::Element;
 use crate::group::Group;

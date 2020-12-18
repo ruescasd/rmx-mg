@@ -309,7 +309,7 @@ impl HashBytes for Signature {
     }
 }
 
-use crate::artifact::Statement;
+use crate::statement::Statement;
 
 impl HashBytes for Statement {
     fn get_bytes(&self) -> Vec<u8> {
@@ -325,7 +325,7 @@ impl HashBytes for Statement {
     }
 }
 
-use crate::artifact::SignedStatement;
+use crate::statement::SignedStatement;
 
 impl HashBytes for SignedStatement {
     fn get_bytes(&self) -> Vec<u8> {

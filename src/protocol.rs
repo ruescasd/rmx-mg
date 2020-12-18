@@ -10,6 +10,7 @@ use crepe::crepe;
 use crate::hashing::*;
 use crate::hashing;
 use crate::artifact::*;
+use crate::statement::*;
 use crate::elgamal::PublicKey;
 use crate::bb::*;
 use crate::util;
