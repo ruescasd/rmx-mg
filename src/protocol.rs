@@ -35,7 +35,7 @@ pub type PlaintextsHash = Hash;
 pub type Hashes = [Hash; 10];
 type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesOk>, HashSet<PkOk>, 
     HashSet<PkSharesUpTo>, HashSet<ConfigSignedUpTo>, HashSet<Contest>,
-    HashSet<PkSignedUpTo>);
+    HashSet<PkSignedUpTo>, HashSet<MixSignedUpTo>);
 
 
 pub struct Protocol<E: Element, G: Group<E>, B: BulletinBoard<E, G>> {
@@ -178,7 +178,7 @@ impl SVerifier {
                 let mix_h = util::to_u8_64(&statement.hashes[1]);
                 let ballots_h = util::to_u8_64(&statement.hashes[2]);
                 self.ret(
-                    InputFact::mix_signed_by(config_h, self.contest, mix_h, ballots_h, self_t),
+                    InputFact::mix_signed_by(config_h, self.contest, mix_h, self_t),
                     verified.is_ok()
                 )
 
@@ -187,7 +187,7 @@ impl SVerifier {
                 let pdecryptions_h = util::to_u8_64(&statement.hashes[1]);
                 let ballots_h = util::to_u8_64(&statement.hashes[2]);
                 self.ret(
-                    InputFact::decryption_signed_by(config_h, self.contest, pdecryptions_h, ballots_h, self_t),
+                    InputFact::decryption_signed_by(config_h, self.contest, pdecryptions_h, self_t),
                     verified.is_ok()
                 )
 
@@ -196,7 +196,7 @@ impl SVerifier {
                 let plaintexts_h = util::to_u8_64(&statement.hashes[1]);
                 let pdecryptions_h = util::to_u8_64(&statement.hashes[2]);
                 self.ret(
-                    InputFact::plaintexts_signed_by(config_h, self.contest, plaintexts_h, pdecryptions_h, self_t),
+                    InputFact::plaintexts_signed_by(config_h, self.contest, plaintexts_h, self_t),
                     verified.is_ok()
                 )
             }
@@ -247,20 +247,20 @@ impl InputFact {
         InputFact::BallotsSigned(BallotsSigned(c, contest, ballots))
     }
     fn mix_signed_by(c: ConfigHash, contest: ContestIndex, mix: MixHash, 
-        ballots: BallotsHash, trustee: TrusteeIndex) -> InputFact {
+        trustee: TrusteeIndex) -> InputFact {
         
-        InputFact::MixSignedBy(MixSignedBy(c, contest, mix, ballots, trustee))
+        InputFact::MixSignedBy(MixSignedBy(c, contest, mix, trustee))
     }
     fn decryption_signed_by(c: ConfigHash, contest: ContestIndex, decryption: DecryptionHash, 
-        ballots: BallotsHash, trustee: TrusteeIndex) -> InputFact {
+        trustee: TrusteeIndex) -> InputFact {
         
-        InputFact::DecryptionSignedBy(DecryptionSignedBy(c, contest, decryption, ballots, trustee))
+        InputFact::DecryptionSignedBy(DecryptionSignedBy(c, contest, decryption, trustee))
     }
     fn plaintexts_signed_by(c: ConfigHash, contest: ContestIndex, plaintexts: PlaintextsHash,
-        decryptions: DecryptionHash, trustee: TrusteeIndex) -> InputFact {
+        trustee: TrusteeIndex) -> InputFact {
         
         InputFact::PlaintextsSignedBy(
-            PlaintextsSignedBy(c, contest, plaintexts, decryptions, trustee)
+            PlaintextsSignedBy(c, contest, plaintexts, trustee)
         )
     }
 }
@@ -403,12 +403,11 @@ crepe! {
     @input
     struct BallotsSigned(ConfigHash, ContestIndex, BallotsHash);
     @input
-    struct MixSignedBy(ConfigHash, ContestIndex, MixHash, BallotsHash, TrusteeIndex);
+    struct MixSignedBy(ConfigHash, ContestIndex, MixHash, TrusteeIndex);
     @input
-    struct DecryptionSignedBy(ConfigHash, ContestIndex, DecryptionHash, BallotsHash, TrusteeIndex);
+    struct DecryptionSignedBy(ConfigHash, ContestIndex, DecryptionHash, TrusteeIndex);
     @input
-    struct PlaintextsSignedBy(ConfigHash, ContestIndex, PlaintextsHash, DecryptionHash, 
-        TrusteeIndex);
+    struct PlaintextsSignedBy(ConfigHash, ContestIndex, PlaintextsHash, TrusteeIndex);
 
     @input
     struct Test(Sha512);
@@ -437,6 +436,9 @@ crepe! {
     // 7
     @output
     struct PkSignedUpTo(ConfigHash, ContestIndex, PkHash, TrusteeIndex);
+    // 8
+    @output
+    struct MixSignedUpTo(ConfigHash, ContestIndex, MixHash, TrusteeIndex);
     
     Do(Act::CheckConfig(config)) <- 
         ConfigPresent(config, _, _, self_t),
@@ -467,7 +469,14 @@ crepe! {
         PkOk(config, contest, pk_hash),
         ConfigPresent(config, _, _, 0),
         ConfigOk(config),
-        !MixSignedBy(config, contest, _, ballots_hash, 0);
+        !MixSignedBy(config, contest, _, 0);
+
+    MixSignedUpTo(config, contest, mix_hash, 0) <-
+        MixSignedBy(config, contest, mix_hash, 0);
+
+    MixSignedUpTo(config, contest, mix_hash, trustee + 1) <-
+        MixSignedUpTo(config, contest, mix_hash, trustee),
+        MixSignedBy(config, contest, mix_hash, trustee + 1);
     
     ConfigSignedUpTo(config, 0) <-
         ConfigSignedBy(config, 0);

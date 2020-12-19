@@ -50,8 +50,8 @@ impl SignedStatement {
             signature
         }
     }
-    pub fn mix(cfg_h: &hashing::Hash, mix_h: &hashing::Hash, ballots_h: &hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
-        let statement = Statement::mix(cfg_h.to_vec(), contest, mix_h.to_vec(), ballots_h.to_vec());
+    pub fn mix(cfg_h: &hashing::Hash, mix_h: &hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
+        let statement = Statement::mix(cfg_h.to_vec(), contest, mix_h.to_vec());
         let stmt_h = hashing::hash(&statement);
         let signature = pk.sign(&stmt_h);
         SignedStatement {
@@ -129,25 +129,25 @@ impl Statement {
             hashes: vec![config, ballots]
         }
     }
-    pub fn mix(config: VHash, contest: u32, mix: VHash, ballots: VHash) -> Statement {
+    pub fn mix(config: VHash, contest: u32, mix: VHash) -> Statement {
         Statement {
             stype: StatementType::Mix,
             contest: contest,
-            hashes: vec![config, mix, ballots]
+            hashes: vec![config, mix]
         }
     }
-    pub fn partial_decryption(config: VHash, contest: u32, partial_decryptions: VHash, ballots: VHash) -> Statement {
+    pub fn partial_decryption(config: VHash, contest: u32, partial_decryptions: VHash) -> Statement {
         Statement {
             stype: StatementType::PDecryption,
             contest: contest,
-            hashes: vec![config, partial_decryptions, ballots]
+            hashes: vec![config, partial_decryptions]
         }
     }
-    pub fn plaintexts(config: VHash, contest: u32, plaintexts: VHash, partial_decryptions: VHash) -> Statement {
+    pub fn plaintexts(config: VHash, contest: u32, plaintexts: VHash) -> Statement {
         Statement {
             stype: StatementType::Plaintexts,
             contest: contest,
-            hashes: vec![config, plaintexts, partial_decryptions]
+            hashes: vec![config, plaintexts]
         }
     }
 }
