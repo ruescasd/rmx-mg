@@ -1,8 +1,6 @@
-
-
-
 use crate::hashing::{Hash};
 use crate::artifact::*;
+use crate::elgamal::PublicKey;
 use crate::arithm::Element;
 use crate::group::Group;
 use crate::protocol::SVerifier;
@@ -23,8 +21,8 @@ pub trait Names {
     fn public_key_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/public_key.stmt", auth, contest).to_string() }
     
 
-    fn ballots(contest: u32) -> String { format!("{}/ballots", contest).to_string() }
-    fn ballots_stmt(contest: u32) -> String { format!("{}/ballots_stmt", contest).to_string() }
+    fn ballots(contest: u32) -> String { format!("ballotbox/{}/ballots", contest).to_string() }
+    fn ballots_stmt(contest: u32) -> String { format!("ballotbox/{}/ballots.stmt", contest).to_string() }
     
     
     fn mix(contest: u32, auth: u32) -> String { format!("{}/{}/mix", auth, contest).to_string() }
@@ -59,22 +57,31 @@ use crate::localstore::*;
 pub trait BulletinBoard<E: Element, G: Group<E>> {
 
     fn list(&self) -> Vec<String>;
+    
     fn add_config(&mut self, config: &ConfigPath);
     fn get_config_unsafe(&self) -> Option<Config<E, G>>;
     fn get_config(&self, hash: Hash) -> Option<Config<E, G>>;
     fn add_config_stmt(&mut self, stmt: &ConfigStmtPath, trustee: u32);
+    
     fn add_share(&mut self, path: &KeysharePath, contest: u32, trustee: u32);
     fn get_share(&self, contest: u32, auth: u32, hash: Hash) -> Option<Keyshare<E, G>>;
+    
+    fn get_pk(&mut self, contest: u32, hash: Hash) -> Option<PublicKey<E, G>>;
     fn set_pk(&mut self, path: &PkPath, contest: u32);
     fn set_pk_stmt(&mut self, path: &PkStmtPath, contest: u32, trustee: u32);
+
+    fn add_ballots(&mut self, path: &BallotsPath, contest: u32);
+    fn get_ballots(&self, contest: u32, hash: Hash) -> Option<Ballots<E>>;
+    
+    fn get_statements(&self) -> Vec<SVerifier>;
+    
+    
     
     fn get_stmts(&self) -> Vec<String> {
         self.list().into_iter().filter(|s| {
             s.ends_with(".stmt")
         }).collect()
     }
-    fn get_statements(&self) -> Vec<SVerifier>;
-    
     
     /*fn add_error(&self, error: Path, position: u32);
   

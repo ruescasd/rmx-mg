@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::marker::PhantomData;
+use std::convert::TryInto;
 
 use serde::{Serialize};
 use ed25519_dalek::PublicKey as SPublicKey;
@@ -97,109 +98,6 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
     }
 }
 
-pub struct Facts {
-    pub(self) input_facts: Vec<InputFact>,
-    pub all_actions: Vec<Act>,
-    pub check_config: Vec<Act>,
-    pub post_share: Vec<Act>,
-    pub combine_shares: Vec<Act>,
-    pub check_pk: Vec<Act>,
-    pub check_mix: Vec<Act>,
-    pub mix: Vec<Act>,
-    pub partial_decrypt: Vec<Act>,
-    pub combine_decryptions: Vec<Act>,
-    pub check_plaintexts: Vec<Act>,
-    config_ok: HashSet<ConfigOk>,
-    pk_shares_ok: HashSet<PkSharesOk>,
-    pk_ok: HashSet<PkOk>
-}
-
-impl Facts {
-    fn new(input_facts: Vec<InputFact>, f: OutputF) -> Facts {
-        let mut all_actions = vec![];
-        let mut check_config = vec![];
-        let mut post_share = vec![];
-        let mut combine_shares = vec![];
-        let mut check_pk = vec![];
-        let mut check_mix = vec![];
-        let mut mix = vec![];
-        let mut partial_decrypt = vec![];
-        let mut combine_decryptions = vec![];
-        let mut check_plaintexts = vec![];
-        
-        let actions = f.0;
-        for a in actions {
-            match a.0 {
-                Act::AddConfig => (),
-                Act::CheckConfig(..) => check_config.push(a.0),
-                Act::PostShare(..) => post_share.push(a.0),
-                Act::CombineShares(..) => combine_shares.push(a.0),
-                Act::CheckPk(..) => check_pk.push(a.0),
-                Act::CheckMix(..) => check_mix.push(a.0),
-                Act::Mix(..) => mix.push(a.0),
-                Act::PartialDecrypt(..) => partial_decrypt.push(a.0),
-                Act::CombineDecryptions(..) => combine_decryptions.push(a.0),
-                Act::CheckPlaintexts(..) => check_plaintexts.push(a.0)
-            }  
-            all_actions.push(a.0);
-        }
-
-        let config_ok = f.1;
-        let pk_shares_ok = f.2;
-        let pk_ok = f.3;
-
-        Facts{
-            input_facts,
-            all_actions,
-            check_config,
-            post_share,
-            combine_shares,
-            check_pk,
-            check_mix,
-            mix,
-            partial_decrypt,
-            combine_decryptions,
-            check_plaintexts,
-            config_ok,
-            pk_shares_ok,
-            pk_ok
-        }
-    }
-
-    fn print(&self) {
-        println!("======== Output facts [");
-        let next = &self.config_ok;
-        for f in next {
-            println!("* ConfigOk {:?}", short(&f.0));
-        }
-        let next = &self.pk_shares_ok;
-        for f in next {
-            println!("* PkSharesOk {:?}", short(&f.0));
-        }
-        let next = &self.pk_ok;
-        for f in next {
-            println!("* PkOk {:?}", short(&f.0));
-        }
-        let next = &self.all_actions; 
-        for f in next {
-            println!("* Action {:?}", f);
-        }
-            
-        println!("] \n");
-    }
-
-    pub fn pk_shares_len(&self) -> usize {
-        self.pk_shares_ok.len()
-    }
-    pub fn pk_ok_len(&self) -> usize {
-        self.pk_ok.len()
-    }
-    pub fn config_ok(&self) -> bool {
-        self.config_ok.len() == 1
-    }
-
-    
-}
 
 fn load_facts(facts: &Vec<InputFact>, runtime: &mut Crepe) {
     println!("======== Input facts [");
@@ -222,40 +120,49 @@ fn load_facts(facts: &Vec<InputFact>, runtime: &mut Crepe) {
 #[derive(Debug)]
 pub struct SVerifier {
     pub statement: SignedStatement,
-    pub trustee: u32,
+    pub trustee: i32,
     pub contest: u32
 }
 
 impl SVerifier {
+    
     fn verify<E: Element, G: Group<E>, B: BulletinBoard<E, G>>(&self, board: &B) -> Option<InputFact> {
         let statement = &self.statement.statement;
         let config = board.get_config_unsafe()?;
-        let pk = config.trustees[self.trustee as usize];
+        
+        let (pk, self_t): (SPublicKey, u32) =
+        if self.trustee >= 0 {
+            (config.trustees[self.trustee as usize], self.trustee.try_into().unwrap())
+        } else {
+            (config.ballotbox, 0)
+        };
+        
         let statement_hash = hashing::hash(statement);
         let verified = pk.verify(&statement_hash, &self.statement.signature);
         let config_h = util::to_u8_64(&statement.hashes[0]);
         println!("* Verify returns: [{}] on [{:?}] from trustee [{}] for contest [{}]", verified.is_ok(), 
             &self.statement.statement.stype, &self.trustee, &self.contest
         );
+        
 
         match statement.stype {
             StatementType::Config => {
                 self.ret(
-                    InputFact::config_signed_by(config_h, self.trustee),
+                    InputFact::config_signed_by(config_h, self_t),
                     verified.is_ok()
                 )
             },
             StatementType::Keyshare => {
                 let share_h = util::to_u8_64(&statement.hashes[1]);
                 self.ret(
-                    InputFact::share_signed_by(config_h, self.contest, share_h, self.trustee),
+                    InputFact::share_signed_by(config_h, self.contest, share_h, self_t),
                     verified.is_ok()
                 )
             },
             StatementType::PublicKey => {
                 let pk_h = util::to_u8_64(&statement.hashes[1]);
                 self.ret(
-                    InputFact::pk_signed_by(config_h, self.contest, pk_h, self.trustee),
+                    InputFact::pk_signed_by(config_h, self.contest, pk_h, self_t),
                     verified.is_ok()
                 )
             },
@@ -270,7 +177,7 @@ impl SVerifier {
                 let mix_h = util::to_u8_64(&statement.hashes[1]);
                 let ballots_h = util::to_u8_64(&statement.hashes[2]);
                 self.ret(
-                    InputFact::mix_signed_by(config_h, self.contest, mix_h, ballots_h, self.trustee),
+                    InputFact::mix_signed_by(config_h, self.contest, mix_h, ballots_h, self_t),
                     verified.is_ok()
                 )
 
@@ -279,7 +186,7 @@ impl SVerifier {
                 let pdecryptions_h = util::to_u8_64(&statement.hashes[1]);
                 let ballots_h = util::to_u8_64(&statement.hashes[2]);
                 self.ret(
-                    InputFact::decryption_signed_by(config_h, self.contest, pdecryptions_h, ballots_h, self.trustee),
+                    InputFact::decryption_signed_by(config_h, self.contest, pdecryptions_h, ballots_h, self_t),
                     verified.is_ok()
                 )
 
@@ -288,7 +195,7 @@ impl SVerifier {
                 let plaintexts_h = util::to_u8_64(&statement.hashes[1]);
                 let pdecryptions_h = util::to_u8_64(&statement.hashes[2]);
                 self.ret(
-                    InputFact::plaintexts_signed_by(config_h, self.contest, plaintexts_h, pdecryptions_h, self.trustee),
+                    InputFact::plaintexts_signed_by(config_h, self.contest, plaintexts_h, pdecryptions_h, self_t),
                     verified.is_ok()
                 )
             }
@@ -355,6 +262,129 @@ impl InputFact {
             PlaintextsSignedBy(c, contest, plaintexts, decryptions, trustee)
         )
     }
+}
+use std::fmt;
+impl fmt::Debug for InputFact {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            InputFact::ConfigPresent(x) => write!(f, 
+                "ConfigPresent: [contests={} trustees={} self={}] {:?}", x.1, x.2, x.3, short(&x.0)),
+            InputFact::ConfigSignedBy(x) => write!(f, 
+                "ConfigSignedBy: [{}] for config: {:?}", x.1, short(&x.0)),
+            InputFact::PkShareSignedBy(x) => write!(f, 
+                "PkShareSignedBy [contest={} trustee={}] for share: {:?}, for config: {:?}", 
+                x.1, x.3, short(&x.2), short(&x.0)),
+            InputFact::PkSignedBy(x) => write!(f, 
+                "PkSignedBy [contest={} trustee={}] for pk: {:?}, for config: {:?}", 
+                x.1, x.3, short(&x.2), short(&x.0)),
+            
+            InputFact::BallotsSigned(x) => write!(f, "BallotsSigned [contest={}] {:?}", x.1, short(&x.0)),
+            InputFact::MixSignedBy(x) => write!(f, "MixSignedBy {:?}", short(&x.0)),
+            InputFact::DecryptionSignedBy(x) => write!(f, "DecryptionSignedBy {:?}", short(&x.0)),
+            InputFact::PlaintextsSignedBy(x) => write!(f, "PlaintextsSignedBy{:?}", short(&x.0))
+        }
+    }
+}
+
+pub struct Facts {
+    pub(self) input_facts: Vec<InputFact>,
+    pub all_actions: Vec<Act>,
+    pub check_config: Vec<Act>,
+    pub post_share: Vec<Act>,
+    pub combine_shares: Vec<Act>,
+    pub check_pk: Vec<Act>,
+    pub check_mix: Vec<Act>,
+    pub mix: Vec<Act>,
+    pub partial_decrypt: Vec<Act>,
+    pub combine_decryptions: Vec<Act>,
+    pub check_plaintexts: Vec<Act>,
+    config_ok: HashSet<ConfigOk>,
+    pk_shares_ok: HashSet<PkSharesOk>,
+    pk_ok: HashSet<PkOk>
+}
+
+impl Facts {
+    fn new(input_facts: Vec<InputFact>, f: OutputF) -> Facts {
+        let mut all_actions = vec![];
+        let mut check_config = vec![];
+        let mut post_share = vec![];
+        let mut combine_shares = vec![];
+        let mut check_pk = vec![];
+        let mut check_mix = vec![];
+        let mut mix = vec![];
+        let mut partial_decrypt = vec![];
+        let mut combine_decryptions = vec![];
+        let mut check_plaintexts = vec![];
+        
+        let actions = f.0;
+        for a in actions {
+            match a.0 {
+                Act::CheckConfig(..) => check_config.push(a.0),
+                Act::PostShare(..) => post_share.push(a.0),
+                Act::CombineShares(..) => combine_shares.push(a.0),
+                Act::CheckPk(..) => check_pk.push(a.0),
+                Act::CheckMix(..) => check_mix.push(a.0),
+                Act::Mix(..) => mix.push(a.0),
+                Act::PartialDecrypt(..) => partial_decrypt.push(a.0),
+                Act::CombineDecryptions(..) => combine_decryptions.push(a.0),
+                Act::CheckPlaintexts(..) => check_plaintexts.push(a.0)
+            }  
+            all_actions.push(a.0);
+        }
+
+        let config_ok = f.1;
+        let pk_shares_ok = f.2;
+        let pk_ok = f.3;
+
+        Facts{
+            input_facts,
+            all_actions,
+            check_config,
+            post_share,
+            combine_shares,
+            check_pk,
+            check_mix,
+            mix,
+            partial_decrypt,
+            combine_decryptions,
+            check_plaintexts,
+            config_ok,
+            pk_shares_ok,
+            pk_ok
+        }
+    }
+
+    fn print(&self) {
+        println!("======== Output facts [");
+        let next = &self.config_ok;
+        for f in next {
+            println!("* ConfigOk {:?}", short(&f.0));
+        }
+        let next = &self.pk_shares_ok;
+        for f in next {
+            println!("* PkSharesOk {:?}", short(&f.0));
+        }
+        let next = &self.pk_ok;
+        for f in next {
+            println!("* PkOk {:?}", short(&f.0));
+        }
+        let next = &self.all_actions; 
+        for f in next {
+            println!("* Action {:?}", f);
+        }
+            
+        println!("] \n");
+    }
+
+    pub fn pk_shares_len(&self) -> usize {
+        self.pk_shares_ok.len()
+    }
+    pub fn pk_ok_len(&self) -> usize {
+        self.pk_ok.len()
+    }
+    pub fn config_ok(&self) -> bool {
+        self.config_ok.len() == 1
+    }   
 }
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
@@ -429,6 +459,14 @@ crepe! {
         PkSharesOk(config, contest, hashes),
         PkSignedBy(config, contest, pk_hash, 0),
         !PkSignedBy(config, contest, pk_hash, self_t);
+
+    // first mix
+    Do(Act::Mix(config, contest, ballots_hash, pk_hash)) <- 
+        BallotsSigned(config, contest, ballots_hash),
+        PkOk(config, contest, pk_hash),
+        ConfigPresent(config, _, _, 0),
+        ConfigOk(config),
+        !MixSignedBy(config, contest, _, ballots_hash, 0);
     
     ConfigSignedUpTo(config, 0) <-
         ConfigSignedBy(config, 0);
@@ -485,29 +523,6 @@ fn array_set(mut input: Hashes, index: u32, value: Hash) -> Hashes {
     input[index as usize] = value;
 
     input
-}
-
-use std::fmt;
-impl fmt::Debug for InputFact {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            InputFact::ConfigPresent(x) => write!(f, 
-                "ConfigPresent: [contests={} trustees={} self={}] {:?}", x.1, x.2, x.3, short(&x.0)),
-            InputFact::ConfigSignedBy(x) => write!(f, 
-                "ConfigSignedBy: [{}] for config: {:?}", x.1, short(&x.0)),
-            InputFact::PkShareSignedBy(x) => write!(f, 
-                "PkShareSignedBy [contest={} trustee={}] for share: {:?}, for config: {:?}", 
-                x.1, x.3, short(&x.2), short(&x.0)),
-            InputFact::PkSignedBy(x) => write!(f, 
-                "PkSignedBy [contest={} trustee={}] for pk: {:?}, for config: {:?}", 
-                x.1, x.3, short(&x.2), short(&x.0)),
-            
-            InputFact::BallotsSigned(x) => write!(f, "BallotsSigned {:?}", short(&x.0)),
-            InputFact::MixSignedBy(x) => write!(f, "MixSignedBy {:?}", short(&x.0)),
-            InputFact::DecryptionSignedBy(x) => write!(f, "DecryptionSignedBy {:?}", short(&x.0)),
-            InputFact::PlaintextsSignedBy(x) => write!(f, "PlaintextsSignedBy{:?}", short(&x.0))
-        }
-    }
 }
 
 #[cfg(test)]
@@ -575,8 +590,9 @@ mod tests {
             phantom_e: PhantomData
         };
         
-        let cfg_path = ls1.set_config(&cfg);
-        bb.add_config(&cfg_path);
+        let cfg_b = bincode::serialize(&cfg).unwrap();
+        let tmp_file = util::write_tmp(cfg_b).unwrap();
+        bb.add_config(&ConfigPath(tmp_file.path().to_path_buf()));
         
         let mut prot = Protocol::new(bb);
         let actions = prot.process_facts(self_pk).check_config;
@@ -646,7 +662,7 @@ mod tests {
         
         let pk = Keymaker::combine_pks(gr, vec![share1.share, share2.share]);
         let pk_h = hashing::hash(&pk);
-        let ss1 = SignedStatement::public_key(&cfg_h, pk_h, 0, &trustee_kps[0]);
+        let ss1 = SignedStatement::public_key(&cfg_h, &pk_h, 0, &trustee_kps[0]);
         let act = output.combine_shares[0];
         let pk_path = ls1.set_pk(&act, pk, &ss1);
         prot.board.set_pk(&pk_path, 0);
@@ -659,7 +675,7 @@ mod tests {
         assert!(output.check_pk.len() == 1);
         let act = output.check_pk[0];
 
-        let ss2 = SignedStatement::public_key(&cfg_h, pk_h, 0, &trustee_kps[1]);
+        let ss2 = SignedStatement::public_key(&cfg_h, &pk_h, 0, &trustee_kps[1]);
         let pk_stmt_path = ls2.set_pk_stmt(&act, &ss2);
         prot.board.set_pk_stmt(&pk_stmt_path, 0, 1);
 
@@ -669,22 +685,12 @@ mod tests {
 
 
 use serde::de::DeserializeOwned;
-
-
 use std::fs;
 use std::path::Path;
 use ed25519_dalek::{Keypair};
-
-
 use rand_core::OsRng;
 
-
-
-
 use crate::keymaker::Keymaker;
-
-
-
 use crate::localstore::*;
 
 
@@ -715,14 +721,10 @@ impl<E: Element + Serialize + DeserializeOwned,
             localstore
         }
     }
-
-    /* pub fn add_config<B: BulletinBoard<E, G>>(&self, cfg: &Config<E, G>, board: &mut B) {
-        let cfg_path = self.localstore.set_config(&cfg);
-        board.add_config(&cfg_path);
-    } */
     
-    pub fn run<B: BulletinBoard<E, G>>(&self, facts: Facts, board: &mut B) {
+    pub fn run<B: BulletinBoard<E, G>>(&self, facts: Facts, board: &mut B) -> u32 {
         let actions = facts.all_actions;
+        let ret = actions.len();
         let (self_index, trustees) =
         if let InputFact::ConfigPresent(ConfigPresent(_, _, trustees, self_t)) = facts.input_facts[facts.input_facts.len() - 1] {
             (Some(self_t), Some(trustees))
@@ -733,9 +735,6 @@ impl<E: Element + Serialize + DeserializeOwned,
         
         for action in actions {
             match action {
-                Act::AddConfig => {
-
-                }
                 Act::CheckConfig(cfg) => {
                     println!("I Should check the config now!");
                     // FIXME validate the config somehow
@@ -757,51 +756,46 @@ impl<E: Element + Serialize + DeserializeOwned,
                     let cfg = board.get_config(cfg_h).unwrap();
                     let hashes = util::clear_zeroes(&hs);
                     assert!(hashes.len() as u32 == trustees.unwrap());
-                    /* let mut shares = Vec::with_capacity(hashes.len());
-                    for (i, h) in hashes.iter().enumerate() {
-                        let next = board.get_share(cnt, i as u32, *h).unwrap();
-                        println!("*** Verifying proof!");
-                        assert!(Keymaker::verify_share(&cfg.group, &next.share, &next.proof));
-                        shares.push(next.share);
-                    }
-                    let pk = Keymaker::combine_pks(&cfg.group, shares);
-                    */
                     let pk = self.get_pk(board, hashes, &cfg.group, cnt).unwrap();
                     let pk_h = hashing::hash(&pk);
-                    let ss = SignedStatement::public_key(&cfg_h, pk_h, cnt, &self.keypair);
+                    let ss = SignedStatement::public_key(&cfg_h, &pk_h, cnt, &self.keypair);
                     
                     let pk_path = self.localstore.set_pk(&action, pk, &ss);
                     board.set_pk(&pk_path, cnt);
                 }
-                Act::CheckPk(cfg_h, cnt, h1, hs) => {
+                Act::CheckPk(cfg_h, cnt, pk_h, hs) => {
                     println!("I Should check pk now! (contest=[{}], self=[{}])", cnt, self_index.unwrap());
                     let cfg = board.get_config(cfg_h).unwrap();
                     let hashes = util::clear_zeroes(&hs);
                     let pk = self.get_pk(board, hashes, &cfg.group, cnt).unwrap();
-                    let pk_h = hashing::hash(&pk);
-                    assert!(pk_h == h1);
-                    let ss = SignedStatement::public_key(&cfg_h, h1, cnt, &self.keypair);
+                    let pk_h_ = hashing::hash(&pk);
+                    assert!(pk_h == pk_h);
+                    let ss = SignedStatement::public_key(&cfg_h, &pk_h, cnt, &self.keypair);
                     let pk_stmt_path = self.localstore.set_pk_stmt(&action, &ss);
                     board.set_pk_stmt(&pk_stmt_path, cnt, self_index.unwrap());
-                    // prot.board.set_pk_stmt(&pk_stmt_path, 0, 1);
                 }
-                Act::CheckMix(_cfg, _cnt, _t, _h1, _h2) => {
+                Act::Mix(cfg_h, cnt, bh, pk_h) => {
+                    println!("I Should mix now! (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    let cfg = board.get_config(cfg_h).unwrap();
+                    let ballots = board.get_ballots(cnt, bh).unwrap();
+                    let pk = board.get_pk(cnt, pk_h).unwrap();
+                }
+                Act::CheckMix(_cfg_h, _cnt, _t, pk_h, _h1, _h2) => {
                     
                 }
-                Act::Mix(_cfg, _cnt, _h1) => {
+                Act::PartialDecrypt(_cfg_h, _cnt, _h1) => {
                     
                 }
-                Act::PartialDecrypt(_cfg, _cnt, _h1) => {
+                Act::CombineDecryptions(_cfg_h, _cnt, _hs) => {
                     
                 }
-                Act::CombineDecryptions(_cfg, _cnt, _hs) => {
-                    
-                }
-                Act::CheckPlaintexts(_cfg, _cnt, _h1, _hs) => {
+                Act::CheckPlaintexts(_cfg_h, _cnt, _h1, _hs) => {
                     
                 }
             }
         }
+
+        ret as u32
     }
 
     fn share(&self) -> Keyshare<E, G> {
@@ -821,7 +815,7 @@ impl<E: Element + Serialize + DeserializeOwned,
         let mut shares = Vec::with_capacity(hs.len());
         for (i, h) in hs.iter().enumerate() {
             let next = board.get_share(cnt, i as u32, *h).unwrap();
-            println!("*** Verifying proof!");
+            println!("*** Verifying share proof!");
             let ok = Keymaker::verify_share(group, &next.share, &next.proof);
             if ok {
                 shares.push(next.share);
@@ -863,6 +857,7 @@ impl<E: Element + Serialize + DeserializeOwned,
     fn get_facts(&self, board: &B) -> Vec<InputFact> {
     
         let self_pk = self.trustee.keypair.public;
+        let now = std::time::Instant::now();
         let svs = board.get_statements();
         println!("SVerifiers: {}", svs.len());
         let mut facts: Vec<InputFact> = svs.iter()
@@ -888,6 +883,7 @@ impl<E: Element + Serialize + DeserializeOwned,
             );
             facts.push(f);
         };
+        println!("Input facts derived in [{}ms]", now.elapsed().as_millis());
 
         facts
     }
@@ -897,15 +893,18 @@ impl<E: Element + Serialize + DeserializeOwned,
         let input_facts = self.get_facts(board);
         load_facts(&input_facts, &mut runtime);
         
+        let now = std::time::Instant::now();
         let output = runtime.run();
+        println!("Output facts derived in [{}ms]", now.elapsed().as_millis());
+        
         Facts::new(input_facts, output)
     }
 
-    pub fn step(&self, board: &mut B) {
+    pub fn step(&self, board: &mut B) -> u32 {
         let output = self.process_facts(&board);
 
         output.print();
 
-        self.trustee.run(output, board);
+        self.trustee.run(output, board)
     }
 }

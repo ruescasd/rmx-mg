@@ -67,7 +67,6 @@ pub fn modify_file(file: &str) {
     writeln!(file, "New line at {}", now).unwrap();
 }
 
-
 pub fn random_ristretto_ballots<G: Group<RistrettoPoint>>(n: usize, group: &G) -> Ballots<RistrettoPoint> {
 
     let cs = (0..n).into_par_iter().map(|_| {

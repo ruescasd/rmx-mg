@@ -46,13 +46,6 @@ impl<E: Element + Serialize + DeserializeOwned,
             phantom_g: PhantomData
         }
     }
-    
-    pub fn set_config(&self, config: &Config<E, G>) -> ConfigPath {
-        let cfg_b = bincode::serialize(&config).unwrap();
-        ConfigPath (
-            self.set_work(&Act::AddConfig, vec![cfg_b]).remove(0)
-        )
-    }
     pub fn set_config_stmt(&self, act: &Act, stmt: &SignedStatement) -> ConfigStmtPath {
         assert!(matches!(act, Act::CheckConfig(_)));
         assert!(matches!(stmt.statement.stype, StatementType::Config));

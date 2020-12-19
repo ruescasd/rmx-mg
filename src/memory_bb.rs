@@ -13,6 +13,7 @@ use crate::hashing::{HashBytes, Hash};
 use crate::hashing;
 use crate::bb::*;
 use crate::artifact::*;
+use crate::elgamal::PublicKey;
 use crate::statement::*;
 use crate::protocol::SVerifier;
 use crate::arithm::Element;
@@ -100,6 +101,9 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBullet
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> 
     BulletinBoard<E, G> for MemoryBulletinBoard<E, G> {
     
+    fn list(&self) -> Vec<String> {
+        self.basic.list()
+    }
     fn add_config(&mut self, path: &ConfigPath) {
         self.put(Self::CONFIG, &path.0);
     }
@@ -109,6 +113,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
 
         Some(ret)
     }
+    
     fn get_config(&self, hash: Hash) -> Option<Config<E, G>> {
         let ret = self.get(Self::CONFIG.to_string(), hash).ok()?;
 
@@ -117,6 +122,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
     fn add_config_stmt(&mut self, path: &ConfigStmtPath, trustee: u32) {
         self.put(&Self::config_stmt(trustee), &path.0);
     }
+    
     fn add_share(&mut self, path: &KeysharePath, contest: u32, trustee: u32) {
         self.put(&Self::share(contest, trustee), &path.0);
         self.put(&Self::share_stmt(contest, trustee), &path.1);
@@ -127,6 +133,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
 
         Some(ret)
     }
+    
     fn set_pk(&mut self, path: &PkPath, contest: u32) {
         // 0: trustee 0 combines shares into pk
         self.put(&Self::public_key(contest, 0), &path.0);
@@ -135,10 +142,25 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
     fn set_pk_stmt(&mut self, path: &PkStmtPath, contest: u32, trustee: u32) {
         self.put(&Self::public_key_stmt(contest, trustee), &path.0);
     }
+    fn get_pk(&mut self, contest: u32, hash: Hash) -> Option<PublicKey<E, G>> {
+        let key = Self::public_key(contest, 0).to_string();
+        let ret = self.get(key, hash).ok()?;
 
-    fn list(&self) -> Vec<String> {
-        self.basic.list()
+        Some(ret)
     }
+
+    fn add_ballots(&mut self, path: &BallotsPath, contest: u32) {
+        self.put(&Self::ballots(contest), &path.0);
+        self.put(&Self::ballots_stmt(contest), &path.1);
+    }
+    fn get_ballots(&self, contest: u32, hash: Hash) -> Option<Ballots<E>> {
+        let key = Self::ballots(contest).to_string();
+        let ret = self.get(key, hash).ok()?;
+
+        Some(ret)
+    }
+
+    
     fn get_statements(&self) -> Vec<SVerifier> {
         
         let sts = self.get_stmts();
@@ -165,17 +187,24 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> 
     Names for MemoryBulletinBoard <E, G>{}
 
-fn artifact_location(path: &str) -> (u32, u32) {
+fn artifact_location(path: &str) -> (i32, u32) {
     let p = Path::new(&path);
     let comp: Vec<&str> = p.components()
         .take(2)
         .map(|comp| comp.as_os_str().to_str().unwrap())
         .collect();
     
-    let auth: u32 = comp[0].parse().unwrap_or(0);
+    let trustee: i32 =
+    if comp[0] == "ballotbox" {
+        -1
+    }
+    else {
+        comp[0].parse().unwrap()
+    };
+    // root artifacts (eg config) have no contest
     let contest: u32 = comp[1].parse().unwrap_or(0);
 
-    (auth, contest)
+    (trustee, contest)
 }
 
 #[cfg(test)]

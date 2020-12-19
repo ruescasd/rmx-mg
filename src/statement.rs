@@ -32,7 +32,7 @@ impl SignedStatement {
             signature
         }
     }
-    pub fn public_key(cfg_h: &hashing::Hash, pk_h: hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
+    pub fn public_key(cfg_h: &hashing::Hash, pk_h: &hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
         let statement = Statement::public_key(cfg_h.to_vec(), contest, pk_h.to_vec());
         let stmt_h = hashing::hash(&statement);
         let signature = pk.sign(&stmt_h);
@@ -41,8 +41,8 @@ impl SignedStatement {
             signature
         }
     }
-    pub fn ballots(cfg_h: &hashing::Hash, pk_h: hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
-        let statement = Statement::public_key(cfg_h.to_vec(), contest, pk_h.to_vec());
+    pub fn ballots(cfg_h: &hashing::Hash, ballots_h: &hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
+        let statement = Statement::ballots(cfg_h.to_vec(), contest, ballots_h.to_vec());
         let stmt_h = hashing::hash(&statement);
         let signature = pk.sign(&stmt_h);
         SignedStatement {

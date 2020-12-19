@@ -380,6 +380,14 @@ impl<E: Element, G: Group<E>> HashBytes for Pk<E, G> {
     }
 }
 
+use crate::artifact::Ballots;
+
+impl<E: Element> HashBytes for Ballots<E> {
+    fn get_bytes(&self) -> Vec<u8> {
+        concat_bytes(&self.ciphertexts)
+    }
+}
+
 use crate::artifact::Mix;
 
 impl<E: Element> HashBytes for Mix<E> {
@@ -421,9 +429,6 @@ impl HashBytes for Hash {
 impl HashBytes for Act {
     fn get_bytes(&self) -> Vec<u8> {
         match self {
-            Act::AddConfig => {
-                vec![]
-            },
             Act::CheckConfig(h) => {
                 let mut v = vec![1u8];
                 v.extendl(&h.to_vec());
@@ -436,21 +441,60 @@ impl HashBytes for Act {
                 v
             },
             Act::CombineShares(h, i, s) => {
-                let mut v = vec![2u8];
+                let mut v = vec![3u8];
                 v.extendl(&h.to_vec());
                 v.extendl(&i.to_le_bytes().to_vec());
                 v.extendl(&concat_bytes_iter(s));
                 v
             },
             Act::CheckPk(h, i, pk, s) => {
-                let mut v = vec![3u8];
+                let mut v = vec![4u8];
                 v.extendl(&h.to_vec());
                 v.extendl(&i.to_le_bytes().to_vec());
                 v.extendl(&pk.to_vec());
                 v.extendl(&concat_bytes_iter(s));
                 v
             },
-            _ => panic!()
+            Act::Mix(h, i, bs, pk_h) => {
+                let mut v = vec![5u8];
+                v.extendl(&h.to_vec());
+                v.extendl(&i.to_le_bytes().to_vec());
+                v.extendl(&bs.to_vec());
+                v.extendl(&pk_h.to_vec());
+                v
+            }
+            Act::CheckMix(h, i, t, m, bs, pk_h) => {
+                let mut v = vec![6u8];
+                v.extendl(&h.to_vec());
+                v.extendl(&i.to_le_bytes().to_vec());
+                v.extendl(&t.to_le_bytes().to_vec());
+                v.extendl(&m.to_vec());
+                v.extendl(&bs.to_vec());
+                v.extendl(&pk_h.to_vec());
+                v
+            }
+            Act::PartialDecrypt(h, i, bs) => {
+                let mut v = vec![7u8];
+                v.extendl(&h.to_vec());
+                v.extendl(&i.to_le_bytes().to_vec());
+                v.extendl(&bs.to_vec());
+                v
+            }
+            Act::CombineDecryptions(h, i, ds) => {
+                let mut v = vec![8u8];
+                v.extendl(&h.to_vec());
+                v.extendl(&i.to_le_bytes().to_vec());
+                v.extendl(&concat_bytes_iter(ds));
+                v
+            }
+            Act::CheckPlaintexts(h, i, m, ds) => {
+                let mut v = vec![9u8];
+                v.extendl(&h.to_vec());
+                v.extendl(&i.to_le_bytes().to_vec());
+                v.extendl(&m.to_vec());
+                v.extendl(&concat_bytes_iter(ds));
+                v
+            }
         }
     }
 }

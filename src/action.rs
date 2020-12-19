@@ -4,13 +4,12 @@ use crate::protocol::*;
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
 pub enum Act {
-    AddConfig,
     CheckConfig(ConfigHash),
     PostShare(ConfigHash, ContestIndex),
     CombineShares(ConfigHash, ContestIndex, Hashes),
     CheckPk(ConfigHash, ContestIndex, PkHash, Hashes),
-    Mix(ConfigHash, ContestIndex, BallotsHash),
-    CheckMix(ConfigHash, ContestIndex, TrusteeIndex, MixHash, BallotsHash),
+    Mix(ConfigHash, ContestIndex, BallotsHash, PkHash),
+    CheckMix(ConfigHash, ContestIndex, TrusteeIndex, PkHash, MixHash, BallotsHash),
     PartialDecrypt(ConfigHash, ContestIndex, BallotsHash),
     CombineDecryptions(ConfigHash, ContestIndex, Hashes),
     CheckPlaintexts(ConfigHash, ContestIndex, MixHash, Hashes)
@@ -21,16 +20,15 @@ use crate::util::{short, shortm};
 impl fmt::Debug for Act {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Act::AddConfig => write!(f, "AddConfig"),
             Act::CheckConfig(cfg) => write!(f, "CheckConfig {:?}", short(cfg)),
             Act::PostShare(cfg, cnt) => write!(f, "PostShare contest=[{}] for config: {:?}", cnt, short(cfg)),
             Act::CombineShares(_cfg, cnt, hs) => write!(f, "CombineShares contest=[{}] shares: {:?}", cnt, shortm(hs)),
             Act::CheckPk(_cfg, cnt, h1, hs) => write!(f, "CheckPk contest=[{}], pk {:?} shares: {:?}", cnt, short(h1), shortm(hs)),
-            Act::CheckMix(_cfg, _cnt, _t, _h1, _h2) => write!(f, "CheckMix"),
-            Act::Mix(_cfg, _cnt, _h1) => write!(f, "Mix"),
-            Act::PartialDecrypt(_cfg, _cnt, _h1) => write!(f, "PartialDecrypt"),
-            Act::CombineDecryptions(_cfg, _cnt, _hs) => write!(f, "CombineDecryptions"),
-            Act::CheckPlaintexts(_cfg, _cnt, _h1, _hs) => write!(f, "CheckPlaintexts")
+            Act::Mix(cfg, _cnt, _h1, pk_h) => write!(f, "Mix for config: {:?}", short(cfg)),
+            Act::CheckMix(cfg, _cnt, _t, _h1, _h2, pk_h) => write!(f, "CheckMix for config: {:?}", short(cfg)),
+            Act::PartialDecrypt(cfg, _cnt, _h1) => write!(f, "PartialDecrypt for config: {:?}", short(cfg)),
+            Act::CombineDecryptions(cfg, _cnt, _hs) => write!(f, "CombineDecryptions for config: {:?}", short(cfg)),
+            Act::CheckPlaintexts(cfg, _cnt, _h1, _hs) => write!(f, "CheckPlaintexts for config: {:?}", short(cfg))
         }
     }
 }

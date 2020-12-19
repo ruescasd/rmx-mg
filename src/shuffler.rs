@@ -41,8 +41,6 @@ pub struct Responses<E: Element> {
     pub s_primes: Vec<E::Exp>
 }
 
-// FIXME cannot get type safety and serde to work, so we're using standalone exponents here
-// type safety is maintained in gen/check proof signatures
 #[derive(Serialize, Deserialize)]
 pub struct ShuffleProof<E: Element> {
     pub t: TValues<E>,
