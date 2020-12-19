@@ -396,7 +396,7 @@ mod tests {
         let ok = shuffler.check_proof(&proof, &es, &e_primes);
         assert!(ok == true);
 
-        let mix = Mix{
+        let mix = Mix {
             mixed_ballots: e_primes,
             proof: proof
         };

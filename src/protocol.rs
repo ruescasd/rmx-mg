@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::convert::TryInto;
+use std::fmt::Debug;
 
 use serde::{Serialize};
 use ed25519_dalek::PublicKey as SPublicKey;
@@ -19,7 +20,7 @@ use crate::arithm::Element;
 use crate::group::Group;
 use crate::action::Act;
 use crate::util::short;
-use std::fmt::Debug;
+use crate::shuffler::*;
 
 pub type TrusteeTotal = u32;
 pub type TrusteeIndex = u32;
@@ -779,6 +780,20 @@ impl<E: Element + Serialize + DeserializeOwned,
                     let cfg = board.get_config(cfg_h).unwrap();
                     let ballots = board.get_ballots(cnt, bh).unwrap();
                     let pk = board.get_pk(cnt, pk_h).unwrap();
+                    let group = &cfg.group;
+                    let hs = generators(ballots.ciphertexts.len() + 1, group);
+                    let exp_hasher = &*group.exp_hasher();
+                    let shuffler = Shuffler {
+                        pk: &pk,
+                        generators: &hs,
+                        hasher: exp_hasher
+                    };
+                    let (e_primes, rs, perm) = shuffler.gen_shuffle(&ballots.ciphertexts);
+                    let proof = shuffler.gen_proof(&ballots.ciphertexts, &e_primes, &rs, &perm);
+                    let mix = Mix {
+                        mixed_ballots: e_primes,
+                        proof: proof
+                    };
                 }
                 Act::CheckMix(_cfg_h, _cnt, _t, pk_h, _h1, _h2) => {
                     
