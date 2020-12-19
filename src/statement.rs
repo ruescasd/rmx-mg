@@ -50,6 +50,35 @@ impl SignedStatement {
             signature
         }
     }
+    pub fn mix(cfg_h: &hashing::Hash, mix_h: &hashing::Hash, ballots_h: &hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
+        let statement = Statement::mix(cfg_h.to_vec(), contest, mix_h.to_vec(), ballots_h.to_vec());
+        let stmt_h = hashing::hash(&statement);
+        let signature = pk.sign(&stmt_h);
+        SignedStatement {
+            statement,
+            signature
+        }
+    }
+    /*
+    pub fn pdecryptions(cfg_h: &hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
+        let statement = Statement::mix(cfg_h.to_vec(), contest, mix_h.to_vec(), ballots_h.to_vec());
+        let stmt_h = hashing::hash(&statement);
+        let signature = pk.sign(&stmt_h);
+        SignedStatement {
+            statement,
+            signature
+        }
+    }
+    pub fn plaintexts(cfg_h: &hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
+        let statement = Statement::mix(cfg_h.to_vec(), contest, mix_h.to_vec(), ballots_h.to_vec());
+        let stmt_h = hashing::hash(&statement);
+        let signature = pk.sign(&stmt_h);
+        SignedStatement {
+            statement,
+            signature
+        }
+    }*/
+    
 }
 
 #[repr(u8)]

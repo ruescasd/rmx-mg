@@ -24,8 +24,8 @@ impl fmt::Debug for Act {
             Act::PostShare(cfg, cnt) => write!(f, "PostShare contest=[{}] for config: {:?}", cnt, short(cfg)),
             Act::CombineShares(_cfg, cnt, hs) => write!(f, "CombineShares contest=[{}] shares: {:?}", cnt, shortm(hs)),
             Act::CheckPk(_cfg, cnt, h1, hs) => write!(f, "CheckPk contest=[{}], pk {:?} shares: {:?}", cnt, short(h1), shortm(hs)),
-            Act::Mix(cfg, _cnt, _h1, pk_h) => write!(f, "Mix for config: {:?}", short(cfg)),
-            Act::CheckMix(cfg, _cnt, _t, _h1, _h2, pk_h) => write!(f, "CheckMix for config: {:?}", short(cfg)),
+            Act::Mix(cfg, cnt, _bh, pk_h) => write!(f, "Mix contest=[{}] for config: {:?}", cnt, short(cfg)),
+            Act::CheckMix(cfg, cnt, _t, _mh, _bh, pk_h) => write!(f, "CheckMix contest=[{}] for config: {:?}", cnt, short(cfg)),
             Act::PartialDecrypt(cfg, _cnt, _h1) => write!(f, "PartialDecrypt for config: {:?}", short(cfg)),
             Act::CombineDecryptions(cfg, _cnt, _hs) => write!(f, "CombineDecryptions for config: {:?}", short(cfg)),
             Act::CheckPlaintexts(cfg, _cnt, _h1, _hs) => write!(f, "CheckPlaintexts for config: {:?}", short(cfg))

@@ -770,7 +770,7 @@ impl<E: Element + Serialize + DeserializeOwned,
                     let hashes = util::clear_zeroes(&hs);
                     let pk = self.get_pk(board, hashes, &cfg.group, cnt).unwrap();
                     let pk_h_ = hashing::hash(&pk);
-                    assert!(pk_h == pk_h);
+                    assert!(pk_h == pk_h_);
                     let ss = SignedStatement::public_key(&cfg_h, &pk_h, cnt, &self.keypair);
                     let pk_stmt_path = self.localstore.set_pk_stmt(&action, &ss);
                     board.set_pk_stmt(&pk_stmt_path, cnt, self_index.unwrap());

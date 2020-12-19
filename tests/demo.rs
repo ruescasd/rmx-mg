@@ -106,7 +106,7 @@ fn demo() {
         
         let f1 = util::write_tmp(ballots_b).unwrap();
         let f2 = util::write_tmp(ss_b).unwrap();
-        println!("adding ballots");
+        println!("Adding {} ballots", ballots.ciphertexts.len());
         bb.add_ballots(&BallotsPath(f1.path().to_path_buf(), f2.path().to_path_buf()), i);
     }
     
