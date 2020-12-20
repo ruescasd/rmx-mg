@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::hashing;
 use crate::protocol::ContestIndex;
+use crate::protocol::TrusteeIndex;
 
 type VHash = Vec<u8>;
 
@@ -50,8 +51,8 @@ impl SignedStatement {
             signature
         }
     }
-    pub fn mix(cfg_h: &hashing::Hash, mix_h: &hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
-        let statement = Statement::mix(cfg_h.to_vec(), contest, mix_h.to_vec());
+    pub fn mix(cfg_h: &hashing::Hash, mix_h: &hashing::Hash, contest: u32, pk: &Keypair, mixing_trustee: Option<TrusteeIndex>) -> SignedStatement {
+        let statement = Statement::mix(cfg_h.to_vec(), contest, mix_h.to_vec(), mixing_trustee);
         let stmt_h = hashing::hash(&statement);
         let signature = pk.sign(&stmt_h);
         SignedStatement {
@@ -96,7 +97,11 @@ pub enum StatementType {
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
 pub struct Statement {
     pub stype: StatementType, 
-    pub contest: ContestIndex, 
+    pub contest: ContestIndex,
+    // special case for mixes where we need to keep track of 
+    // target trustee (the trustee producing the mix
+    // which the local trustee is signing)
+    pub trustee_aux: Option<TrusteeIndex>,
     pub hashes: Vec<VHash>
 }
 
@@ -105,6 +110,7 @@ impl Statement {
         Statement {
             stype: StatementType::Config,
             contest: 0,
+            trustee_aux: None,
             hashes: vec![config]
         }
     }
@@ -112,6 +118,7 @@ impl Statement {
         Statement {
             stype: StatementType::Keyshare,
             contest: contest,
+            trustee_aux: None,
             hashes: vec![config, share]
         }
     }
@@ -119,6 +126,7 @@ impl Statement {
         Statement {
             stype: StatementType::PublicKey,
             contest: contest,
+            trustee_aux: None,
             hashes: vec![config, public_key]
         }
     }
@@ -126,13 +134,15 @@ impl Statement {
         Statement {
             stype: StatementType::Ballots,
             contest: contest,
+            trustee_aux: None,
             hashes: vec![config, ballots]
         }
     }
-    pub fn mix(config: VHash, contest: u32, mix: VHash) -> Statement {
+    pub fn mix(config: VHash, contest: u32, mix: VHash, mixing_trustee: Option<u32>) -> Statement {
         Statement {
             stype: StatementType::Mix,
             contest: contest,
+            trustee_aux: mixing_trustee,
             hashes: vec![config, mix]
         }
     }
@@ -140,6 +150,7 @@ impl Statement {
         Statement {
             stype: StatementType::PDecryption,
             contest: contest,
+            trustee_aux: None,
             hashes: vec![config, partial_decryptions]
         }
     }
@@ -147,6 +158,7 @@ impl Statement {
         Statement {
             stype: StatementType::Plaintexts,
             contest: contest,
+            trustee_aux: None,
             hashes: vec![config, plaintexts]
         }
     }

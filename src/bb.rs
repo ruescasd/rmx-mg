@@ -27,7 +27,7 @@ pub trait Names {
     
     fn mix(contest: u32, auth: u32) -> String { format!("{}/{}/mix", auth, contest).to_string() }
     fn mix_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/mix.stmt", auth, contest).to_string() }
-    
+    fn mix_stmt_other(contest: u32, auth: u32, other_t: u32) -> String { format!("{}/{}/mix.{}.stmt", auth, contest, other_t).to_string() }
 
     fn decryption(contest: u32, auth: u32) -> String { format!("{}/{}/decryption", auth, contest).to_string() }
     fn decryption_stmt(contest: u32, auth: u32) -> String { format!("{}/{}/decryption.stmt", auth, contest).to_string() }
@@ -60,23 +60,32 @@ pub trait BulletinBoard<E: Element, G: Group<E>> {
     
     fn add_config(&mut self, config: &ConfigPath);
     fn get_config_unsafe(&self) -> Option<Config<E, G>>;
-    fn get_config(&self, hash: Hash) -> Option<Config<E, G>>;
+    
     fn add_config_stmt(&mut self, stmt: &ConfigStmtPath, trustee: u32);
+    fn get_config(&self, hash: Hash) -> Option<Config<E, G>>;
     
     fn add_share(&mut self, path: &KeysharePath, contest: u32, trustee: u32);
-    fn get_share(&self, contest: u32, auth: u32, hash: Hash) -> Option<Keyshare<E, G>>;
+    fn get_share(&self, contest: u32, trustee: u32, hash: Hash) -> Option<Keyshare<E, G>>;
     
-    fn get_pk(&mut self, contest: u32, hash: Hash) -> Option<PublicKey<E, G>>;
     fn set_pk(&mut self, path: &PkPath, contest: u32);
     fn set_pk_stmt(&mut self, path: &PkStmtPath, contest: u32, trustee: u32);
+    fn get_pk(&mut self, contest: u32, hash: Hash) -> Option<PublicKey<E, G>>;
 
     fn add_ballots(&mut self, path: &BallotsPath, contest: u32);
     fn get_ballots(&self, contest: u32, hash: Hash) -> Option<Ballots<E>>;
     
+    fn add_mix(&mut self, path: &MixPath, contest: u32, trustee: u32);
+    fn add_mix_stmt(&mut self, path: &MixStmtPath, contest: u32, trustee: u32, other_t: u32);
+    fn get_mix(&self, contest: u32, trustee: u32, hash: Hash) -> Option<Mix<E>>;
+
+    // fn add_pdecryptions(&mut self, path: &PartialDecryptionsPath, contest: u32, trustee: u32);
+    // fn get_pdecryptions(&self, contest: u32, auth: u32, hash: Hash) -> Option<PartialDecryption<E>>;
+
+    // fn add_plaintexts(&mut self, path: &PlaintextsPath, contest: u32);
+    // fn add_plaintexts_stmt(&mut self, path: &PlaintextsStmtPath, contest: u32, trustee: u32);
+    // fn get_plaintexts(&self, contest: u32, hash: Hash) -> Option<Plaintexts<E>>;
+
     fn get_statements(&self) -> Vec<SVerifier>;
-    
-    
-    
     fn get_stmts(&self) -> Vec<String> {
         self.list().into_iter().filter(|s| {
             s.ends_with(".stmt")

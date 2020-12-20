@@ -14,6 +14,7 @@ use crate::hashing;
 use crate::artifact::*;
 use crate::statement::*;
 use crate::elgamal::PublicKey;
+use crate::elgamal::Ciphertext;
 use crate::bb::*;
 use crate::util;
 use crate::arithm::Element;
@@ -33,7 +34,7 @@ pub type MixHash = Hash;
 pub type DecryptionHash = Hash;
 pub type PlaintextsHash = Hash;
 pub type Hashes = [Hash; 10];
-type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesOk>, HashSet<PkOk>, 
+type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesAll>, HashSet<PkOk>, 
     HashSet<PkSharesUpTo>, HashSet<ConfigSignedUpTo>, HashSet<Contest>,
     HashSet<PkSignedUpTo>, HashSet<MixSignedUpTo>);
 
@@ -145,6 +146,7 @@ impl SVerifier {
             &self.statement.statement.stype, &self.trustee, &self.contest
         );
         
+        let mixer_t = statement.trustee_aux.unwrap_or(self_t);
 
         match statement.stype {
             StatementType::Config => {
@@ -176,16 +178,14 @@ impl SVerifier {
             },
             StatementType::Mix => {
                 let mix_h = util::to_u8_64(&statement.hashes[1]);
-                let ballots_h = util::to_u8_64(&statement.hashes[2]);
                 self.ret(
-                    InputFact::mix_signed_by(config_h, self.contest, mix_h, self_t),
+                    InputFact::mix_signed_by(config_h, self.contest, mix_h, mixer_t, self_t),
                     verified.is_ok()
                 )
 
             },
             StatementType::PDecryption => {
                 let pdecryptions_h = util::to_u8_64(&statement.hashes[1]);
-                let ballots_h = util::to_u8_64(&statement.hashes[2]);
                 self.ret(
                     InputFact::decryption_signed_by(config_h, self.contest, pdecryptions_h, self_t),
                     verified.is_ok()
@@ -194,7 +194,6 @@ impl SVerifier {
             },
             StatementType::Plaintexts => {
                 let plaintexts_h = util::to_u8_64(&statement.hashes[1]);
-                let pdecryptions_h = util::to_u8_64(&statement.hashes[2]);
                 self.ret(
                     InputFact::plaintexts_signed_by(config_h, self.contest, plaintexts_h, self_t),
                     verified.is_ok()
@@ -247,9 +246,9 @@ impl InputFact {
         InputFact::BallotsSigned(BallotsSigned(c, contest, ballots))
     }
     fn mix_signed_by(c: ConfigHash, contest: ContestIndex, mix: MixHash, 
-        trustee: TrusteeIndex) -> InputFact {
+        mixer_t: TrusteeIndex, signer_t: TrusteeIndex) -> InputFact {
         
-        InputFact::MixSignedBy(MixSignedBy(c, contest, mix, trustee))
+        InputFact::MixSignedBy(MixSignedBy(c, contest, mix, mixer_t, signer_t))
     }
     fn decryption_signed_by(c: ConfigHash, contest: ContestIndex, decryption: DecryptionHash, 
         trustee: TrusteeIndex) -> InputFact {
@@ -300,7 +299,7 @@ pub struct Facts {
     pub combine_decryptions: Vec<Act>,
     pub check_plaintexts: Vec<Act>,
     config_ok: HashSet<ConfigOk>,
-    pk_shares_ok: HashSet<PkSharesOk>,
+    pk_shares_ok: HashSet<PkSharesAll>,
     pk_ok: HashSet<PkOk>
 }
 
@@ -363,7 +362,7 @@ impl Facts {
         }
         let next = &self.pk_shares_ok;
         for f in next {
-            println!("* PkSharesOk {:?}", short(&f.0));
+            println!("* PkSharesAll {:?}", short(&f.0));
         }
         let next = &self.pk_ok;
         for f in next {
@@ -403,7 +402,7 @@ crepe! {
     @input
     struct BallotsSigned(ConfigHash, ContestIndex, BallotsHash);
     @input
-    struct MixSignedBy(ConfigHash, ContestIndex, MixHash, TrusteeIndex);
+    struct MixSignedBy(ConfigHash, ContestIndex, MixHash, TrusteeIndex, TrusteeIndex);
     @input
     struct DecryptionSignedBy(ConfigHash, ContestIndex, DecryptionHash, TrusteeIndex);
     @input
@@ -420,7 +419,7 @@ crepe! {
     struct ConfigOk(ConfigHash);
     // 2
     @output
-    struct PkSharesOk(ConfigHash, ContestIndex, Hashes);
+    struct PkSharesAll(ConfigHash, ContestIndex, Hashes);
     // 3
     @output
     struct PkOk(ConfigHash, ContestIndex, PkHash);
@@ -439,6 +438,12 @@ crepe! {
     // 8
     @output
     struct MixSignedUpTo(ConfigHash, ContestIndex, MixHash, TrusteeIndex);
+    // 9
+    // @output
+    // struct MixOk(ConfigHash, ContestIndex, MixHash);
+    // 10
+    // @output
+    // struct ContestMixedUpTo(ConfigHash, ContestIndex, BallotsHash);
     
     Do(Act::CheckConfig(config)) <- 
         ConfigPresent(config, _, _, self_t),
@@ -451,7 +456,7 @@ crepe! {
         !PkShareSignedBy(config, contest, _, self_t);
     
     Do(Act::CombineShares(config, contest, hashes)) <- 
-        PkSharesOk(config, contest, hashes),
+        PkSharesAll(config, contest, hashes),
         ConfigPresent(config, _, _, 0),
         ConfigOk(config),
         !PkSignedBy(config, contest, _, 0);
@@ -459,7 +464,7 @@ crepe! {
     Do(Act::CheckPk(config, contest, pk_hash, hashes)) <- 
         ConfigPresent(config, _, _, self_t),
         ConfigOk(config),
-        PkSharesOk(config, contest, hashes),
+        PkSharesAll(config, contest, hashes),
         PkSignedBy(config, contest, pk_hash, 0),
         !PkSignedBy(config, contest, pk_hash, self_t);
 
@@ -469,14 +474,41 @@ crepe! {
         PkOk(config, contest, pk_hash),
         ConfigPresent(config, _, _, 0),
         ConfigOk(config),
-        !MixSignedBy(config, contest, _, 0);
+        !MixSignedBy(config, contest, _, 0, 0);
 
+    Do(Act::Mix(config, contest, mix_ballots_hash, pk_hash)) <- 
+        PkOk(config, contest, pk_hash),
+        ConfigPresent(config, _, _, self_t),
+        ConfigOk(config),
+        (self_t > 0),    
+        MixSignedBy(config, contest, mix_ballots_hash, self_t - 1, self_t - 1),
+        MixSignedBy(config, contest, mix_ballots_hash, self_t - 1, self_t),
+        !MixSignedBy(config, contest, _, self_t, self_t);
+  
+    Do(Act::CheckMix(config, contest, 0, mix_hash, ballots_hash, pk_hash)) <- 
+        MixSignedBy(config, contest, mix_hash, 0, _),    
+        BallotsSigned(config, contest, ballots_hash),
+        PkOk(config, contest, pk_hash),
+        ConfigPresent(config, _, _, self_t),
+        ConfigOk(config),
+        !MixSignedBy(config, contest, mix_hash, 0, self_t);
+/*
+    Do(Act::CheckMix(config, contest, trustee, mix_hash, mix_ballots_hash, pk_hash)) <- 
+        MixSignedBy(config, contest, mix_hash, trustee),
+        (trustee > 0),    
+        MixSignedBy(config, contest, mix_ballots_hash, trustee - 1),
+        PkOk(config, contest, pk_hash),
+        ConfigPresent(config, _, _, self_t),
+        ConfigOk(config),
+        !MixSignedBy(config, contest, mix_hash, self_t);
+    */
+        
     MixSignedUpTo(config, contest, mix_hash, 0) <-
-        MixSignedBy(config, contest, mix_hash, 0);
+        MixSignedBy(config, contest, mix_hash, mixer_t, signer_t);
 
-    MixSignedUpTo(config, contest, mix_hash, trustee + 1) <-
-        MixSignedUpTo(config, contest, mix_hash, trustee),
-        MixSignedBy(config, contest, mix_hash, trustee + 1);
+    MixSignedUpTo(config, contest, mix_hash, signer_t + 1) <-
+        MixSignedUpTo(config, contest, mix_hash, signer_t),
+        MixSignedBy(config, contest, mix_hash, poster_t, signer_t + 1);
     
     ConfigSignedUpTo(config, 0) <-
         ConfigSignedBy(config, 0);
@@ -498,7 +530,7 @@ crepe! {
         PkShareSignedBy(config, contest, share, trustee + 1),
         let shares = array_set(input_shares, trustee + 1, share);
 
-    PkSharesOk(config, contest, shares) <-
+    PkSharesAll(config, contest, shares) <-
         ConfigPresent(config, _, total_t, _),
         PkSharesUpTo(config, contest, total_t - 1, shares),
         ConfigOk(config);
@@ -543,7 +575,7 @@ mod tests {
     use ed25519_dalek::{Keypair};
     
     use uuid::Uuid;
-    use rand_core::OsRng;
+    use rand::rngs::OsRng;
     
     use rug::Integer;
 
@@ -698,7 +730,7 @@ use serde::de::DeserializeOwned;
 use std::fs;
 use std::path::Path;
 use ed25519_dalek::{Keypair};
-use rand_core::OsRng;
+use rand::rngs::OsRng;
 
 use crate::keymaker::Keymaker;
 use crate::localstore::*;
@@ -781,31 +813,56 @@ impl<E: Element + Serialize + DeserializeOwned,
                     let pk_h_ = hashing::hash(&pk);
                     assert!(pk_h == pk_h_);
                     let ss = SignedStatement::public_key(&cfg_h, &pk_h, cnt, &self.keypair);
+                    
                     let pk_stmt_path = self.localstore.set_pk_stmt(&action, &ss);
                     board.set_pk_stmt(&pk_stmt_path, cnt, self_index.unwrap());
                 }
                 Act::Mix(cfg_h, cnt, bh, pk_h) => {
-                    println!("I Should mix now! (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    let self_t = self_index.unwrap();
+                    println!("I Should mix now! (contest=[{}], self=[{}])", cnt, self_t);
                     let cfg = board.get_config(cfg_h).unwrap();
-                    let ballots = board.get_ballots(cnt, bh).unwrap();
+                    
+                    let ciphertexts = self.get_mix_src(board, cnt, self_t, bh);
                     let pk = board.get_pk(cnt, pk_h).unwrap();
                     let group = &cfg.group;
-                    let hs = generators(ballots.ciphertexts.len() + 1, group);
+                    let hs = generators(ciphertexts.len() + 1, group);
                     let exp_hasher = &*group.exp_hasher();
                     let shuffler = Shuffler {
                         pk: &pk,
                         generators: &hs,
                         hasher: exp_hasher
                     };
-                    let (e_primes, rs, perm) = shuffler.gen_shuffle(&ballots.ciphertexts);
-                    let proof = shuffler.gen_proof(&ballots.ciphertexts, &e_primes, &rs, &perm);
+                    let (e_primes, rs, perm) = shuffler.gen_shuffle(&ciphertexts);
+                    let proof = shuffler.gen_proof(&ciphertexts, &e_primes, &rs, &perm);
+                    assert!(shuffler.check_proof(&proof, &ciphertexts, &e_primes));
                     let mix = Mix {
                         mixed_ballots: e_primes,
                         proof: proof
                     };
+                    let mix_h = hashing::hash(&mix);
+                    println!("Mix generated ballots {:?} from {:?}", short(&mix_h), short(&bh));
+                    let ss = SignedStatement::mix(&cfg_h, &mix_h, cnt, &self.keypair, None);
+                    let mix_path = self.localstore.set_mix(&action, mix, &ss);
+                    board.add_mix(&mix_path, cnt, self_index.unwrap());
                 }
-                Act::CheckMix(_cfg_h, _cnt, _t, pk_h, _h1, _h2) => {
-                    
+                Act::CheckMix(cfg_h, cnt, trustee, mix_h, ballots_h, pk_h) => {
+                    let cfg = board.get_config(cfg_h).unwrap();
+                    println!("I should check mix now! (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    let mix = board.get_mix(cnt, trustee, mix_h).unwrap();
+                    let ciphertexts = self.get_mix_src(board, cnt, trustee, ballots_h);
+                    let pk = board.get_pk(cnt, pk_h).unwrap();
+                    let group = &cfg.group;
+                    let hs = generators(ciphertexts.len() + 1, group);
+                    let exp_hasher = &*group.exp_hasher();
+                    let shuffler = Shuffler {
+                        pk: &pk,
+                        generators: &hs,
+                        hasher: exp_hasher
+                    };
+                    let proof = mix.proof;
+                    println!("Verifying shuffle {:?} with source {:?}", short(&mix_h), short(&ballots_h));
+                    assert!(shuffler.check_proof(&proof, &ciphertexts, &mix.mixed_ballots));
+
                 }
                 Act::PartialDecrypt(_cfg_h, _cnt, _h1) => {
                     
@@ -822,6 +879,20 @@ impl<E: Element + Serialize + DeserializeOwned,
         ret as u32
     }
 
+    // ballots may come the ballot box, or an earlier mix
+    fn get_mix_src<B: BulletinBoard<E, G>>(&self, board: &B, contest: u32, 
+        mixing_trustee: u32, ballots_h: Hash) -> Vec<Ciphertext<E>> {
+
+        if mixing_trustee == 0 {
+            let ballots = board.get_ballots(contest, ballots_h).unwrap();
+            ballots.ciphertexts
+        }
+        else {
+            let mix = board.get_mix(contest, mixing_trustee - 1, ballots_h).unwrap();
+            mix.mixed_ballots
+        }
+    }
+    
     fn share(&self) -> Keyshare<E, G> {
         let (share, proof) = self.keymaker.share();
         let encrypted_sk = self.keymaker.get_encrypted_sk();

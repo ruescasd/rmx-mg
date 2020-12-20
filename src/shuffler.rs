@@ -1,6 +1,8 @@
 use std::sync::Mutex;
-use rand::Rng as rand_rng;
-use rand_core::OsRng;
+
+use rand::Rng;
+use rand::rngs::OsRng;
+
 use serde::{Deserialize, Serialize};
 use rayon::prelude::*;
 
@@ -9,9 +11,6 @@ use crate::group::*;
 use crate::elgamal::*;
 use crate::hashing;
 use crate::hashing::{HashBytes, HashTo};
-
-
-// type ParRng = RngCore + CryptoRng + Sync + Send;
 
 pub struct YChallengeInput<'a, E: Element + HashBytes, G: Group<E>> {
     pub es: &'a Vec<Ciphertext<E>>,
@@ -443,9 +442,8 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
 }
 
 // FIXME not kosher
-pub fn generators<E: Element, G: Group<E>>
-    (size: usize, group: &G) -> Vec<E> {
-
+pub fn generators<E: Element, G: Group<E>> (size: usize, group: &G) -> Vec<E> {
+    /*
     let mut ret: Vec<E> = Vec::with_capacity(size);
     
     for _ in 0..size {
@@ -453,7 +451,9 @@ pub fn generators<E: Element, G: Group<E>>
         ret.push(g);
     }
 
-    ret
+    ret*/
+    let seed = vec![3u8, 1u8, 4u8, 1u8, 5u8];
+    group.generators(size, seed)
 }
 
 fn gen_permutation(size: usize) -> Vec<usize> {

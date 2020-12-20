@@ -1,4 +1,6 @@
-use rand_core::OsRng;
+use rand::rngs::OsRng;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
 use curve25519_dalek::ristretto::{RistrettoPoint, CompressedRistretto};
@@ -9,7 +11,7 @@ use curve25519_dalek::traits::Identity;
 use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
-use crate::hashing::{HashTo, RistrettoHasher};
+use crate::hashing::{HashTo, RistrettoHasher, hash_bytes_256};
 use crate::util;
 
 impl Element for RistrettoPoint {
@@ -134,7 +136,22 @@ impl Group<RistrettoPoint> for RistrettoGroup {
     fn exp_hasher(&self) -> Box<dyn HashTo<Scalar>> {
         Box::new(RistrettoHasher)
     }
+
+    fn elem_hasher(&self) -> Box<dyn HashTo<RistrettoPoint>> {
+        Box::new(RistrettoHasher)
+    }
     
+    fn generators(&self, size: usize, seed: Vec<u8>) -> Vec<RistrettoPoint> {
+        let hashed = hash_bytes_256(seed);
+        let mut csprng: StdRng = SeedableRng::from_seed(hashed);
+        let mut ret: Vec<RistrettoPoint> = Vec::with_capacity(size);
+        for _ in 0..size {
+            let g = RistrettoPoint::random(&mut csprng);
+            ret.push(g);
+        }
+
+        ret
+    }
 }
 
 
@@ -143,7 +160,8 @@ mod tests {
     extern crate textplots;
     use textplots::{utils, Chart, Plot, Shape};
 
-    use rand_core::{OsRng, RngCore};
+    use rand::RngCore;  
+    use rand::rngs::OsRng;
 
     use curve25519_dalek::ristretto::{RistrettoPoint};
     use curve25519_dalek::traits::Identity;

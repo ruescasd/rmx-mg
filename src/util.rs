@@ -39,6 +39,13 @@ pub fn to_u8_30(input: &Vec<u8>) -> [u8; 30] {
     bytes
 }
 
+pub fn to_u8_32(input: &Vec<u8>) -> [u8; 32] {
+    assert_eq!(input.len(), 32);
+    let mut bytes = [0u8; 32];
+    bytes.copy_from_slice(&input);
+    bytes
+}
+
 pub fn to_u8_64(input: &Vec<u8>) -> [u8; 64] {
     assert_eq!(input.len(), 64);
     let mut bytes = [0u8; 64];

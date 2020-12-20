@@ -16,6 +16,8 @@ pub trait Group<E: Element>: HashBytes + Send + Sync + Sized + Clone {
     fn encode(&self, plaintext: E::Plaintext) -> E;
     fn decode(&self, element: E) -> E::Plaintext;
     fn exp_hasher(&self) -> Box<dyn HashTo<E::Exp>>;
+    fn elem_hasher(&self) -> Box<dyn HashTo<E>>;
+    fn generators(&self, size: usize, seed: Vec<u8>) -> Vec<E>;
     
     fn schnorr_prove(&self, secret: &E::Exp, public: &E, g: &E) -> Schnorr<E> {
         let r = self.rnd_exp();

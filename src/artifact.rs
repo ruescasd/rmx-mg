@@ -62,7 +62,7 @@ pub struct Plaintexts<E> {
 mod tests {  
     use uuid::Uuid;
     use rug::Integer;
-    use rand_core::OsRng;
+    use rand::rngs::OsRng;
     use ed25519_dalek::Keypair;
     use crate::rug_b::*;
     use crate::artifact::*;

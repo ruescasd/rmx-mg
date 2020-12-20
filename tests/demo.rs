@@ -2,7 +2,7 @@
 
 use std::marker::PhantomData;
 
-use rand_core::OsRng;
+use rand::rngs::OsRng;
 
 use ed25519_dalek::{Keypair};
 

@@ -3,7 +3,8 @@ use block_modes::{BlockMode, Cbc};
 use block_modes::block_padding::Pkcs7;
 
 use generic_array::{typenum::U32, typenum::U16, GenericArray};
-use rand_core::{OsRng, RngCore};
+use rand::RngCore;  
+use rand::rngs::OsRng;
 
 type Aes256Cbc = Cbc<Aes256, Pkcs7>;
 

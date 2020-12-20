@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 rug = {version = "1.11", features = ["integer", "rand", "serde"]}
-rand_core = "0.5.0"
+
 rand = "0.7.3"
 curve25519-dalek = {version = "3.0.0", features = ["serde"]}
 ed25519-dalek = {version = "1.0.1", features = ["serde"]}

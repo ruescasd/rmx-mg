@@ -2,7 +2,7 @@
 
 #[cfg(test)]
 mod tests {
-    use rand_core::{OsRng};
+    use rand::rngs::OsRng;
     use ed25519_dalek::Keypair;
     use ed25519_dalek::Signature;
     use ed25519_dalek::{Signer, PublicKey, Verifier};

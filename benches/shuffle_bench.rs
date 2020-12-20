@@ -1,16 +1,9 @@
-
-
-use rug::Integer;
-
 use std::time::Duration;
-
-
+use rug::Integer;
 use rmx::group::*;
 use rmx::elgamal::*;
 use rmx::ristretto_b::*;
 use rmx::rug_b::*;
-
-
 use rmx::shuffler::*;
 
 use criterion::{criterion_group, criterion_main, Criterion, SamplingMode, BenchmarkId};

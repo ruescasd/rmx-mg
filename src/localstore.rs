@@ -23,7 +23,7 @@ pub struct BallotsPath(pub PathBuf, pub PathBuf);
 pub struct MixPath(pub PathBuf, pub PathBuf);
 pub struct MixStmtPath(pub PathBuf);
 pub struct PDecryptionsPath(pub PathBuf, pub PathBuf);
-pub struct PDecryptionsStmtPath(pub PathBuf);
+// pub struct PDecryptionsStmtPath(pub PathBuf);
 pub struct PlaintextsPath(pub PathBuf, pub PathBuf);
 pub struct PlaintextsStmtPath(pub PathBuf);
 
@@ -84,6 +84,60 @@ impl<E: Element + Serialize + DeserializeOwned,
         let stmt_p = paths.remove(0);
         
         PkStmtPath(stmt_p)
+    }
+    pub fn set_mix(&self, act: &Act, mix: Mix<E>, stmt: &SignedStatement) -> MixPath {
+        assert!(matches!(act, Act::Mix(..)));
+        assert!(matches!(stmt.statement.stype, StatementType::Mix));
+        let mix_b = bincode::serialize(&mix).unwrap();
+        let stmt_b = bincode::serialize(&stmt).unwrap();
+        let mut paths = self.set_work(act, vec![mix_b, stmt_b]);
+        let pk_p = paths.remove(0);
+        let stmt_p = paths.remove(0);
+        
+        MixPath(pk_p, stmt_p)
+    }
+    pub fn set_mix_stmt(&self, act: &Act, stmt: &SignedStatement) -> MixStmtPath {
+        assert!(matches!(act, Act::CheckMix(..)));
+        assert!(matches!(stmt.statement.stype, StatementType::Mix));
+        let stmt_b = bincode::serialize(&stmt).unwrap();
+        let mut paths = self.set_work(act, vec![stmt_b]);
+        let stmt_p = paths.remove(0);
+        
+        MixStmtPath(stmt_p)
+    }
+
+
+    pub fn set_pdecryptions(&self, act: &Act, pdecryptions: PartialDecryption<E>, stmt: &SignedStatement) -> PDecryptionsPath {
+        assert!(matches!(act, Act::PartialDecrypt(..)));
+        assert!(matches!(stmt.statement.stype, StatementType::PDecryption));
+        let pdecryptions_b = bincode::serialize(&pdecryptions).unwrap();
+        let stmt_b = bincode::serialize(&stmt).unwrap();
+        let mut paths = self.set_work(act, vec![pdecryptions_b, stmt_b]);
+        let pdecryptions_p = paths.remove(0);
+        let stmt_p = paths.remove(0);
+        
+        PDecryptionsPath(pdecryptions_p, stmt_p)
+    }
+    
+    pub fn set_plaintexts(&self, act: &Act, plaintexts: Plaintexts<E>, stmt: &SignedStatement) -> PlaintextsPath {
+        assert!(matches!(act, Act::CombineDecryptions(..)));
+        assert!(matches!(stmt.statement.stype, StatementType::Plaintexts));
+        let plaintexts_b = bincode::serialize(&plaintexts).unwrap();
+        let stmt_b = bincode::serialize(&stmt).unwrap();
+        let mut paths = self.set_work(act, vec![plaintexts_b, stmt_b]);
+        let plaintexts_p = paths.remove(0);
+        let stmt_p = paths.remove(0);
+        
+        PlaintextsPath(plaintexts_p, stmt_p)
+    }
+    pub fn set_plaintexts_stmt(&self, act: &Act, stmt: &SignedStatement) -> PlaintextsStmtPath {
+        assert!(matches!(act, Act::CheckPlaintexts(..)));
+        assert!(matches!(stmt.statement.stype, StatementType::Plaintexts));
+        let stmt_b = bincode::serialize(&stmt).unwrap();
+        let mut paths = self.set_work(act, vec![stmt_b]);
+        let stmt_p = paths.remove(0);
+        
+        PlaintextsStmtPath(stmt_p)
     }
     
     pub fn get_work(&self, action: &Act, _hash: hashing::Hash) -> Option<Vec<PathBuf>> {

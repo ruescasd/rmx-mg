@@ -2,10 +2,14 @@ use rug::{
     rand::{RandGen, RandState},
     Integer
 };
-use rand_core::{RngCore, OsRng};
+
+use rand::RngCore;  
+use rand::rngs::OsRng;
+use rand::SeedableRng;
+use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
 
-use crate::hashing::{HashTo, RugHasher};
+use crate::hashing::{HashTo, RugHasher, hash_bytes_256};
 use crate::arithm::*;
 use crate::elgamal::*;
 use crate::group::*;
@@ -78,6 +82,14 @@ impl Exponent for Integer {
 struct OsRandgen(OsRng);
 
 impl RandGen for OsRandgen {
+    fn gen(&mut self) -> u32 {
+        return self.0.next_u32();
+    }
+}
+
+struct StdRandgen(StdRng);
+
+impl RandGen for StdRandgen {
     fn gen(&mut self) -> u32 {
         return self.0.next_u32();
     }
@@ -164,6 +176,26 @@ impl Group<Integer> for RugGroup {
     
     fn exp_hasher(&self) -> Box<dyn HashTo<Integer>> {
         Box::new(RugHasher(self.modulus_exp.clone()))
+    }
+
+    fn elem_hasher(&self) -> Box<dyn HashTo<Integer>> {
+        Box::new(RugHasher(self.modulus.clone()))
+    }
+    fn generators(&self, size: usize, seed: Vec<u8>) -> Vec<Integer> {
+        let hashed = hash_bytes_256(seed);
+        let csprng: StdRng = SeedableRng::from_seed(hashed);
+        let mut gen  = StdRandgen(csprng);
+        let mut state = RandState::new_custom(&mut gen);
+        
+        let mut ret: Vec<Integer> = Vec::with_capacity(size);
+        for _ in 0..size {
+            let g = self.encode(
+                self.modulus_exp.clone().random_below(&mut state)
+            );
+            ret.push(g);
+        }
+        
+        ret
     }
     
 }

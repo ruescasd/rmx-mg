@@ -2,7 +2,7 @@ use std::marker::{Send, Sync};
 
 use curve25519_dalek::ristretto::RistrettoPoint;
 use curve25519_dalek::scalar::Scalar;
-use sha2::{Sha512, Digest};
+use sha2::{Sha512, Sha256, Digest};
 use rug::{Integer,integer::Order};
 
 use crate::arithm::*;
@@ -41,6 +41,15 @@ impl HashTo<Scalar> for RistrettoHasher {
         hasher.update(bytes);
 
         Scalar::from_hash(hasher)
+    }
+}
+
+impl HashTo<RistrettoPoint> for RistrettoHasher {
+    fn hash_to(&self, bytes: &[u8]) -> RistrettoPoint {
+        let mut hasher = Sha512::new();
+        hasher.update(bytes);
+
+        RistrettoPoint::from_hash(hasher)
     }
 }
 
@@ -146,9 +155,22 @@ use crate::util;
 
 pub fn hash<T: HashBytes>(data: &T) -> [u8; 64] {
     let bytes = data.get_bytes();
+    hash_bytes(bytes)
+    /* let mut hasher = Sha512::new();
+    hasher.update(bytes);
+    util::to_u8_64(&hasher.finalize().to_vec())*/
+}
+
+pub fn hash_bytes(bytes: Vec<u8>) -> [u8; 64] {
     let mut hasher = Sha512::new();
     hasher.update(bytes);
     util::to_u8_64(&hasher.finalize().to_vec())
+}
+
+pub fn hash_bytes_256(bytes: Vec<u8>) -> [u8; 32] {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    util::to_u8_32(&hasher.finalize().to_vec())
 }
 
 impl<E: Element + HashBytes> HashBytes for Ciphertext<E> {
@@ -511,7 +533,8 @@ impl HashBytes for str {
 mod tests {  
     // use hex_literal::hex;
     use sha2::{Sha512, Digest};
-    use rand_core::{RngCore, OsRng};
+    use rand::RngCore;  
+    use rand::rngs::OsRng;
     use rug::{
         Integer,
         integer::Order

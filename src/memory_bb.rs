@@ -160,7 +160,27 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
         Some(ret)
     }
 
-    
+    fn add_mix(&mut self, path: &MixPath, contest: u32, trustee: u32) {
+        self.put(&Self::mix(contest, trustee), &path.0);
+        self.put(&Self::mix_stmt(contest, trustee), &path.1);
+    }
+    fn add_mix_stmt(&mut self, path: &MixStmtPath, contest: u32, trustee: u32, other_t: u32) {
+        self.put(&Self::mix_stmt_other(contest, trustee, other_t), &path.0);
+    }
+    fn get_mix(&self, contest: u32, trustee: u32, hash: Hash) -> Option<Mix<E>> {
+        let key = Self::mix(contest, trustee).to_string();
+        let ret = self.get(key, hash).ok()?;
+
+        Some(ret)
+    }
+
+    // fn add_pdecryptions(&mut self, path: &PartialDecryptionsPath, contest: u32, trustee: u32);
+    // fn get_pdecryptions(&self, contest: u32, auth: u32, hash: Hash) -> Option<PartialDecryption<E>>;
+
+    // fn add_plaintexts(&mut self, path: &PlaintextsPath, contest: u32);
+    // fn add_plaintexts_stmt(&mut self, path: &PlaintextsStmtPath, contest: u32, trustee: u32);
+    // fn get_plaintexts(&self, contest: u32, hash: Hash) -> Option<Plaintexts<E>>;
+
     fn get_statements(&self) -> Vec<SVerifier> {
         
         let sts = self.get_stmts();
@@ -211,8 +231,7 @@ fn artifact_location(path: &str) -> (i32, u32) {
 mod tests {
 
     use uuid::Uuid;
-    
-    use rand_core::OsRng;
+    use rand::rngs::OsRng;
     use ed25519_dalek::Keypair;
     use tempfile::NamedTempFile;
     
@@ -226,8 +245,6 @@ mod tests {
     #[test]
     fn test_membb_putget() {
         let mut csprng = OsRng;
-        
-        
         let id = Uuid::new_v4();
         let group = RugGroup::default();
         let contests = 2;
