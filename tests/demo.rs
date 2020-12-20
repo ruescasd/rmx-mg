@@ -95,6 +95,7 @@ fn demo() {
     prot2.step(&mut bb);
     assert!(actions == 0);
        
+    println!("=================== ballots ===================");
     for i in 0..contests {
         let ballots = util::random_rug_ballots(100, &group);
         let ballots_b = bincode::serialize(&ballots).unwrap();
@@ -109,7 +110,20 @@ fn demo() {
         println!("Adding {} ballots", ballots.ciphertexts.len());
         bb.add_ballots(&BallotsPath(f1.path().to_path_buf(), f2.path().to_path_buf()), i);
     }
+    println!("===============================================");
     
+    // mix position 0
     prot1.step(&mut bb);
+    // verify mix position 0
+    prot2.step(&mut bb);
+
+    // nothing
+    prot1.step(&mut bb);
+    // mix position 1
+    prot2.step(&mut bb);
+
+    // check mix position 1
+    prot1.step(&mut bb);
+    // nothing
     prot2.step(&mut bb);
 }

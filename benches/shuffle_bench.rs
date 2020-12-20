@@ -22,7 +22,8 @@ fn shuffle_rug(n: usize) -> bool {
         let c = pk.encrypt(plaintext);
         es.push(c);
     }
-    let hs = generators(es.len() + 1, &group);
+    let seed = vec![];
+    let hs = generators(es.len() + 1, &group, 0, seed);
     let shuffler = Shuffler {
         pk: &pk,
         generators: &hs,
@@ -50,7 +51,8 @@ fn shuffle_ristretto(n: usize) -> bool {
         let c = pk.encrypt(plaintext);
         es.push(c);
     }
-    let hs = generators(es.len() + 1, &group);
+    let seed = vec![];
+    let hs = generators(es.len() + 1, 0, &group);
     let shuffler = Shuffler {
         pk: &pk,
         generators: &hs,

@@ -141,7 +141,7 @@ impl Group<RistrettoPoint> for RistrettoGroup {
         Box::new(RistrettoHasher)
     }
     
-    fn generators(&self, size: usize, seed: Vec<u8>) -> Vec<RistrettoPoint> {
+    fn generators(&self, size: usize, contest: u32, seed: Vec<u8>) -> Vec<RistrettoPoint> {
         let hashed = hash_bytes_256(seed);
         let mut csprng: StdRng = SeedableRng::from_seed(hashed);
         let mut ret: Vec<RistrettoPoint> = Vec::with_capacity(size);
@@ -463,8 +463,8 @@ mod tests {
         let pk = PublicKey::from(&sk.public_value, &group);
 
         let es = util::random_ristretto_ballots(10, &group).ciphertexts;
-        
-        let hs = generators(es.len() + 1, &group);
+        let seed = vec![];
+        let hs = generators(es.len() + 1, &group, 0, seed);
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,

@@ -51,8 +51,11 @@ impl SignedStatement {
             signature
         }
     }
-    pub fn mix(cfg_h: &hashing::Hash, mix_h: &hashing::Hash, contest: u32, pk: &Keypair, mixing_trustee: Option<TrusteeIndex>) -> SignedStatement {
-        let statement = Statement::mix(cfg_h.to_vec(), contest, mix_h.to_vec(), mixing_trustee);
+    pub fn mix(cfg_h: &hashing::Hash, mix_h: &hashing::Hash, ballots_h: &hashing::Hash, contest: u32, 
+        pk: &Keypair, mixing_trustee: Option<TrusteeIndex>) -> SignedStatement {
+        
+        let statement = Statement::mix(cfg_h.to_vec(), contest, mix_h.to_vec(), 
+            ballots_h.to_vec(), mixing_trustee);
         let stmt_h = hashing::hash(&statement);
         let signature = pk.sign(&stmt_h);
         SignedStatement {
@@ -138,12 +141,12 @@ impl Statement {
             hashes: vec![config, ballots]
         }
     }
-    pub fn mix(config: VHash, contest: u32, mix: VHash, mixing_trustee: Option<u32>) -> Statement {
+    pub fn mix(config: VHash, contest: u32, mix: VHash, ballots: VHash, mixing_trustee: Option<u32>) -> Statement {
         Statement {
             stype: StatementType::Mix,
             contest: contest,
             trustee_aux: mixing_trustee,
-            hashes: vec![config, mix]
+            hashes: vec![config, mix, ballots]
         }
     }
     pub fn partial_decryption(config: VHash, contest: u32, partial_decryptions: VHash) -> Statement {

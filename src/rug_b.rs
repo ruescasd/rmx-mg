@@ -99,7 +99,8 @@ impl RandGen for StdRandgen {
 pub struct RugGroup {
     pub generator: Integer,
     pub modulus: Integer,
-    pub modulus_exp: Integer
+    pub modulus_exp: Integer,
+    pub co_factor: Integer
 }
 
 impl RugGroup {
@@ -112,14 +113,63 @@ impl RugGroup {
         let p = Integer::from_str_radix(Self::P_STR, 16).unwrap();
         let q = Integer::from_str_radix(Self::Q_STR, 16).unwrap();
         let g = Integer::from(3);
+        let co_factor = Integer::from(2);
         
         assert!(g.clone().legendre(&p) == 1);
 
         RugGroup {
             generator: g,
             modulus: p.clone(),
-            modulus_exp: q
+            modulus_exp: q,
+            co_factor: co_factor
         }
+    }
+
+    fn generators_fips(&self, size: usize, contest: u32, seed: Vec<u8>) -> Vec<Integer> {
+        let mut ret = Vec::with_capacity(size);
+        let hasher = self.elem_hasher();
+        let two = Integer::from(2);
+        
+        let mut prefix = seed.to_vec();
+        prefix.extend("ggen".to_string().into_bytes());
+        prefix.extend(&contest.to_le_bytes());
+        
+        for i in 0..size {
+            let mut next = prefix.clone();
+            let mut x: u64 = 1;
+            loop {
+                assert!(x != 0);
+                x = x + 1;
+                next.extend(&x.to_le_bytes());
+                let elem: Integer = hasher.hash_to(&next);
+                let g = elem.mod_pow(&self.co_factor, &self.modulus());
+                if g >= two {
+                    ret.push(g);
+                    break;
+                }
+            }
+        }
+        
+        ret
+    }
+
+    fn generators_rnd(&self, size: usize, contest: u32, seed: Vec<u8>) -> Vec<Integer> {
+        let mut seed_ = seed.to_vec();
+        seed_.extend(&contest.to_le_bytes());
+        let hashed = hash_bytes_256(seed_);
+        let csprng: StdRng = SeedableRng::from_seed(hashed);
+        let mut gen  = StdRandgen(csprng);
+        let mut state = RandState::new_custom(&mut gen);
+        
+        let mut ret: Vec<Integer> = Vec::with_capacity(size);
+        for _ in 0..size {
+            let g = self.encode(
+                self.modulus_exp.clone().random_below(&mut state)
+            );
+            ret.push(g);
+        }
+        
+        ret
     }
 }
 
@@ -181,21 +231,9 @@ impl Group<Integer> for RugGroup {
     fn elem_hasher(&self) -> Box<dyn HashTo<Integer>> {
         Box::new(RugHasher(self.modulus.clone()))
     }
-    fn generators(&self, size: usize, seed: Vec<u8>) -> Vec<Integer> {
-        let hashed = hash_bytes_256(seed);
-        let csprng: StdRng = SeedableRng::from_seed(hashed);
-        let mut gen  = StdRandgen(csprng);
-        let mut state = RandState::new_custom(&mut gen);
-        
-        let mut ret: Vec<Integer> = Vec::with_capacity(size);
-        for _ in 0..size {
-            let g = self.encode(
-                self.modulus_exp.clone().random_below(&mut state)
-            );
-            ret.push(g);
-        }
-        
-        ret
+    
+    fn generators(&self, size: usize, contest: u32, seed: Vec<u8>) -> Vec<Integer> {
+        self.generators_fips(size, contest, seed)
     }
     
 }
@@ -417,7 +455,8 @@ mod tests {
 
         let es = util::random_rug_ballots(10, &group).ciphertexts;
         
-        let hs = generators(es.len() + 1, &group);
+        let seed = vec![];
+        let hs = generators(es.len() + 1, &group, 0, seed);
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,

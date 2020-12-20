@@ -442,18 +442,8 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
 }
 
 // FIXME not kosher
-pub fn generators<E: Element, G: Group<E>> (size: usize, group: &G) -> Vec<E> {
-    /*
-    let mut ret: Vec<E> = Vec::with_capacity(size);
-    
-    for _ in 0..size {
-        let g = group.rnd();
-        ret.push(g);
-    }
-
-    ret*/
-    let seed = vec![3u8, 1u8, 4u8, 1u8, 5u8];
-    group.generators(size, seed)
+pub fn generators<E: Element, G: Group<E>> (size: usize, group: &G, contest: u32, seed: Vec<u8>) -> Vec<E> {
+    group.generators(size, contest, seed)
 }
 
 fn gen_permutation(size: usize) -> Vec<usize> {
@@ -500,7 +490,8 @@ mod tests {
             let c = pk.encrypt(plaintext);
             es.push(c);
         }
-        let hs = generators(es.len() + 1, &group);
+        let seed = vec![];
+        let hs = generators(es.len() + 1, &group, 0, seed);
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,
@@ -530,7 +521,8 @@ mod tests {
             let c = pk.encrypt(plaintext);
             es.push(c);
         }
-        let hs = generators(es.len() + 1, &group);
+        let seed = vec![];
+        let hs = generators(es.len() + 1, &group, 0, seed);
         let shuffler = Shuffler {
             pk: &pk,
             generators: &hs,
