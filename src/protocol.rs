@@ -3,7 +3,6 @@ use std::marker::PhantomData;
 use std::convert::TryInto;
 use std::fmt::Debug;
 
-use serde::{Serialize};
 use ed25519_dalek::PublicKey as SPublicKey;
 use ed25519_dalek::{Verifier};
 
@@ -34,13 +33,14 @@ pub type MixHash = Hash;
 pub type DecryptionHash = Hash;
 pub type PlaintextsHash = Hash;
 pub type Hashes = [Hash; 10];
+
 type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesAll>, HashSet<PkOk>, 
     HashSet<PkSharesUpTo>, HashSet<ConfigSignedUpTo>, HashSet<Contest>,
     HashSet<PkSignedUpTo>, HashSet<MixSignedUpTo>, HashSet<MixOk>, HashSet<ContestMixedUpTo>,
     HashSet<ContestMixedOk>);
 
 
-pub struct Protocol<E: Element, G: Group<E>, B: BulletinBoard<E, G>> {
+pub struct Protocol<E, G, B> {
     pub board: B,
     phantom_e: PhantomData<E>,
     phantom_g: PhantomData<G>
@@ -800,32 +800,27 @@ use crate::localstore::*;
 use crate::symmetric::gen_key;
 
 
-pub struct Trustee<E: Element + Serialize + DeserializeOwned, 
-    G: Group<E> + Serialize + DeserializeOwned> {
-
+pub struct Trustee<E, G> {
     pub keypair: Keypair,
-    pub keymaker: Keymaker<E, G>,
     pub localstore: LocalStore<E, G>,
     pub symmetric: GenericArray<u8, U32>
 }
 
-impl<E: Element + Serialize + DeserializeOwned, 
-    G: Group<E> + Serialize + DeserializeOwned> 
+impl<E: Element + DeserializeOwned, 
+    G: Group<E> + DeserializeOwned> 
     Trustee<E, G> {
     
-    pub fn new(group: &G, local_store: String) -> Trustee<E, G> {
+    pub fn new(local_store: String) -> Trustee<E, G> {
         let mut csprng = OsRng;
         let local_path = Path::new(&local_store);
         fs::remove_dir_all(local_path).ok();
         fs::create_dir(local_path).ok();
         let localstore = LocalStore::new(local_store);
         let keypair = Keypair::generate(&mut csprng);
-        let keymaker = Keymaker::gen(group);
         let symmetric = gen_key();
 
         Trustee {
             keypair,
-            keymaker,
             localstore,
             symmetric
         }
@@ -851,11 +846,12 @@ impl<E: Element + Serialize + DeserializeOwned,
                     let stmt_path = self.localstore.set_config_stmt(&action, &ss);
                     board.add_config_stmt(&stmt_path, self_index.unwrap());
                 }
-                Act::PostShare(cfg, cnt) => {
+                Act::PostShare(cfg_h, cnt) => {
                     println!("I Should post my share now! (contest=[{}], self=[{}])", cnt, self_index.unwrap());
-                    let share = self.share();
+                    let cfg = board.get_config(cfg_h).unwrap();
+                    let share = self.share(&cfg.group);
                     let share_h = hashing::hash(&share);
-                    let ss = SignedStatement::keyshare(&cfg, &share_h, cnt, &self.keypair);
+                    let ss = SignedStatement::keyshare(&cfg_h, &share_h, cnt, &self.keypair);
                     let share_path = self.localstore.set_share(&action, share, &ss);
                     
                     board.add_share(&share_path, cnt, self_index.unwrap());
@@ -968,9 +964,10 @@ impl<E: Element + Serialize + DeserializeOwned,
         }
     }
     
-    fn share(&self) -> Keyshare<E, G> {
-        let (share, proof) = self.keymaker.share();
-        let encrypted_sk = self.keymaker.get_encrypted_sk(self.symmetric);
+    fn share(&self, group: &G) -> Keyshare<E, G> {
+        let keymaker = Keymaker::gen(group);
+        let (share, proof) = keymaker.share();
+        let encrypted_sk = keymaker.get_encrypted_sk(self.symmetric);
         
         Keyshare {
             share,
@@ -1004,16 +1001,13 @@ impl<E: Element + Serialize + DeserializeOwned,
     }
 }
 
-pub struct Protocol2 <E: Element + Serialize + DeserializeOwned, 
-    G: Group<E> + Serialize + DeserializeOwned,
-    B: BulletinBoard<E, G>> {
-    
+pub struct Protocol2 <E, G, B> {
     trustee: Trustee<E, G>,
     phantom_b: PhantomData<B>
 }
 
-impl<E: Element + Serialize + DeserializeOwned, 
-    G: Group<E> + Serialize + DeserializeOwned,
+impl<E: Element + DeserializeOwned, 
+    G: Group<E> + DeserializeOwned,
     B: BulletinBoard<E, G>> 
     Protocol2<E, G, B> {
 

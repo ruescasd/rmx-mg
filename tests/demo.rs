@@ -47,8 +47,8 @@ fn demo() {
     let local1 = "/tmp/local";
     let local2 = "/tmp/local2";
     let group = RugGroup::default();
-    let trustee1 = Trustee::new(&group, local1.to_string());
-    let trustee2 = Trustee::new(&group, local2.to_string());
+    let trustee1 = Trustee::new(local1.to_string());
+    let trustee2 = Trustee::new(local2.to_string());
     let mut csprng = OsRng;
     let bb_keypair = Keypair::generate(&mut csprng);
     

@@ -4,7 +4,7 @@ use serde::de::DeserializeOwned;
 
 use crate::hashing::HashBytes;
 
-pub trait Element: HashBytes + Clone + Send + Sync {
+pub trait Element: HashBytes + Clone + Send + Sync + Serialize {
     type Exp: Exponent;
     type Plaintext;
     

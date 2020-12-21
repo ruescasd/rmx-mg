@@ -5,12 +5,10 @@ use crate::artifact::EncryptedPrivateKey;
 use crate::arithm::*;
 use crate::group::*;
 use crate::elgamal::*;
-use crate::symmetric;
 
-pub struct Keymaker<E: Element, G: Group<E>> {
+pub struct Keymaker<E: Element, G> {
     sk: PrivateKey<E, G>,
-    pk: PublicKey<E, G>,
-    // symmetric: GenericArray<u8, U32>
+    pk: PublicKey<E, G>
 }
 
 impl<E: Element, G: Group<E>> Keymaker<E, G> {
@@ -18,7 +16,6 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
     pub fn gen(group: &G) -> Keymaker<E, G> {
         let sk = group.gen_key();
         let pk = PublicKey::from(&sk.public_value.clone(), group);
-        let symmetric = symmetric::gen_key();
         
         Keymaker {
             sk: sk,
@@ -28,11 +25,10 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
 
     pub fn from_sk(sk: PrivateKey<E, G>, group: &G) -> Keymaker<E, G> {
         let pk = PublicKey::from(&sk.public_value.clone(), group);
-        let symmetric = symmetric::gen_key();
         
         Keymaker {
             sk: sk,
-            pk: pk,
+            pk: pk
         }
     }
     

@@ -9,7 +9,7 @@ use crate::group::*;
 use crate::shuffler::*;
 
 #[derive(Serialize, Deserialize, Eq, PartialEq, Debug)]
-pub struct Config<E: Element, G: Group<E>> {
+pub struct Config<E, G> {
     pub id: [u8; 16],
     pub group: G,
     pub contests: u32, 
@@ -19,7 +19,7 @@ pub struct Config<E: Element, G: Group<E>> {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Keyshare<E: Element, G: Group<E>> {
+pub struct Keyshare<E: Element, G> {
     pub share: PublicKey<E, G>,
     pub proof: Schnorr<E>,
     pub encrypted_sk: EncryptedPrivateKey
@@ -32,12 +32,7 @@ pub struct EncryptedPrivateKey {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Pk<E: Element, G: Group<E>> {
-    pub value: PublicKey<E, G>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Ballots<E: Element> {
+pub struct Ballots<E> {
     pub ciphertexts: Vec<Ciphertext<E>>
 }
 

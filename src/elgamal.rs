@@ -7,13 +7,13 @@ use crate::artifact::EncryptedPrivateKey;
 use crate::symmetric;
 
 #[derive(Serialize, Deserialize, Clone)]
-pub struct Ciphertext<E: Element> {
+pub struct Ciphertext<E> {
     pub a: E,
     pub b: E
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct PublicKey<E: Element, G: Group<E>> {
+pub struct PublicKey<E, G> {
     pub value: E,
     pub group: G
 }
@@ -37,7 +37,7 @@ impl<E: Element, G: Group<E>> PublicKey<E, G> {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct PrivateKey<E: Element, G: Group<E>> {
+pub struct PrivateKey<E: Element, G> {
     pub value: E::Exp,
     pub public_value: E,
     pub group: G

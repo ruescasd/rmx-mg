@@ -1,10 +1,11 @@
 use std::marker::{Send, Sync};
+use serde::{Deserialize, Serialize};
 
 use crate::arithm::*;
 use crate::hashing::*;
 use crate::elgamal::*;
 
-pub trait Group<E: Element>: HashBytes + Send + Sync + Sized + Clone {
+pub trait Group<E: Element>: Serialize + HashBytes + Send + Sync + Sized + Clone {
     
     fn generator(&self) -> E;
     fn rnd(&self) -> E;
@@ -77,8 +78,6 @@ pub trait Group<E: Element>: HashBytes + Send + Sync + Sized + Clone {
     }
 }
 
-use serde::{Deserialize, Serialize};
-
 #[derive(Serialize, Deserialize)]
 pub struct Schnorr<E: Element> {
     pub commitment: E,
@@ -93,16 +92,3 @@ pub struct ChaumPedersen<E: Element> {
     pub challenge: E::Exp,
     pub response: E::Exp
 }
-
-/*
-#[derive(Serialize, Deserialize)]
-pub struct Test1<E: Element> {
-    challenge: E::Exp
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Test<E: Element> {
-    commitment1: E,
-    commitment2: E,
-    challenge: Vec<Test1<E>>
-}*/

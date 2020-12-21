@@ -1,5 +1,11 @@
-use crate::protocol::*;
+use std::fmt;
+use serde::de::DeserializeOwned;
 
+use crate::util::{short, shortm};
+use crate::protocol::*;
+use crate::bb::BulletinBoard;
+use crate::group::Group;
+use crate::arithm::Element;
 // use strum::Display;
 
 #[derive(Copy, Clone, Hash, Eq, PartialEq)]
@@ -15,8 +21,15 @@ pub enum Act {
     CheckPlaintexts(ConfigHash, ContestIndex, MixHash, Hashes)
 }
 
-use std::fmt;
-use crate::util::{short, shortm};
+impl Act {
+    pub fn run<E: Element + DeserializeOwned, 
+        G: Group<E> + DeserializeOwned, 
+        B: BulletinBoard<E, G>>
+        (&self, facts: Facts, board: &mut B) {
+
+    }
+}
+
 impl fmt::Debug for Act {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {

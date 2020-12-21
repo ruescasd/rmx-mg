@@ -394,13 +394,13 @@ impl HashBytes for EncryptedPrivateKey {
     }
 }
 
-use crate::artifact::Pk;
+/* use crate::artifact::Pk;
 
 impl<E: Element, G: Group<E>> HashBytes for Pk<E, G> {
     fn get_bytes(&self) -> Vec<u8> {
         self.value.get_bytes()
     }
-}
+}*/
 
 use crate::artifact::Ballots;
 

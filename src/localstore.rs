@@ -1,11 +1,9 @@
 use std::path::{Path,PathBuf};
 use std::marker::PhantomData;
 
-use serde::Serialize;
 use serde::de::DeserializeOwned;
 
 use crate::hashing;
-
 use crate::util;
 use crate::action::Act;
 use crate::artifact::*;
@@ -27,14 +25,14 @@ pub struct PDecryptionsPath(pub PathBuf, pub PathBuf);
 pub struct PlaintextsPath(pub PathBuf, pub PathBuf);
 pub struct PlaintextsStmtPath(pub PathBuf);
 
-pub struct LocalStore<E: Element, G: Group<E>> {
+pub struct LocalStore<E, G> {
     pub fs_path: PathBuf,
     phantom_e: PhantomData<E>,
     phantom_g: PhantomData<G>
 }
 
-impl<E: Element + Serialize + DeserializeOwned, 
-    G: Group<E> + Serialize + DeserializeOwned> 
+impl<E: Element + DeserializeOwned, 
+    G: Group<E> + DeserializeOwned> 
     LocalStore<E, G> {
     
     pub fn new(fs_path: String) -> LocalStore<E, G> {
