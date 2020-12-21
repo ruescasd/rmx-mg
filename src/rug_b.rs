@@ -125,6 +125,7 @@ impl RugGroup {
         }
     }
 
+    // https://nvlpubs.nist.gov/nistpubs/FIPS/NIST.FIPS.186-4.pdf A.2.3
     fn generators_fips(&self, size: usize, contest: u32, seed: Vec<u8>) -> Vec<Integer> {
         let mut ret = Vec::with_capacity(size);
         let hasher = self.elem_hasher();

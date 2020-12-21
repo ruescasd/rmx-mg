@@ -1,3 +1,4 @@
+use std::fmt;
 use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::convert::TryInto;
@@ -16,8 +17,7 @@ use crate::hashing::*;
 use crate::hashing;
 use crate::artifact::*;
 use crate::statement::*;
-use crate::elgamal::PublicKey;
-use crate::elgamal::Ciphertext;
+use crate::elgamal::{PublicKey, Ciphertext, PrivateKey};
 use crate::bb::*;
 use crate::util;
 use crate::arithm::Element;
@@ -27,7 +27,7 @@ use crate::util::short;
 use crate::shuffler::*;
 use crate::keymaker::Keymaker;
 use crate::localstore::LocalStore;
-use crate::symmetric::gen_key;
+use crate::symmetric;
 
 pub type TrusteeTotal = u32;
 pub type TrusteeIndex = u32;
@@ -44,7 +44,7 @@ pub type Hashes = [Hash; 10];
 type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesAll>, HashSet<PkOk>, 
     HashSet<PkSharesUpTo>, HashSet<ConfigSignedUpTo>, HashSet<Contest>,
     HashSet<PkSignedUpTo>, HashSet<MixSignedUpTo>, HashSet<MixOk>, HashSet<ContestMixedUpTo>,
-    HashSet<ContestMixedOk>);
+    HashSet<ContestMixedOk>, HashSet<DecryptionsUpTo>, HashSet<DecryptionsAll>);
 
 
 pub struct Protocol<E, G, B> {
@@ -106,25 +106,6 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
 
         ret
     }
-}
-
-
-fn load_facts(facts: &Vec<InputFact>, runtime: &mut Crepe) {
-    println!("======== Input facts [");
-    facts.into_iter().map(|f| {
-        println!("* Input fact {:?}", f);
-        match f {
-            InputFact::ConfigPresent(x) => runtime.extend(&[*x]),
-            InputFact::ConfigSignedBy(x) => runtime.extend(&[*x]),
-            InputFact::PkShareSignedBy(x) => runtime.extend(&[*x]),
-            InputFact::PkSignedBy(x) => runtime.extend(&[*x]),
-            InputFact::BallotsSigned(x) => runtime.extend(&[*x]),
-            InputFact::MixSignedBy(x) => runtime.extend(&[*x]),
-            InputFact::DecryptionSignedBy(x) => runtime.extend(&[*x]),
-            InputFact::PlaintextsSignedBy(x) => runtime.extend(&[*x])
-        }
-    }).count();
-    println!("] \n");
 }
 
 #[derive(Debug)]
@@ -272,7 +253,7 @@ impl InputFact {
         )
     }
 }
-use std::fmt;
+
 impl fmt::Debug for InputFact {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -302,6 +283,24 @@ impl fmt::Debug for InputFact {
                 x.1, short(&x.0))
         }
     }
+}
+
+fn load_facts(facts: &Vec<InputFact>, runtime: &mut Crepe) {
+    println!("======== Input facts [");
+    facts.into_iter().map(|f| {
+        println!("* Input fact {:?}", f);
+        match f {
+            InputFact::ConfigPresent(x) => runtime.extend(&[*x]),
+            InputFact::ConfigSignedBy(x) => runtime.extend(&[*x]),
+            InputFact::PkShareSignedBy(x) => runtime.extend(&[*x]),
+            InputFact::PkSignedBy(x) => runtime.extend(&[*x]),
+            InputFact::BallotsSigned(x) => runtime.extend(&[*x]),
+            InputFact::MixSignedBy(x) => runtime.extend(&[*x]),
+            InputFact::DecryptionSignedBy(x) => runtime.extend(&[*x]),
+            InputFact::PlaintextsSignedBy(x) => runtime.extend(&[*x])
+        }
+    }).count();
+    println!("] \n");
 }
 
 pub struct Facts {
@@ -421,9 +420,6 @@ impl Facts {
     }   
 }
 
-#[derive(Copy, Clone, Hash, Eq, PartialEq)]
-struct Sha512(Hash);
-
 crepe! {
     @input
     struct ConfigPresent(ConfigHash, ContestIndex, TrusteeIndex, TrusteeIndex);
@@ -441,9 +437,6 @@ crepe! {
     struct DecryptionSignedBy(ConfigHash, ContestIndex, DecryptionHash, TrusteeIndex);
     @input
     struct PlaintextsSignedBy(ConfigHash, ContestIndex, PlaintextsHash, TrusteeIndex);
-
-    @input
-    struct Test(Sha512);
 
     // 0
     @output
@@ -481,6 +474,12 @@ crepe! {
     // 11
     @output
     struct ContestMixedOk(ConfigHash, ContestIndex, MixHash);
+    // 11
+    @output
+    struct DecryptionsUpTo(ConfigHash, ContestIndex, TrusteeIndex, Hashes);
+    // 12
+    @output
+    struct DecryptionsAll(ConfigHash, ContestIndex, Hashes);
     
     Do(Act::CheckConfig(config)) <- 
         ConfigPresent(config, _, _, self_t),
@@ -552,6 +551,20 @@ crepe! {
         ContestMixedOk(config, contest, mix_hash),
         !DecryptionSignedBy(config, contest, _, self_t);
 
+    DecryptionsUpTo(config, contest, 0, first) <-
+        DecryptionSignedBy(config, contest, decryption, 0),
+        let first = array_make(decryption);
+
+    DecryptionsUpTo(config, contest, trustee + 1, decryptions) <- 
+        DecryptionsUpTo(config, contest, trustee, input_decryptions),
+        DecryptionSignedBy(config, contest, decryption, trustee + 1),
+        let decryptions = array_set(input_decryptions, trustee + 1, decryption);
+
+    DecryptionsAll(config, contest, decryptions) <-
+        ConfigPresent(config, _, total_t, _),
+        ConfigOk(config),
+        DecryptionsUpTo(config, contest, total_t - 1, decryptions);
+    
     MixSignedUpTo(config, contest, mix_hash, ballots_hash, 0) <-
         MixSignedBy(config, contest, mix_hash, ballots_hash, _, 0);
 
@@ -809,7 +822,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
         fs::create_dir(local_path).ok();
         let localstore = LocalStore::new(local_store);
         let keypair = Keypair::generate(&mut csprng);
-        let symmetric = gen_key();
+        let symmetric = symmetric::gen_key();
 
         Trustee {
             keypair,
@@ -923,10 +936,24 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
 
                 }
                 Act::PartialDecrypt(cfg_h, cnt, mix_h, share_h) => {
-                    let cfg = board.get_config(cfg_h).unwrap();
                     println!("I should partial decrypt (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    let cfg = board.get_config(cfg_h).unwrap();
                     let mix = board.get_mix(cnt, (cfg.trustees.len() - 1) as u32, mix_h).unwrap();
                     let share = board.get_share(cnt, self_index.unwrap(), share_h).unwrap();
+                    let encrypted_sk = share.encrypted_sk;
+                    let sk: PrivateKey<E, G> = PrivateKey::from_encrypted(self.symmetric, encrypted_sk, &cfg.group);
+                    let keymaker = Keymaker::from_sk(sk, &cfg.group);
+
+                    println!("Computing partial decryptions.. (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    let (decs, proofs) = keymaker.decryption_factor_many(&mix.mixed_ballots);
+                    let pd = PartialDecryption {
+                        pd_ballots: decs,
+                        proofs: proofs
+                    };
+                    let pd_h = hashing::hash(&pd);
+                    let ss = SignedStatement::pdecryptions(&cfg_h, cnt, &pd_h, &self.keypair);
+                    let pd_path = self.localstore.set_pdecryptions(&action, pd, &ss);
+                    board.add_decryption(&pd_path, cnt, self_index.unwrap());
                 }
                 Act::CombineDecryptions(cfg_h, cnt, _hs) => {
                     let cfg = board.get_config(cfg_h).unwrap();
@@ -941,7 +968,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
 
         ret as u32
     }
-
+    
     // ballots may come the ballot box, or an earlier mix
     fn get_mix_src<B: BulletinBoard<E, G>>(&self, board: &B, contest: u32, 
         mixing_trustee: u32, ballots_h: Hash) -> Vec<Ciphertext<E>> {

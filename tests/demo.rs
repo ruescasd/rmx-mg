@@ -124,6 +124,9 @@ fn demo() {
 
     // check mix position 1
     prot1.step(&mut bb);
-    // nothing
+    // partial decryptions
     prot2.step(&mut bb);
+
+    // partial decryptions
+    prot1.step(&mut bb);
 }

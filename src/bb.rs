@@ -78,12 +78,12 @@ pub trait BulletinBoard<E: Element, G: Group<E>> {
     fn add_mix_stmt(&mut self, path: &MixStmtPath, contest: u32, trustee: u32, other_t: u32);
     fn get_mix(&self, contest: u32, trustee: u32, hash: Hash) -> Option<Mix<E>>;
 
-    // fn add_pdecryptions(&mut self, path: &PartialDecryptionsPath, contest: u32, trustee: u32);
-    // fn get_pdecryptions(&self, contest: u32, auth: u32, hash: Hash) -> Option<PartialDecryption<E>>;
+    fn add_decryption(&mut self, path: &PDecryptionsPath, contest: u32, trustee: u32);
+    fn get_decryption(&self, contest: u32, trustee: u32, hash: Hash) -> Option<PartialDecryption<E>>;
 
-    // fn add_plaintexts(&mut self, path: &PlaintextsPath, contest: u32);
-    // fn add_plaintexts_stmt(&mut self, path: &PlaintextsStmtPath, contest: u32, trustee: u32);
-    // fn get_plaintexts(&self, contest: u32, hash: Hash) -> Option<Plaintexts<E>>;
+    fn set_plaintexts(&mut self, path: &PlaintextsPath, contest: u32);
+    fn set_plaintexts_stmt(&mut self, path: &PlaintextsStmtPath, contest: u32, trustee: u32);
+    fn get_plaintexts(&self, contest: u32, hash: Hash) -> Option<Plaintexts<E>>;
 
     fn get_statements(&self) -> Vec<SVerifier>;
     fn get_stmts(&self) -> Vec<String> {

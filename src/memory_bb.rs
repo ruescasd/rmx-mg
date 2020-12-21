@@ -143,6 +143,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
         self.put(&Self::public_key_stmt(contest, trustee), &path.0);
     }
     fn get_pk(&mut self, contest: u32, hash: Hash) -> Option<PublicKey<E, G>> {
+        // 0: trustee 0 combines shares into pk
         let key = Self::public_key(contest, 0).to_string();
         let ret = self.get(key, hash).ok()?;
 
@@ -174,12 +175,32 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
         Some(ret)
     }
 
-    // fn add_pdecryptions(&mut self, path: &PartialDecryptionsPath, contest: u32, trustee: u32);
-    // fn get_pdecryptions(&self, contest: u32, auth: u32, hash: Hash) -> Option<PartialDecryption<E>>;
+    fn add_decryption(&mut self, path: &PDecryptionsPath, contest: u32, trustee: u32) {
+        self.put(&Self::decryption(contest, trustee), &path.0);
+        self.put(&Self::decryption_stmt(contest, trustee), &path.1);
+    }
+    fn get_decryption(&self, contest: u32, trustee: u32, hash: Hash) -> Option<PartialDecryption<E>> {
+        let key = Self::decryption(contest, trustee).to_string();
+        let ret = self.get(key, hash).ok()?;
 
-    // fn add_plaintexts(&mut self, path: &PlaintextsPath, contest: u32);
-    // fn add_plaintexts_stmt(&mut self, path: &PlaintextsStmtPath, contest: u32, trustee: u32);
-    // fn get_plaintexts(&self, contest: u32, hash: Hash) -> Option<Plaintexts<E>>;
+        Some(ret)
+    }
+
+    fn set_plaintexts(&mut self, path: &PlaintextsPath, contest: u32) {
+        // 0: trustee 0 combines shares into pk
+        self.put(&Self::plaintexts(contest, 0), &path.0);
+        self.put(&Self::plaintexts_stmt(contest, 0), &path.1);
+    }
+    fn set_plaintexts_stmt(&mut self, path: &PlaintextsStmtPath, contest: u32, trustee: u32) {
+        self.put(&Self::plaintexts_stmt(contest, trustee), &path.0);
+    }
+    fn get_plaintexts(&self, contest: u32, hash: Hash) -> Option<Plaintexts<E>> {
+        // 0: trustee 0 combines shares into pk
+        let key = Self::plaintexts(contest, 0).to_string();
+        let ret = self.get(key, hash).ok()?;
+
+        Some(ret)
+    }
 
     fn get_statements(&self) -> Vec<SVerifier> {
         

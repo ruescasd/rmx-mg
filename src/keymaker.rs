@@ -73,7 +73,7 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
     pub fn decryption_factor_many(&self, cs: &Vec<Ciphertext<E>>) -> 
         (Vec<E>, Vec<ChaumPedersen<E>>) {
 
-            let decs_proofs: (Vec<E>, Vec<ChaumPedersen<E>>) = cs.par_iter().map(|c| {
+        let decs_proofs: (Vec<E>, Vec<ChaumPedersen<E>>) = cs.par_iter().map(|c| {
             self.decryption_factor(c)
         }).unzip();
         
