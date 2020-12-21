@@ -10,7 +10,7 @@ use crate::symmetric;
 pub struct Keymaker<E: Element, G: Group<E>> {
     sk: PrivateKey<E, G>,
     pk: PublicKey<E, G>,
-    symmetric: GenericArray<u8, U32>
+    // symmetric: GenericArray<u8, U32>
 }
 
 impl<E: Element, G: Group<E>> Keymaker<E, G> {
@@ -22,8 +22,17 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
         
         Keymaker {
             sk: sk,
+            pk: pk
+        }
+    }
+
+    pub fn from_sk(sk: PrivateKey<E, G>, group: &G) -> Keymaker<E, G> {
+        let pk = PublicKey::from(&sk.public_value.clone(), group);
+        let symmetric = symmetric::gen_key();
+        
+        Keymaker {
+            sk: sk,
             pk: pk,
-            symmetric: symmetric
         }
     }
     
@@ -37,8 +46,8 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
 
     }
 
-    pub fn get_encrypted_sk(&self) -> EncryptedPrivateKey {
-        self.sk.to_encrypted(self.symmetric)
+    pub fn get_encrypted_sk(&self, symmetric: GenericArray<u8, U32>) -> EncryptedPrivateKey {
+        self.sk.to_encrypted(symmetric)
     }
 
     pub fn verify_share(group: &G, pk: &PublicKey<E, G>, proof: &Schnorr<E>) -> bool {

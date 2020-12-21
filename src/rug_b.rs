@@ -134,7 +134,7 @@ impl RugGroup {
         prefix.extend("ggen".to_string().into_bytes());
         prefix.extend(&contest.to_le_bytes());
         
-        for i in 0..size {
+        for _ in 0..size {
             let mut next = prefix.clone();
             let mut x: u64 = 1;
             loop {
@@ -374,8 +374,10 @@ mod tests {
         let km2 = Keymaker::gen(&group);
         let (pk1, proof1) = km1.share();
         let (pk2, proof2) = km2.share();
-        let esk1 = km1.get_encrypted_sk();
-        let esk2 = km2.get_encrypted_sk();
+        let sym1 = symmetric::gen_key();
+        let sym2 = symmetric::gen_key();
+        let esk1 = km1.get_encrypted_sk(sym1);
+        let esk2 = km2.get_encrypted_sk(sym2);
 
         let share1 = Keyshare {
             share: pk1,

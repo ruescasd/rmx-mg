@@ -495,11 +495,12 @@ impl HashBytes for Act {
                 v.extendl(&pk_h.to_vec());
                 v
             }
-            Act::PartialDecrypt(h, i, bs) => {
+            Act::PartialDecrypt(h, i, bs, share_h) => {
                 let mut v = vec![7u8];
                 v.extendl(&h.to_vec());
                 v.extendl(&i.to_le_bytes().to_vec());
                 v.extendl(&bs.to_vec());
+                v.extendl(&share_h.to_vec());
                 v
             }
             Act::CombineDecryptions(h, i, ds) => {

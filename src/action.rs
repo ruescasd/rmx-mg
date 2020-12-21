@@ -10,7 +10,7 @@ pub enum Act {
     CheckPk(ConfigHash, ContestIndex, PkHash, Hashes),
     Mix(ConfigHash, ContestIndex, BallotsHash, PkHash),
     CheckMix(ConfigHash, ContestIndex, TrusteeIndex, MixHash, BallotsHash, PkHash),
-    PartialDecrypt(ConfigHash, ContestIndex, BallotsHash),
+    PartialDecrypt(ConfigHash, ContestIndex, BallotsHash, ShareHash),
     CombineDecryptions(ConfigHash, ContestIndex, Hashes),
     CheckPlaintexts(ConfigHash, ContestIndex, MixHash, Hashes)
 }
@@ -24,11 +24,11 @@ impl fmt::Debug for Act {
             Act::PostShare(cfg, cnt) => write!(f, "PostShare contest=[{}] for config: {:?}", cnt, short(cfg)),
             Act::CombineShares(_cfg, cnt, hs) => write!(f, "CombineShares contest=[{}] shares: {:?}", cnt, shortm(hs)),
             Act::CheckPk(_cfg, cnt, h1, hs) => write!(f, "CheckPk contest=[{}], pk {:?} shares: {:?}", cnt, short(h1), shortm(hs)),
-            Act::Mix(cfg, cnt, _bh, pk_h) => write!(f, "Mix contest=[{}] for config: {:?}", cnt, short(cfg)),
-            Act::CheckMix(cfg, cnt, t, _mh, _bh, pk_h) => write!(f, "CheckMix contest=[{}], posted by trustee=[{}] for config: {:?}", cnt, t, short(cfg)),
-            Act::PartialDecrypt(cfg, _cnt, _h1) => write!(f, "PartialDecrypt for config: {:?}", short(cfg)),
-            Act::CombineDecryptions(cfg, _cnt, _hs) => write!(f, "CombineDecryptions for config: {:?}", short(cfg)),
-            Act::CheckPlaintexts(cfg, _cnt, _h1, _hs) => write!(f, "CheckPlaintexts for config: {:?}", short(cfg))
+            Act::Mix(cfg, cnt, _bh, _pk_h) => write!(f, "Mix contest=[{}] for config: {:?}", cnt, short(cfg)),
+            Act::CheckMix(cfg, cnt, t, _mh, _bh, _pk_h) => write!(f, "CheckMix contest=[{}], posted by trustee=[{}] for config: {:?}", cnt, t, short(cfg)),
+            Act::PartialDecrypt(cfg, cnt, _h1, _share_h) => write!(f, "PartialDecrypt contest=[{}] for config: {:?}", cnt, short(cfg)),
+            Act::CombineDecryptions(cfg, cnt, _hs) => write!(f, "CombineDecryptions contest=[{}] for config: {:?}", cnt, short(cfg)),
+            Act::CheckPlaintexts(cfg, cnt, _h1, _hs) => write!(f, "CheckPlaintexts contest=[{}] for config: {:?}", cnt, short(cfg))
         }
     }
 }

@@ -142,7 +142,9 @@ impl Group<RistrettoPoint> for RistrettoGroup {
     }
     
     fn generators(&self, size: usize, contest: u32, seed: Vec<u8>) -> Vec<RistrettoPoint> {
-        let hashed = hash_bytes_256(seed);
+        let mut seed_ = seed.to_vec();
+        seed_.extend(&contest.to_le_bytes());
+        let hashed = hash_bytes_256(seed_);
         let mut csprng: StdRng = SeedableRng::from_seed(hashed);
         let mut ret: Vec<RistrettoPoint> = Vec::with_capacity(size);
         for _ in 0..size {
@@ -370,8 +372,10 @@ mod tests {
         let km2 = Keymaker::gen(&group);
         let (pk1, proof1) = km1.share();
         let (pk2, proof2) = km2.share();
-        let esk1 = km1.get_encrypted_sk();
-        let esk2 = km2.get_encrypted_sk();
+        let sym1 = symmetric::gen_key();
+        let sym2 = symmetric::gen_key();
+        let esk1 = km1.get_encrypted_sk(sym1);
+        let esk2 = km2.get_encrypted_sk(sym2);
 
         let share1 = Keyshare {
             share: pk1,

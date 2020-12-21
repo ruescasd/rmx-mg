@@ -37,7 +37,7 @@ pub type Hashes = [Hash; 10];
 type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesAll>, HashSet<PkOk>, 
     HashSet<PkSharesUpTo>, HashSet<ConfigSignedUpTo>, HashSet<Contest>,
     HashSet<PkSignedUpTo>, HashSet<MixSignedUpTo>, HashSet<MixOk>, HashSet<ContestMixedUpTo>,
-    HashSet<ContestMixed>);
+    HashSet<ContestMixedOk>);
 
 
 pub struct Protocol<E: Element, G: Group<E>, B: BulletinBoard<E, G>> {
@@ -143,9 +143,9 @@ impl SVerifier {
         let statement_hash = hashing::hash(statement);
         let verified = pk.verify(&statement_hash, &self.statement.signature);
         let config_h = util::to_u8_64(&statement.hashes[0]);
-        println!("* Verify returns: [{}] on [{:?}] from trustee [{}] for contest [{}]", verified.is_ok(), 
-            &self.statement.statement.stype, &self.trustee, &self.contest
-        );
+        // println!("* Verify returns: [{}] on [{:?}] from trustee [{}] for contest [{}]", verified.is_ok(), 
+        //    &self.statement.statement.stype, &self.trustee, &self.contest
+        //);
         
         let mixer_t = statement.trustee_aux.unwrap_or(self_t);
 
@@ -387,7 +387,7 @@ impl Facts {
         }
         let next = &self.mixes_ok;
         for f in next {
-            println!("* MixesOk contest=[{}] mix=[{:?}], ballots=[{:?}] for config {:?}", 
+            println!("* MixOk contest=[{}] mix=[{:?}], ballots=[{:?}] for config {:?}", 
             f.1, short(&f.2), short(&f.3), short(&f.0));
         }
         let next = &self.contest_up_to;
@@ -473,7 +473,7 @@ crepe! {
     struct ContestMixedUpTo(ConfigHash, ContestIndex, MixHash, TrusteeIndex);
     // 11
     @output
-    struct ContestMixed(ConfigHash, ContestIndex, MixHash, );
+    struct ContestMixedOk(ConfigHash, ContestIndex, MixHash);
     
     Do(Act::CheckConfig(config)) <- 
         ConfigPresent(config, _, _, self_t),
@@ -521,28 +521,36 @@ crepe! {
         PkOk(config, contest, pk_hash),
         ConfigPresent(config, _, _, self_t),
         ConfigOk(config),    
-        MixSignedBy(config, contest, mix_hash, _, 0, _),    
+        MixSignedBy(config, contest, mix_hash, ballots_hash, 0, 0),
         // input ballots to mix came from the ballotbox
         BallotsSigned(config, contest, ballots_hash),
-        !MixSignedBy(config, contest, mix_hash, _, 0, self_t);
+        !MixSignedBy(config, contest, mix_hash, ballots_hash, 0, self_t);
 
     // check mix n
     Do(Act::CheckMix(config, contest, mixer_t, mix_hash, mix_ballots_hash, pk_hash)) <- 
         PkOk(config, contest, pk_hash),
         ConfigPresent(config, _, _, self_t),
         ConfigOk(config),    
-        MixSignedBy(config, contest, mix_hash, _, mixer_t, _),
+        MixSignedBy(config, contest, mix_hash, mix_ballots_hash, mixer_t, _signer_t),
         (mixer_t > 0),
         // input ballots to mix came from a previous mix, thus (mixer_t - 1)
         MixSignedBy(config, contest, mix_ballots_hash, _, mixer_t - 1, _),
         !MixSignedBy(config, contest, mix_hash, mix_ballots_hash, mixer_t, self_t);
-        
+    
+    Do(Act::PartialDecrypt(config, contest, mix_hash, share)) <- 
+        PkOk(config, contest, _pk_hash),
+        ConfigPresent(config, _n_trustees, _, self_t),
+        ConfigOk(config),
+        PkShareSignedBy(config, contest, share, self_t),
+        ContestMixedOk(config, contest, mix_hash),
+        !DecryptionSignedBy(config, contest, _, self_t);
+
     MixSignedUpTo(config, contest, mix_hash, ballots_hash, 0) <-
-        MixSignedBy(config, contest, mix_hash, ballots_hash, mixer_t, signer_t);
+        MixSignedBy(config, contest, mix_hash, ballots_hash, _, 0);
 
     MixSignedUpTo(config, contest, mix_hash, ballots_hash, signer_t + 1) <-
         MixSignedUpTo(config, contest, mix_hash, ballots_hash, signer_t),
-        MixSignedBy(config, contest, mix_hash, ballots_hash, poster_t, signer_t + 1);
+        MixSignedBy(config, contest, mix_hash, ballots_hash, _mixer_t, signer_t + 1);
 
     MixOk(config, contest, mix_hash, ballots_hash) <-
         ConfigPresent(config, _, total_t, _),
@@ -556,6 +564,11 @@ crepe! {
     ContestMixedUpTo(config, contest, mix_hash, trustee + 1) <- 
         ContestMixedUpTo(config, contest, previous_mix_hash, trustee),
         MixOk(config, contest, mix_hash, previous_mix_hash);
+
+    ContestMixedOk(config, contest, mix_hash) <- 
+        ConfigPresent(config, _, total_t, _),
+        ConfigOk(config),
+        ContestMixedUpTo(config, contest, mix_hash, total_t - 1);
     
     ConfigSignedUpTo(config, 0) <-
         ConfigSignedBy(config, 0);
@@ -620,7 +633,6 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use ed25519_dalek::{Keypair};
-    
     use uuid::Uuid;
     use rand::rngs::OsRng;
     
@@ -633,6 +645,7 @@ mod tests {
     use crate::memory_bb::*;
     use crate::protocol::*;
     use crate::action::*;
+    use crate::symmetric;
     
     use crate::localstore::*;
     
@@ -712,8 +725,10 @@ mod tests {
         
         let (pk1, proof1) = km1.share();
         let (pk2, proof2) = km2.share();
-        let esk1 = km1.get_encrypted_sk();
-        let esk2 = km2.get_encrypted_sk();
+        let sym1 = symmetric::gen_key();
+        let sym2 = symmetric::gen_key();
+        let esk1 = km1.get_encrypted_sk(sym1);
+        let esk2 = km2.get_encrypted_sk(sym2);
         
         let share1 = Keyshare {
             share: pk1,
@@ -775,12 +790,14 @@ mod tests {
 
 use serde::de::DeserializeOwned;
 use std::fs;
+use generic_array::{typenum::U32, GenericArray};
 use std::path::Path;
 use ed25519_dalek::{Keypair};
 use rand::rngs::OsRng;
 
 use crate::keymaker::Keymaker;
 use crate::localstore::*;
+use crate::symmetric::gen_key;
 
 
 pub struct Trustee<E: Element + Serialize + DeserializeOwned, 
@@ -788,7 +805,8 @@ pub struct Trustee<E: Element + Serialize + DeserializeOwned,
 
     pub keypair: Keypair,
     pub keymaker: Keymaker<E, G>,
-    pub localstore: LocalStore<E, G>
+    pub localstore: LocalStore<E, G>,
+    pub symmetric: GenericArray<u8, U32>
 }
 
 impl<E: Element + Serialize + DeserializeOwned, 
@@ -803,11 +821,13 @@ impl<E: Element + Serialize + DeserializeOwned,
         let localstore = LocalStore::new(local_store);
         let keypair = Keypair::generate(&mut csprng);
         let keymaker = Keymaker::gen(group);
+        let symmetric = gen_key();
 
         Trustee {
             keypair,
             keymaker,
-            localstore
+            localstore,
+            symmetric
         }
     }
     
@@ -914,14 +934,19 @@ impl<E: Element + Serialize + DeserializeOwned,
                     board.add_mix_stmt(&mix_path, cnt, self_index.unwrap(), trustee);
 
                 }
-                Act::PartialDecrypt(_cfg_h, _cnt, _h1) => {
-                    
+                Act::PartialDecrypt(cfg_h, cnt, mix_h, share_h) => {
+                    let cfg = board.get_config(cfg_h).unwrap();
+                    println!("I should partial decrypt (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    let mix = board.get_mix(cnt, (cfg.trustees.len() - 1) as u32, mix_h).unwrap();
+                    let share = board.get_share(cnt, self_index.unwrap(), share_h).unwrap();
                 }
-                Act::CombineDecryptions(_cfg_h, _cnt, _hs) => {
-                    
+                Act::CombineDecryptions(cfg_h, cnt, _hs) => {
+                    let cfg = board.get_config(cfg_h).unwrap();
+                    println!("I combine decryptions (contest=[{}], self=[{}])", cnt, self_index.unwrap());
                 }
-                Act::CheckPlaintexts(_cfg_h, _cnt, _h1, _hs) => {
-                    
+                Act::CheckPlaintexts(cfg_h, cnt, _h1, _hs) => {
+                    let cfg = board.get_config(cfg_h).unwrap();
+                    println!("I check plaintexts (contest=[{}], self=[{}])", cnt, self_index.unwrap());
                 }
             }
         }
@@ -945,7 +970,7 @@ impl<E: Element + Serialize + DeserializeOwned,
     
     fn share(&self) -> Keyshare<E, G> {
         let (share, proof) = self.keymaker.share();
-        let encrypted_sk = self.keymaker.get_encrypted_sk();
+        let encrypted_sk = self.keymaker.get_encrypted_sk(self.symmetric);
         
         Keyshare {
             share,
@@ -1046,6 +1071,7 @@ impl<E: Element + Serialize + DeserializeOwned,
     }
 
     pub fn step(&self, board: &mut B) -> u32 {
+        println!("====================================== Step ======================================");
         let output = self.process_facts(&board);
 
         output.print();

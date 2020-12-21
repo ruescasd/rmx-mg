@@ -29,6 +29,10 @@ pub fn decrypt(key: GenericArray<u8, U32>, iv_bytes: &[u8], ciphertext: &[u8]) -
     cipher.decrypt(&mut ciphertext.to_vec()).unwrap().to_vec()
 }
 
+pub fn key_from_bytes(key_bytes: [u8; 32]) -> GenericArray<u8, U32> {
+    GenericArray::clone_from_slice(&key_bytes)
+}
+
 pub fn gen_key() -> GenericArray<u8, U32> {
     let mut csprng = OsRng;
     let mut key_bytes = [0u8; 32];
