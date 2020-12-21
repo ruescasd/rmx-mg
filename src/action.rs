@@ -22,11 +22,10 @@ pub enum Act {
 }
 
 impl Act {
-    pub fn run<E: Element + DeserializeOwned, 
-        G: Group<E> + DeserializeOwned, 
-        B: BulletinBoard<E, G>>
-        (&self, facts: Facts, board: &mut B) {
+    pub fn run<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned, 
+        B: BulletinBoard<E, G>> (&self, facts: Facts, board: &mut B) {
 
+        
     }
 }
 

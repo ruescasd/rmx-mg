@@ -2,10 +2,14 @@ use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::convert::TryInto;
 use std::fmt::Debug;
+use std::fs;
+use std::path::Path;
+use generic_array::{typenum::U32, GenericArray};
 
+use serde::de::DeserializeOwned;
+use rand::rngs::OsRng;
 use ed25519_dalek::PublicKey as SPublicKey;
-use ed25519_dalek::{Verifier};
-
+use ed25519_dalek::{Verifier, Keypair};
 use crepe::crepe;
 
 use crate::hashing::*;
@@ -21,6 +25,9 @@ use crate::group::Group;
 use crate::action::Act;
 use crate::util::short;
 use crate::shuffler::*;
+use crate::keymaker::Keymaker;
+use crate::localstore::LocalStore;
+use crate::symmetric::gen_key;
 
 pub type TrusteeTotal = u32;
 pub type TrusteeIndex = u32;
@@ -787,28 +794,13 @@ mod tests {
     }
 }
 
-
-use serde::de::DeserializeOwned;
-use std::fs;
-use generic_array::{typenum::U32, GenericArray};
-use std::path::Path;
-use ed25519_dalek::{Keypair};
-use rand::rngs::OsRng;
-
-use crate::keymaker::Keymaker;
-use crate::localstore::*;
-use crate::symmetric::gen_key;
-
-
 pub struct Trustee<E, G> {
     pub keypair: Keypair,
     pub localstore: LocalStore<E, G>,
     pub symmetric: GenericArray<u8, U32>
 }
 
-impl<E: Element + DeserializeOwned, 
-    G: Group<E> + DeserializeOwned> 
-    Trustee<E, G> {
+impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G> {
     
     pub fn new(local_store: String) -> Trustee<E, G> {
         let mut csprng = OsRng;
@@ -1006,10 +998,8 @@ pub struct Protocol2 <E, G, B> {
     phantom_b: PhantomData<B>
 }
 
-impl<E: Element + DeserializeOwned, 
-    G: Group<E> + DeserializeOwned,
-    B: BulletinBoard<E, G>> 
-    Protocol2<E, G, B> {
+impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned,
+    B: BulletinBoard<E, G>> Protocol2<E, G, B> {
 
     pub fn new(trustee: Trustee<E, G>) -> Protocol2<E, G, B> {
         Protocol2 {
