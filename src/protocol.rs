@@ -3,8 +3,6 @@ use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::convert::TryInto;
 use std::fmt::Debug;
-use std::fs;
-use std::path::Path;
 use generic_array::{typenum::U32, GenericArray};
 
 use serde::de::DeserializeOwned;
@@ -825,9 +823,6 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
     
     pub fn new(local_store: String) -> Trustee<E, G> {
         let mut csprng = OsRng;
-        let local_path = Path::new(&local_store);
-        fs::remove_dir_all(local_path).ok();
-        fs::create_dir(local_path).ok();
         let localstore = LocalStore::new(local_store);
         let keypair = Keypair::generate(&mut csprng);
         let symmetric = symmetric::gen_key();

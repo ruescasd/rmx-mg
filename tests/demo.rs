@@ -1,6 +1,8 @@
 use std::marker::PhantomData;
 use std::collections::HashSet;
 use std::iter::FromIterator;
+use std::fs;
+use std::path::Path;
 
 use rand::rngs::OsRng;
 use ed25519_dalek::{Keypair, PublicKey as SPublicKey};
@@ -42,6 +44,13 @@ pub fn gen_config(group: &RugGroup, contests: u32, trustee_pks: Vec<SPublicKey>,
 fn demo() {
     let local1 = "/tmp/local";
     let local2 = "/tmp/local2";
+    let local_path = Path::new(&local1);
+    fs::remove_dir_all(local_path).ok();
+    fs::create_dir(local_path).ok();
+    let local_path = Path::new(&local2);
+    fs::remove_dir_all(local_path).ok();
+    fs::create_dir(local_path).ok();
+    
     let group = RugGroup::default();
     let trustee1 = Trustee::new(local1.to_string());
     let trustee2 = Trustee::new(local2.to_string());
