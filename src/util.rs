@@ -90,8 +90,25 @@ pub fn random_ristretto_ballots<G: Group<RistrettoPoint>>(n: usize, group: &G) -
     }
 }
 
-pub fn random_rug_encrypt_ballots(n: usize, pk: &PublicKey<Integer, RugGroup>) -> (Vec<Integer>, Vec<Ciphertext<Integer>>) {
+pub fn random_ristretto_encrypt_ballots(n: usize, pk: &PublicKey<RistrettoPoint, RistrettoGroup>) -> (Vec<[u8; 30]>, Vec<Ciphertext<RistrettoPoint>>) {
+    
+    let (plaintexts,cs) = (0..n).into_par_iter().map(|_| {
+        let mut csprng = OsRng;
+        let mut value = [0u8;30];
+        csprng.fill_bytes(&mut value);        
+        let encoded = pk.group.encode(value);
+        let encrypted = pk.encrypt(&encoded);
+        (value, encrypted)
+        
+    }).unzip();
 
+    
+    (plaintexts, cs)
+}
+use rand::rngs::OsRng;
+use rand::RngCore;
+pub fn random_rug_encrypt_ballots(n: usize, pk: &PublicKey<Integer, RugGroup>) -> (Vec<Integer>, Vec<Ciphertext<Integer>>) {
+    
     let (plaintexts,cs) = (0..n).into_par_iter().map(|_| {
             let value = pk.group.rnd_exp();
             let encoded = pk.group.encode(value.clone());
