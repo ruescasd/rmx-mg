@@ -266,13 +266,13 @@ mod tests {
         let plaintext = group.rnd_exp();
         
         let encoded = group.encode(plaintext.clone());
-        let c = pk.encrypt(encoded.clone());
+        let c = pk.encrypt(&encoded);
         let d = group.decode(sk.decrypt(&c));
         assert_eq!(d, plaintext);
 
         let zero = Integer::from(0);
         let encoded_zero = group.encode(zero.clone());
-        let c_zero = pk.encrypt(encoded_zero.clone());
+        let c_zero = pk.encrypt(&encoded_zero);
         let d_zero = group.decode(sk.decrypt(&c_zero));
         assert_eq!(d_zero, zero);
     }
@@ -318,7 +318,7 @@ mod tests {
         let plaintext = group.rnd_exp();
         
         let encoded = group.encode(plaintext.clone());
-        let c = pk.encrypt(encoded.clone());
+        let c = pk.encrypt(&encoded);
         let (d, proof) = sk.decrypt_and_prove(&c);
 
         let dec_factor =  Element::modulo(&c.a.div(&d, &group.modulus()), &group.modulus());
@@ -351,7 +351,7 @@ mod tests {
         let pks = vec![pk1, pk2];
         
         let pk_combined = Keymaker::combine_pks(&group, pks);
-        let c = pk_combined.encrypt(encoded.clone());
+        let c = pk_combined.encrypt(&encoded);
         
         let (dec_f1, proof1) = km1.decryption_factor(&c);
         let (dec_f2, proof2) = km2.decryption_factor(&c);
@@ -410,7 +410,7 @@ mod tests {
         for _ in 0..10 {
             let plaintext = group.rnd_exp();
             let encoded = group.encode(plaintext.clone());
-            let c = pk_combined.encrypt(encoded);
+            let c = pk_combined.encrypt(&encoded);
             bs.push(plaintext);
             cs.push(c);
         }
@@ -505,7 +505,7 @@ mod tests {
         let plaintext = group.rnd_exp();
         
         let encoded = group.encode(plaintext.clone());
-        let c = pk.encrypt(encoded.clone());
+        let c = pk.encrypt(&encoded);
         
         let sym_key = symmetric::gen_key();
         let enc_sk = sk.to_encrypted(sym_key);

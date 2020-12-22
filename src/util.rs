@@ -15,6 +15,8 @@ use std::io;
 use crate::group::*;
 use crate::elgamal::*;
 use crate::artifact::*;
+use crate::rug_b::RugGroup;
+use crate::ristretto_b::RistrettoGroup;
 
 pub fn read_file_bytes(path: &Path) -> io::Result<Vec<u8>> {
     fs::read(path)
@@ -86,6 +88,20 @@ pub fn random_ristretto_ballots<G: Group<RistrettoPoint>>(n: usize, group: &G) -
     Ballots {
         ciphertexts: cs
     }
+}
+
+pub fn random_rug_encrypt_ballots(n: usize, pk: &PublicKey<Integer, RugGroup>) -> (Vec<Integer>, Vec<Ciphertext<Integer>>) {
+
+    let (plaintexts,cs) = (0..n).into_par_iter().map(|_| {
+            let value = pk.group.rnd_exp();
+            let encoded = pk.group.encode(value.clone());
+            let encrypted = pk.encrypt(&encoded);
+            (value, encrypted)
+        
+    }).unzip();
+
+    
+    (plaintexts, cs)
 }
 
 pub fn random_rug_ballots<G: Group<Integer>>(n: usize, group: &G) -> Ballots<Integer> {

@@ -189,7 +189,7 @@ mod tests {
         csprng.fill_bytes(&mut fill);
         let plaintext = group.encode(util::to_u8_30(&fill.to_vec()));
         
-        let c = pk.encrypt(plaintext);    
+        let c = pk.encrypt(&plaintext);
         let d = sk.decrypt(&c);
         
         let recovered = group.decode(d).to_vec();
@@ -312,7 +312,7 @@ mod tests {
         csprng.fill_bytes(&mut fill);
         let plaintext = group.encode(util::to_u8_30(&fill.to_vec()));
         
-        let c = pk.encrypt(plaintext);    
+        let c = pk.encrypt(&plaintext);
         let (d, proof) = sk.decrypt_and_prove(&c);
 
         let dec_factor = c.a.div(&d, &group.modulus()).modulo(&group.modulus());
@@ -347,7 +347,7 @@ mod tests {
         let pks = vec![pk1, pk2];
         
         let pk_combined = Keymaker::combine_pks(&group, pks);
-        let c = pk_combined.encrypt(plaintext);
+        let c = pk_combined.encrypt(&plaintext);
         
         let (dec_f1, proof1) = km1.decryption_factor(&c);
         let (dec_f2, proof2) = km2.decryption_factor(&c);
@@ -411,7 +411,7 @@ mod tests {
             let mut fill = [0u8;30];
             csprng.fill_bytes(&mut fill);
             let encoded = group.encode(util::to_u8_30(&fill.to_vec()));
-            let c = pk_combined.encrypt(encoded);
+            let c = pk_combined.encrypt(&encoded);
             bs.push(fill.to_vec());
             cs.push(c);
         }
@@ -516,7 +516,7 @@ mod tests {
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
         let plaintext = group.encode(util::to_u8_30(&fill.to_vec()));
-        let c = pk.encrypt(plaintext);
+        let c = pk.encrypt(&plaintext);
         let sym_key = symmetric::gen_key();
         let enc_sk = sk.to_encrypted(sym_key);
         let enc_sk_b = bincode::serialize(&enc_sk).unwrap();

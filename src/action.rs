@@ -17,7 +17,7 @@ pub enum Act {
     Mix(ConfigHash, ContestIndex, BallotsHash, PkHash),
     CheckMix(ConfigHash, ContestIndex, TrusteeIndex, MixHash, BallotsHash, PkHash),
     PartialDecrypt(ConfigHash, ContestIndex, BallotsHash, ShareHash),
-    CombineDecryptions(ConfigHash, ContestIndex, Hashes),
+    CombineDecryptions(ConfigHash, ContestIndex, Hashes, MixHash, Hashes),
     CheckPlaintexts(ConfigHash, ContestIndex, MixHash, Hashes)
 }
 
@@ -39,7 +39,7 @@ impl fmt::Debug for Act {
             Act::Mix(cfg, cnt, _bh, _pk_h) => write!(f, "Mix contest=[{}] for config: {:?}", cnt, short(cfg)),
             Act::CheckMix(cfg, cnt, t, _mh, _bh, _pk_h) => write!(f, "CheckMix contest=[{}], posted by trustee=[{}] for config: {:?}", cnt, t, short(cfg)),
             Act::PartialDecrypt(cfg, cnt, _h1, _share_h) => write!(f, "PartialDecrypt contest=[{}] for config: {:?}", cnt, short(cfg)),
-            Act::CombineDecryptions(cfg, cnt, _hs) => write!(f, "CombineDecryptions contest=[{}] for config: {:?}", cnt, short(cfg)),
+            Act::CombineDecryptions(cfg, cnt, _hs, mix_h, share_h) => write!(f, "CombineDecryptions contest=[{}] for config: {:?}", cnt, short(cfg)),
             Act::CheckPlaintexts(cfg, cnt, _h1, _hs) => write!(f, "CheckPlaintexts contest=[{}] for config: {:?}", cnt, short(cfg))
         }
     }

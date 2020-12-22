@@ -73,15 +73,15 @@ impl SignedStatement {
             signature
         }
     }
-    /*pub fn plaintexts(cfg_h: &hashing::Hash, contest: u32, pk: &Keypair) -> SignedStatement {
-        let statement = Statement::mix(cfg_h.to_vec(), contest, mix_h.to_vec(), ballots_h.to_vec());
+    pub fn plaintexts(cfg_h: &hashing::Hash, contest: u32, plaintext_h: &hashing::Hash, pk: &Keypair) -> SignedStatement {
+        let statement = Statement::plaintexts(cfg_h.to_vec(), contest, plaintext_h.to_vec());
         let stmt_h = hashing::hash(&statement);
         let signature = pk.sign(&stmt_h);
         SignedStatement {
             statement,
             signature
         }
-    }*/
+    }
     
 }
 

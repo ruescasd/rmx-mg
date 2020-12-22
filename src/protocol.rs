@@ -551,6 +551,14 @@ crepe! {
         ContestMixedOk(config, contest, mix_hash),
         !DecryptionSignedBy(config, contest, _, self_t);
 
+    Do(Act::CombineDecryptions(config, contest, decryptions, mix_hash, shares)) <- 
+        DecryptionsAll(config, contest, decryptions),
+        ConfigPresent(config, _, _, 0),
+        ConfigOk(config),
+        ContestMixedOk(config, contest, mix_hash),
+        PkSharesAll(config, contest, shares),
+        !PlaintextsSignedBy(config, contest, _, 0);
+
     DecryptionsUpTo(config, contest, 0, first) <-
         DecryptionSignedBy(config, contest, decryption, 0),
         let first = array_make(decryption);
@@ -955,9 +963,19 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                     let pd_path = self.localstore.set_pdecryptions(&action, pd, &ss);
                     board.add_decryption(&pd_path, cnt, self_index.unwrap());
                 }
-                Act::CombineDecryptions(cfg_h, cnt, _hs) => {
+                Act::CombineDecryptions(cfg_h, cnt, decryption_hs, mix_h, share_hs) => {
                     let cfg = board.get_config(cfg_h).unwrap();
-                    println!("I combine decryptions (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    println!("I should combine decryptions (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    let d_hs = util::clear_zeroes(&decryption_hs);
+                    let s_hs = util::clear_zeroes(&share_hs);
+                    let pls = self.get_plaintexts(board, cnt, d_hs, mix_h, s_hs, &cfg).unwrap();
+                    let plaintexts = Plaintexts {
+                        plaintexts: pls
+                    };
+                    let p_h = hashing::hash(&plaintexts);
+                    let ss = SignedStatement::plaintexts(&cfg_h, cnt, &p_h, &self.keypair);
+                    let p_path = self.localstore.set_plaintexts(&action, plaintexts, &ss);
+                    board.set_plaintexts(&p_path, cnt);
                 }
                 Act::CheckPlaintexts(cfg_h, cnt, _h1, _hs) => {
                     let cfg = board.get_config(cfg_h).unwrap();
@@ -992,6 +1010,38 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
             share,
             proof,
             encrypted_sk
+        }
+    }
+
+    fn get_plaintexts<B: BulletinBoard<E, G>>(&self, board: &B, cnt: u32, hs: Vec<Hash>, 
+        mix_h: Hash, share_hs: Vec<Hash>, cfg: &Config<E, G>) -> Option<Vec<E>> {
+        
+        assert!(hs.len() == share_hs.len());
+        
+        let mut decryptions: Vec<Vec<E>> = Vec::with_capacity(hs.len());
+        let last_trustee = cfg.trustees.len() - 1;
+        let mix = board.get_mix(cnt, last_trustee as u32, mix_h).unwrap();
+        let ciphertexts = mix.mixed_ballots;
+        for (i, h) in hs.iter().enumerate() {
+            let next_d = board.get_decryption(cnt, i as u32, *h).unwrap();
+            let next_s = board.get_share(cnt, i as u32, share_hs[i]).unwrap();
+            let ok = Keymaker::verify_decryption_factors(&cfg.group, &next_s.share.value, &ciphertexts,
+                &next_d.pd_ballots, &next_d.proofs);
+            assert!(ok);
+            
+            if ok {
+                decryptions.push(next_d.pd_ballots);
+            }
+            else { 
+                break;
+            }
+        }
+        if decryptions.len() == hs.len() {
+            let plaintexts = Keymaker::joint_dec_many(&cfg.group, &decryptions, &ciphertexts);
+            Some(plaintexts)
+        }
+        else {
+            None
         }
     }
 

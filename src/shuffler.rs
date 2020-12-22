@@ -487,7 +487,7 @@ mod tests {
 
         for _ in 0..n {
             let plaintext = group.rnd();
-            let c = pk.encrypt(plaintext);
+            let c = pk.encrypt(&plaintext);
             es.push(c);
         }
         let seed = vec![];
@@ -518,7 +518,7 @@ mod tests {
         
         for _ in 0..n {
             let plaintext: Integer = group.encode(group.rnd_exp());
-            let c = pk.encrypt(plaintext);
+            let c = pk.encrypt(&plaintext);
             es.push(c);
         }
         let seed = vec![];

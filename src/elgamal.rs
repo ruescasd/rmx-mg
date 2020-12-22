@@ -19,7 +19,7 @@ pub struct PublicKey<E, G> {
 }
 
 impl<E: Element, G: Group<E>> PublicKey<E, G> {
-    pub fn encrypt(&self, plaintext: E) -> Ciphertext<E> {
+    pub fn encrypt(&self, plaintext: &E) -> Ciphertext<E> {
         
         let randomness = self.group.rnd_exp();
         Ciphertext {

@@ -503,11 +503,13 @@ impl HashBytes for Act {
                 v.extendl(&share_h.to_vec());
                 v
             }
-            Act::CombineDecryptions(h, i, ds) => {
+            Act::CombineDecryptions(h, i, ds, mix_h, shares) => {
                 let mut v = vec![8u8];
                 v.extendl(&h.to_vec());
                 v.extendl(&i.to_le_bytes().to_vec());
                 v.extendl(&concat_bytes_iter(ds));
+                v.extendl(&mix_h.to_vec());
+                v.extendl(&concat_bytes_iter(shares));
                 v
             }
             Act::CheckPlaintexts(h, i, m, ds) => {

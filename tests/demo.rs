@@ -1,28 +1,24 @@
-
-
 use std::marker::PhantomData;
+use std::collections::HashSet;
+use std::iter::FromIterator;
 
 use rand::rngs::OsRng;
-
-use ed25519_dalek::{Keypair};
-
+use ed25519_dalek::{Keypair, PublicKey as SPublicKey};
 use uuid::Uuid;
-
 use rug::Integer;
 
 use rmx::statement::SignedStatement;
 use rmx::artifact::*;
+use rmx::elgamal::PublicKey;
 use rmx::hashing;
-
+use rmx::group::Group;
 use rmx::rug_b::*;
 use rmx::bb::BulletinBoard;
+use rmx::bb::Names;
 use rmx::memory_bb::*;
 use rmx::protocol::*;
-
 use rmx::util;
 use rmx::localstore::*;
-
-use ed25519_dalek::PublicKey as SPublicKey;
 
 pub fn gen_config(group: &RugGroup, contests: u32, trustee_pks: Vec<SPublicKey>,
     ballotbox_pk: SPublicKey) -> Config<Integer, RugGroup> {
@@ -94,10 +90,17 @@ fn demo() {
     let actions = prot2.step(&mut bb);
     prot2.step(&mut bb);
     assert!(actions == 0);
+
+    let mut all_plaintexts = Vec::with_capacity(contests as usize);
        
     println!("=================== ballots ===================");
     for i in 0..contests {
-        let ballots = util::random_rug_ballots(100, &group);
+        let pk_b = bb.get_unsafe(MemoryBulletinBoard::<Integer, RugGroup>::public_key(i, 0)).unwrap();
+        let pk: PublicKey<Integer, RugGroup> = bincode::deserialize(pk_b).unwrap();
+        
+        let (plaintexts, ciphertexts) = util::random_rug_encrypt_ballots(100, &pk);
+        all_plaintexts.push(plaintexts);
+        let ballots = Ballots { ciphertexts };
         let ballots_b = bincode::serialize(&ballots).unwrap();
         let ballots_h = hashing::hash(&ballots);
         let cfg_h = hashing::hash(&cfg);
@@ -128,5 +131,27 @@ fn demo() {
     prot2.step(&mut bb);
 
     // partial decryptions
+    prot1.step(&mut bb);
+    // nothing
+    prot2.step(&mut bb);
+
+    // combine decryptions
+    prot1.step(&mut bb);
+
+    for i in 0..contests {
+        let decrypted_b = bb.get_unsafe(MemoryBulletinBoard::<Integer, RugGroup>::plaintexts(i, 0)).unwrap();
+        let decrypted: Plaintexts<Integer> = bincode::deserialize(decrypted_b).unwrap();
+        let decoded: Vec<Integer> = decrypted.plaintexts.iter().map(|p| {
+            group.decode(p.clone())
+        }).collect();
+        let p1: HashSet<&Integer> = HashSet::from_iter(all_plaintexts[i as usize].iter().clone());
+        let p2: HashSet<&Integer> = HashSet::from_iter(decoded.iter().clone());
+        
+        print!("Comparing plaintexts contest=[{}]...", i);
+        assert!(p1 == p2);
+        println!("Ok");
+    }
+
+    // check plaintexts
     prot1.step(&mut bb);
 }

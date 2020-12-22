@@ -96,6 +96,9 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBullet
     fn get<A: HashBytes + DeserializeOwned>(&self, target: String, hash: Hash) -> Result<A, String> {
         self.basic.get(target, hash)
     }
+    pub fn get_unsafe(&self, target: String) -> Option<&Vec<u8>> {
+        self.basic.get_unsafe(&target)
+    }
 }
 
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> 
