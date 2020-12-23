@@ -29,8 +29,9 @@ use rmx::localstore::*;
 
 use cursive::align::HAlign;
 use cursive::traits::*;
-use cursive::views::{Dialog, DummyView, LinearLayout, TextView, Panel};
+use cursive::views::{Dialog, DummyView, LinearLayout, TextView, Panel, ScrollView};
 use cursive::theme::{Color, PaletteColor, Theme};
+use cursive::view::ScrollStrategy;
 use cursive::Cursive;
 
 
@@ -66,7 +67,7 @@ struct Demo<E, G> {
     board: MemoryBulletinBoard<E, G>
 }
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Demo<E, G> {
-    fn new(sink: cursive::CbSink, group: &G, contests: u32) -> Demo<E, G> {
+    fn new(sink: cursive::CbSink, group: &G, trustees: u32, contests: u32) -> Demo<E, G> {
         let local1 = "/tmp/local";
         let local2 = "/tmp/local2";
         let local_path = Path::new(&local1);
@@ -75,30 +76,32 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Demo<E, G> {
         let local_path = Path::new(&local2);
         fs::remove_dir_all(local_path).ok();
         fs::create_dir(local_path).ok();
+        
+        let mut trustee_pks = Vec::new();
+        let mut prots = Vec::new();
+        
+        for i in 0..trustees {
+            let local = format!("/tmp/local{}", i);
+            let local_path = Path::new(&local);
+            fs::remove_dir_all(local_path).ok();
+            fs::create_dir(local_path).ok();
+            let trustee: Trustee<E, G> = Trustee::new(local.to_string());
+            trustee_pks.push(trustee.keypair.public);
+            let prot: Protocol<E, G, MemoryBulletinBoard<E, G>> = Protocol::new(trustee);
+            prots.push(prot);
 
-        let trustee1: Trustee<E, G> = Trustee::new(local1.to_string());
-        let trustee2: Trustee<E, G> = Trustee::new(local2.to_string());
+        }
         let mut csprng = OsRng;
         let bb_keypair = Keypair::generate(&mut csprng);
         let mut bb = MemoryBulletinBoard::<E, G>::new();
-    
-        let mut trustee_pks = Vec::new();
-        trustee_pks.push(trustee1.keypair.public);
-        trustee_pks.push(trustee2.keypair.public);
-    
         let cfg = gen_config(group, contests, trustee_pks, bb_keypair.public);
         let cfg_b = bincode::serialize(&cfg).unwrap();
         let tmp_file = util::write_tmp(cfg_b).unwrap();
         bb.add_config(&ConfigPath(tmp_file.path().to_path_buf()));
-    
-        let prot1: Protocol<E, G, MemoryBulletinBoard<E, G>> = Protocol::new(trustee1);
-        let prot2: Protocol<E, G, MemoryBulletinBoard<E, G>> = Protocol::new(trustee2);
-
-        let trustees = vec![prot1, prot2];
 
         Demo {
             cb_sink: sink,
-            trustees: trustees,
+            trustees: prots,
             bb_keypair: bb_keypair,
             config: cfg,
             board: bb
@@ -168,10 +171,11 @@ impl std::io::Write for DemoLogSink {
         self.cb_sink.send(Box::new( 
             move |s: &mut cursive::Cursive| {
             let data = s.user_data::<u32>().unwrap_or(&mut 0).clone();
-            s.call_on_name(&data.to_string(), |view: &mut TextView| {
+            s.call_on_name(&data.to_string(), |view: &mut ScrollView<TextView>| {
                 let bytes = Arc::try_unwrap(message).unwrap();
                 let string = std::str::from_utf8(&bytes).unwrap();
-                view.append(string);
+                view.get_inner_mut().append(string);
+                view.scroll_to_bottom();
                 // view.append(data.to_string());
             });
             
@@ -195,7 +199,9 @@ fn demo_tui() {
     let mut n: u32 = 0;
     let mut siv = cursive::default();
     let group = RugGroup::default();
-    let demo = Demo::new(siv.cb_sink().clone(), &group, 2);
+    let trustees: u32 = 3;
+    let contests = 2;
+    let demo = Demo::new(siv.cb_sink().clone(), &group, trustees, contests);
     CombinedLogger::init(
         vec![
             // TermLogger::new(LevelFilter::Warn, Config::default(), TerminalMode::Mixed),
@@ -213,51 +219,49 @@ fn demo_tui() {
     
     let theme = custom_theme_from_cursive(&siv);
     siv.set_theme(theme);
-
-    // Some description text. We want it to be long, but not _too_ long.
     let text = "Ready";
 
-    // We'll create a dialog with a TextView serving as a title
-    siv.add_fullscreen_layer(
-        LinearLayout::vertical()
-            // Disabling scrollable means the view cannot shrink.
-            .child(Panel::new(
-                    TextView::new(text).with_name("0").scrollable()
-                )
-                .title("Trustee 0")
-                .title_position(HAlign::Left)
-            )
-            // The other views will share the remaining space.
-            .child(Panel::new(
-                    TextView::new(text).with_name("1").scrollable()
-                )
-                .title("Trustee 1")
-                .title_position(HAlign::Left)
-            )
-            .child(Panel::new(
-                    TextView::new("[q - Quit] [n - Protocol step] [b - Add ballots]")
-                )
-                .title("Help")
-                .title_position(HAlign::Left)
-                .fixed_height(3)
-            )
+    let mut layout = LinearLayout::vertical();
+    for i in 0..trustees {
+        let title = format!("Trustee {}", i);
+        
+        layout = layout.child(Panel::new(
+            TextView::new(text)
+            .scrollable().scroll_strategy(ScrollStrategy::StickToBottom).with_name(&i.to_string()))
+            .title(title)
+            .title_position(HAlign::Left)
+        );
+    }
+    layout = layout.child(Panel::new(
+            TextView::new("[q - Quit] [n - Protocol step] [b - Add ballots]")
+        )
+        .title("Help")
+        .title_position(HAlign::Left)
+        .fixed_height(3)
     );
 
+    siv.add_fullscreen_layer(layout);
     siv.add_global_callback('q', |s| s.quit());
     siv.add_global_callback('n', move |s| {
-        s.call_on_name(&n.to_string(), |view: &mut TextView| {
-            view.set_content("");
-        });
-        s.set_user_data(n);
-        step_t(Arc::clone(&demo_arc), n);
-        n = (n + 1) % 2;
+        let mutex = Arc::clone(&demo_arc);
+        if mutex.try_lock().is_ok() {
+            s.call_on_name(&n.to_string(), |view: &mut ScrollView<TextView>| {
+                view.get_inner_mut().set_content("");
+            });
+            s.set_user_data(n);
+            step_t(Arc::clone(&demo_arc), n);
+            n = (n + 1) % trustees;
+        }
     });
     siv.add_global_callback('b', move |s| {
-        s.set_user_data(0);
-        s.call_on_name(&"0".to_string(), |view: &mut TextView| {
-            view.set_content("");
-        });
-        ballots_t(Arc::clone(&demo_arc2));
+        let mutex = Arc::clone(&demo_arc2);
+        if mutex.try_lock().is_ok() {
+            s.set_user_data(0);
+            s.call_on_name(&"0".to_string(), |view: &mut TextView| {
+                view.set_content("");
+            });
+            ballots_t(Arc::clone(&demo_arc2));
+        }
     });
     
     siv.run();

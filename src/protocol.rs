@@ -138,6 +138,9 @@ impl SVerifier {
     }
 }
 
+use strum::Display;
+
+#[derive(Copy, Clone, Display)]
 enum InputFact {
     ConfigPresent(ConfigPresent),
     ConfigSignedBy(ConfigSignedBy),
@@ -210,8 +213,8 @@ impl fmt::Debug for InputFact {
             InputFact::BallotsSigned(x) => write!(f, 
                 "BallotsSigned [contest={}] [ballots={:?}] {:?}", x.1, short(&x.2), short(&x.0)),
             InputFact::MixSignedBy(x) => write!(f, 
-                "MixSignedBy [contest={}] [mixer={}, signer={}] for config {:?}", 
-                x.1, x.4, x.5, short(&x.0)),
+                "MixSignedBy [contest={}] to=[{:?}] from=[{:?}], [mixer={}, signer={}] for config {:?}", 
+                x.1, short(&x.2), short(&x.3), x.4, x.5, short(&x.0)),
             InputFact::DecryptionSignedBy(x) => write!(f, 
                 "DecryptionSignedBy [contest={}] [signer={}] {:?}", 
                 x.1, x.3, short(&x.0)),
@@ -223,17 +226,21 @@ impl fmt::Debug for InputFact {
 }
 
 fn load_facts(facts: &Vec<InputFact>, runtime: &mut Crepe) {
-    facts.into_iter().map(|f| {
+    let mut sorted = facts.to_vec();
+    sorted.sort_by(|a, b| {
+        a.to_string().partial_cmp(&b.to_string()).unwrap()
+    });
+    sorted.into_iter().map(|f| {
         info!("* Input fact {:?}", f);
         match f {
-            InputFact::ConfigPresent(x) => runtime.extend(&[*x]),
-            InputFact::ConfigSignedBy(x) => runtime.extend(&[*x]),
-            InputFact::PkShareSignedBy(x) => runtime.extend(&[*x]),
-            InputFact::PkSignedBy(x) => runtime.extend(&[*x]),
-            InputFact::BallotsSigned(x) => runtime.extend(&[*x]),
-            InputFact::MixSignedBy(x) => runtime.extend(&[*x]),
-            InputFact::DecryptionSignedBy(x) => runtime.extend(&[*x]),
-            InputFact::PlaintextsSignedBy(x) => runtime.extend(&[*x])
+            InputFact::ConfigPresent(x) => runtime.extend(&[x]),
+            InputFact::ConfigSignedBy(x) => runtime.extend(&[x]),
+            InputFact::PkShareSignedBy(x) => runtime.extend(&[x]),
+            InputFact::PkSignedBy(x) => runtime.extend(&[x]),
+            InputFact::BallotsSigned(x) => runtime.extend(&[x]),
+            InputFact::MixSignedBy(x) => runtime.extend(&[x]),
+            InputFact::DecryptionSignedBy(x) => runtime.extend(&[x]),
+            InputFact::PlaintextsSignedBy(x) => runtime.extend(&[x])
         }
     }).count();
     info!("\n");
@@ -868,7 +875,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned,
         let self_pk = self.trustee.keypair.public;
         let now = std::time::Instant::now();
         let svs = board.get_statements();
-        info!("SVerifiers: {}", svs.len());
+        // info!("SVerifiers: {}", svs.len());
         let mut facts: Vec<InputFact> = svs.iter()
             .map(|sv| sv.verify(board))
             .filter(|f| f.is_some())
@@ -911,7 +918,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned,
 
     pub fn step(&self, board: &mut B) -> u32 {
         let output = self.process_facts(&board);
-        output.print();
+        // output.print();
 
         self.trustee.run(output, board)
     }
