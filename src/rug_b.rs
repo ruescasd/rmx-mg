@@ -165,7 +165,7 @@ impl RugGroup {
         let mut ret: Vec<Integer> = Vec::with_capacity(size);
         for _ in 0..size {
             let g = self.encode(
-                self.modulus_exp.clone().random_below(&mut state)
+                &self.modulus_exp.clone().random_below(&mut state)
             );
             ret.push(g);
         }
@@ -182,7 +182,7 @@ impl Group<Integer> for RugGroup {
         let mut gen  = OsRandgen(OsRng);
         let mut state = RandState::new_custom(&mut gen);
         
-        self.encode(self.modulus_exp.clone().random_below(&mut state))
+        self.encode(&self.modulus_exp.clone().random_below(&mut state))
     }
     fn modulus(&self) -> Integer {
         self.modulus.clone()
@@ -193,34 +193,37 @@ impl Group<Integer> for RugGroup {
         
         self.modulus_exp.clone().random_below(&mut state)
     }
+    fn rnd_plaintext(&self) -> Integer {
+        self.rnd_exp()
+    }
     fn exp_modulus(&self) -> Integer {
         self.modulus_exp.clone()
     }
-    fn encode(&self, plaintext: Integer) -> Integer {
-        assert!(plaintext < self.modulus_exp.clone() - 1);
+    fn encode(&self, plaintext: &Integer) -> Integer {
+        assert!(plaintext < &(self.modulus_exp.clone() - 1));
 
-        let notzero: Integer = plaintext + 1;
+        let notzero: Integer = plaintext.clone() + 1;
         let legendre = notzero.clone().legendre(&self.modulus());
         let product = legendre * notzero;
         
         // this syntax to disambiguate between traits
         Element::modulo(&product, &self.modulus())
     }
-    fn decode(&self, element: Integer) -> Integer {
-        if element > self.exp_modulus() {
+    fn decode(&self, element: &Integer) -> Integer {
+        if element > &self.exp_modulus() {
             (self.modulus() - element) - 1
         }
         else {
-            element - 1
+            element.clone() - 1
         }
     }
     fn gen_key(&self) -> PrivateKey<Integer, Self> {
         let secret = self.rnd_exp();
         PrivateKey::from(&secret, self)
     }
-    fn pk_from_value(&self, value: Integer) -> PublicKey<Integer, Self> {
+    fn pk_from_value(&self, value: &Integer) -> PublicKey<Integer, Self> {
         PublicKey {
-            value: value,
+            value: value.clone(),
             group: self.clone()
         }
     }
@@ -253,7 +256,7 @@ mod tests {
     fn test_encode_panic() {
         
         let rg = RugGroup::default();
-        rg.encode(rg.exp_modulus() - 1);
+        rg.encode(&(rg.exp_modulus() - 1));
     }
 
     #[test]
@@ -265,15 +268,15 @@ mod tests {
 
         let plaintext = group.rnd_exp();
         
-        let encoded = group.encode(plaintext.clone());
+        let encoded = group.encode(&plaintext);
         let c = pk.encrypt(&encoded);
-        let d = group.decode(sk.decrypt(&c));
+        let d = group.decode(&sk.decrypt(&c));
         assert_eq!(d, plaintext);
 
         let zero = Integer::from(0);
-        let encoded_zero = group.encode(zero.clone());
+        let encoded_zero = group.encode(&zero);
         let c_zero = pk.encrypt(&encoded_zero);
-        let d_zero = group.decode(sk.decrypt(&c_zero));
+        let d_zero = group.decode(&sk.decrypt(&c_zero));
         assert_eq!(d_zero, zero);
     }
 
@@ -317,7 +320,7 @@ mod tests {
 
         let plaintext = group.rnd_exp();
         
-        let encoded = group.encode(plaintext.clone());
+        let encoded = group.encode(&plaintext);
         let c = pk.encrypt(&encoded);
         let (d, proof) = sk.decrypt_and_prove(&c);
 
@@ -325,7 +328,7 @@ mod tests {
         let verified = group.cp_verify(&pk.value, &dec_factor, &group.generator(), &c.b, &proof);
         
         assert!(verified == true);
-        assert_eq!(group.decode(d), plaintext);
+        assert_eq!(group.decode(&d), plaintext);
     }
 
     #[test]
@@ -344,7 +347,7 @@ mod tests {
         
         let plaintext = group.rnd_exp();
         
-        let encoded = group.encode(plaintext.clone());
+        let encoded = group.encode(&plaintext);
         
         let pk1_value = &pk1.value.clone();
         let pk2_value = &pk2.value.clone();
@@ -364,7 +367,7 @@ mod tests {
         let decs = vec![dec_f1, dec_f2];
         let d = Keymaker::joint_dec(&group, decs, &c);
         
-        assert_eq!(group.decode(d), plaintext);
+        assert_eq!(group.decode(&d), plaintext);
     }
 
     #[test]
@@ -409,7 +412,7 @@ mod tests {
         let mut bs = Vec::with_capacity(10);
         for _ in 0..10 {
             let plaintext = group.rnd_exp();
-            let encoded = group.encode(plaintext.clone());
+            let encoded = group.encode(&plaintext);
             let c = pk_combined.encrypt(&encoded);
             bs.push(plaintext);
             cs.push(c);
@@ -442,7 +445,7 @@ mod tests {
         let decs = vec![pd1_d.pd_ballots, pd2_d.pd_ballots];
         let ds = Keymaker::joint_dec_many(&group, &decs, &cs);
         let recovered: Vec<Integer> = ds.into_iter()
-            .map(|d| group.decode(d))
+            .map(|d| group.decode(&d))
             .collect();
         
         assert_eq!(bs, recovered);
@@ -504,7 +507,7 @@ mod tests {
 
         let plaintext = group.rnd_exp();
         
-        let encoded = group.encode(plaintext.clone());
+        let encoded = group.encode(&plaintext);
         let c = pk.encrypt(&encoded);
         
         let sym_key = symmetric::gen_key();
@@ -512,7 +515,7 @@ mod tests {
         let enc_sk_b = bincode::serialize(&enc_sk).unwrap();
         let enc_sk_d: EncryptedPrivateKey = bincode::deserialize(&enc_sk_b).unwrap();
         let sk_d = PrivateKey::from_encrypted(sym_key, enc_sk_d, &group);
-        let d = group.decode(sk_d.decrypt(&c));
+        let d = group.decode(&sk_d.decrypt(&c));
         assert_eq!(d, plaintext);
     }
 }

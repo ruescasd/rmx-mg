@@ -11,11 +11,12 @@ pub trait Group<E: Element>: Serialize + HashBytes + Send + Sync + Sized + Clone
     fn rnd(&self) -> E;
     fn modulus(&self) -> E;
     fn rnd_exp(&self) -> E::Exp;
+    fn rnd_plaintext(&self) -> E::Plaintext;
     fn exp_modulus(&self) -> E::Exp;
     fn gen_key(&self) -> PrivateKey<E, Self>;
-    fn pk_from_value(&self, value: E) -> PublicKey<E, Self>;
-    fn encode(&self, plaintext: E::Plaintext) -> E;
-    fn decode(&self, element: E) -> E::Plaintext;
+    fn pk_from_value(&self, value: &E) -> PublicKey<E, Self>;
+    fn encode(&self, plaintext: &E::Plaintext) -> E;
+    fn decode(&self, element: &E) -> E::Plaintext;
     fn exp_hasher(&self) -> Box<dyn HashTo<E::Exp>>;
     fn elem_hasher(&self) -> Box<dyn HashTo<E>>;
     fn generators(&self, size: usize, contest: u32, seed: Vec<u8>) -> Vec<E>;

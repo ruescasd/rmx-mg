@@ -6,7 +6,7 @@ use crate::hashing::HashBytes;
 
 pub trait Element: HashBytes + Clone + Send + Sync + Serialize {
     type Exp: Exponent;
-    type Plaintext;
+    type Plaintext: std::hash::Hash + Eq + Send + Sync;
     
     fn mul(&self, other: &Self) -> Self;
     fn div(&self, other: &Self, modulus: &Self) -> Self;

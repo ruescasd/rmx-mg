@@ -517,7 +517,7 @@ mod tests {
         let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(10);
         
         for _ in 0..n {
-            let plaintext: Integer = group.encode(group.rnd_exp());
+            let plaintext: Integer = group.encode(&group.rnd_exp());
             let c = pk.encrypt(&plaintext);
             es.push(c);
         }

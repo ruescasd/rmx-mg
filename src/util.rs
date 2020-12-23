@@ -3,16 +3,19 @@ use std::fs::File;
 use std::io::Write;
 use std::fs::OpenOptions;
 use std::fs;
+use std::io;
 
+use rand::rngs::OsRng;
+use rand::RngCore;
 use curve25519_dalek::ristretto::{RistrettoPoint};
 use rug::Integer;
 use rayon::prelude::*;
 use chrono::{DateTime, Utc};
 use tempfile::NamedTempFile;
 use uuid::Uuid;
-use std::io;
 
-use crate::group::*;
+use crate::group::Group;
+use crate::arithm::Element;
 use crate::elgamal::*;
 use crate::artifact::*;
 use crate::rug_b::RugGroup;
@@ -90,13 +93,28 @@ pub fn random_ristretto_ballots<G: Group<RistrettoPoint>>(n: usize, group: &G) -
     }
 }
 
+pub fn random_rug_ballots<G: Group<Integer>>(n: usize, group: &G) -> Ballots<Integer> {
+    
+    let cs = (0..n).into_par_iter().map(|_| {
+            Ciphertext{
+                a: group.encode(&group.rnd_exp()),
+                b: group.encode(&group.rnd_exp())
+            }
+        
+    }).collect();
+
+    Ballots {
+        ciphertexts: cs
+    }
+}
+
 pub fn random_ristretto_encrypt_ballots(n: usize, pk: &PublicKey<RistrettoPoint, RistrettoGroup>) -> (Vec<[u8; 30]>, Vec<Ciphertext<RistrettoPoint>>) {
     
     let (plaintexts,cs) = (0..n).into_par_iter().map(|_| {
         let mut csprng = OsRng;
         let mut value = [0u8;30];
         csprng.fill_bytes(&mut value);        
-        let encoded = pk.group.encode(value);
+        let encoded = pk.group.encode(&value);
         let encrypted = pk.encrypt(&encoded);
         (value, encrypted)
         
@@ -105,13 +123,12 @@ pub fn random_ristretto_encrypt_ballots(n: usize, pk: &PublicKey<RistrettoPoint,
     
     (plaintexts, cs)
 }
-use rand::rngs::OsRng;
-use rand::RngCore;
+
 pub fn random_rug_encrypt_ballots(n: usize, pk: &PublicKey<Integer, RugGroup>) -> (Vec<Integer>, Vec<Ciphertext<Integer>>) {
     
     let (plaintexts,cs) = (0..n).into_par_iter().map(|_| {
             let value = pk.group.rnd_exp();
-            let encoded = pk.group.encode(value.clone());
+            let encoded = pk.group.encode(&value);
             let encrypted = pk.encrypt(&encoded);
             (value, encrypted)
         
@@ -121,20 +138,23 @@ pub fn random_rug_encrypt_ballots(n: usize, pk: &PublicKey<Integer, RugGroup>) -
     (plaintexts, cs)
 }
 
-pub fn random_rug_ballots<G: Group<Integer>>(n: usize, group: &G) -> Ballots<Integer> {
+pub fn random_encrypt_ballots<E: Element, G: Group<E>>(n: usize, pk: &PublicKey<E, G>) -> (Vec<E::Plaintext>, Vec<Ciphertext<E>>) {
     
-    let cs = (0..n).into_par_iter().map(|_| {
-            Ciphertext{
-                a: group.encode(group.rnd_exp()),
-                b: group.encode(group.rnd_exp())
-            }
-        
+    let plaintexts: Vec<E::Plaintext> = (0..n).into_par_iter().map(|_| {
+        pk.group.rnd_plaintext()
     }).collect();
 
-    Ballots {
-        ciphertexts: cs
-    }
+    let cs: Vec<Ciphertext<E>> = plaintexts.par_iter().map(|p| {
+            let encoded = pk.group.encode(&p);
+            let encrypted = pk.encrypt(&encoded);
+            // (value, encrypted)
+            encrypted
+        
+    }).collect();
+    
+    (plaintexts, cs)
 }
+
 
 pub(crate) fn short(input: &[u8; 64]) -> Vec<u8> {
     input[0..5].to_vec()

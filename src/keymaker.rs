@@ -34,7 +34,7 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
     
     pub fn share(&self) -> (PublicKey<E, G>, Schnorr<E>) {
         let group = &self.sk.group;
-        let pk = group.pk_from_value(self.pk.value.clone());
+        let pk = group.pk_from_value(&self.pk.value);
 
         let proof = group.schnorr_prove(&self.sk.value, &pk.value, &group.generator());
 
@@ -56,7 +56,7 @@ impl<E: Element, G: Group<E>> Keymaker<E, G> {
             acc = acc.mul(&pks[i].value).modulo(&group.modulus());
         }
 
-        group.pk_from_value(acc)
+        group.pk_from_value(&acc)
     }
     
     pub fn decryption_factor(&self, c: &Ciphertext<E>) -> (E, ChaumPedersen<E>) {

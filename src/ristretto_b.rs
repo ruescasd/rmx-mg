@@ -1,4 +1,5 @@
 use rand::rngs::OsRng;
+use rand::RngCore;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use serde::{Deserialize, Serialize};
@@ -101,14 +102,21 @@ impl Group<RistrettoPoint> for RistrettoGroup {
         let mut rng = OsRng;
         Scalar::random(&mut rng)
     }
+    fn rnd_plaintext(&self) -> [u8; 30] {
+        let mut csprng = OsRng;
+        let mut value = [0u8;30];
+        csprng.fill_bytes(&mut value);
+
+        value
+    }
     fn exp_modulus(&self) -> Scalar {
         Scalar::default()
     }
 
     // see https://github.com/ruescasd/rmx-mg/issues/4
-    fn encode(&self, data: [u8; 30]) -> RistrettoPoint {
+    fn encode(&self, data: &[u8; 30]) -> RistrettoPoint {
         let mut bytes = [0u8; 32];
-        bytes[1..1 + data.len()].copy_from_slice(&data);
+        bytes[1..1 + data.len()].copy_from_slice(data);
         for j in 0..64 {
             bytes[31] = j as u8;
             for i in 0..128 {
@@ -120,7 +128,7 @@ impl Group<RistrettoPoint> for RistrettoGroup {
         }
         panic!("Failed to encode into ristretto point");
     }
-    fn decode(&self, element: RistrettoPoint) -> [u8; 30] {
+    fn decode(&self, element: &RistrettoPoint) -> [u8; 30] {
         let compressed = element.compress();
         let slice = &compressed.as_bytes()[1..31];
         util::to_u8_30(&slice.to_vec())
@@ -129,7 +137,7 @@ impl Group<RistrettoPoint> for RistrettoGroup {
         let secret = self.rnd_exp();
         PrivateKey::from(&secret, self)
     }
-    fn pk_from_value(&self, value: RistrettoPoint) -> PublicKey<RistrettoPoint, Self> {
+    fn pk_from_value(&self, value: &RistrettoPoint) -> PublicKey<RistrettoPoint, Self> {
         PublicKey::from(&value, &self.clone())
     }
 
@@ -187,12 +195,12 @@ mod tests {
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(util::to_u8_30(&fill.to_vec()));
+        let plaintext = group.encode(&util::to_u8_30(&fill.to_vec()));
         
         let c = pk.encrypt(&plaintext);
         let d = sk.decrypt(&c);
         
-        let recovered = group.decode(d).to_vec();
+        let recovered = group.decode(&d).to_vec();
         assert_eq!(fill.to_vec(), recovered);
     }
 
@@ -310,7 +318,7 @@ mod tests {
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(util::to_u8_30(&fill.to_vec()));
+        let plaintext = group.encode(&util::to_u8_30(&fill.to_vec()));
         
         let c = pk.encrypt(&plaintext);
         let (d, proof) = sk.decrypt_and_prove(&c);
@@ -318,7 +326,7 @@ mod tests {
         let dec_factor = c.a.div(&d, &group.modulus()).modulo(&group.modulus());
 
         let verified = group.cp_verify(&pk.value, &dec_factor, &group.generator(), &c.b, &proof);
-        let recovered = group.decode(d).to_vec();
+        let recovered = group.decode(&d).to_vec();
         assert!(verified == true);
         assert_eq!(fill.to_vec(), recovered);
     }
@@ -340,7 +348,7 @@ mod tests {
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(util::to_u8_30(&fill.to_vec()));
+        let plaintext = group.encode(&util::to_u8_30(&fill.to_vec()));
         
         let pk1_value = &pk1.value.clone();
         let pk2_value = &pk2.value.clone();
@@ -359,7 +367,7 @@ mod tests {
         
         let decs = vec![dec_f1, dec_f2];
         let d = Keymaker::joint_dec(&group, decs, &c);
-        let recovered = group.decode(d).to_vec();
+        let recovered = group.decode(&d).to_vec();
         assert_eq!(fill.to_vec(), recovered);
     }
     
@@ -410,7 +418,7 @@ mod tests {
         for _ in 0..10 {
             let mut fill = [0u8;30];
             csprng.fill_bytes(&mut fill);
-            let encoded = group.encode(util::to_u8_30(&fill.to_vec()));
+            let encoded = group.encode(&util::to_u8_30(&fill.to_vec()));
             let c = pk_combined.encrypt(&encoded);
             bs.push(fill.to_vec());
             cs.push(c);
@@ -445,7 +453,7 @@ mod tests {
         let ds = Keymaker::joint_dec_many(&group, &decs, &cs);
 
         let recovered: Vec<Vec<u8>> = ds.into_iter()
-            .map(|d| group.decode(d).to_vec())
+            .map(|d| group.decode(&d).to_vec())
             .collect();
         
         assert_eq!(bs, recovered);
@@ -515,7 +523,7 @@ mod tests {
         
         let mut fill = [0u8;30];
         csprng.fill_bytes(&mut fill);
-        let plaintext = group.encode(util::to_u8_30(&fill.to_vec()));
+        let plaintext = group.encode(&util::to_u8_30(&fill.to_vec()));
         let c = pk.encrypt(&plaintext);
         let sym_key = symmetric::gen_key();
         let enc_sk = sk.to_encrypted(sym_key);
@@ -524,7 +532,7 @@ mod tests {
         let sk_d = PrivateKey::from_encrypted(sym_key, enc_sk_d, &group);
         let d = sk_d.decrypt(&c);
         
-        let recovered = group.decode(d).to_vec();
+        let recovered = group.decode(&d).to_vec();
         assert_eq!(fill.to_vec(), recovered);
     }
 }

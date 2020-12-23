@@ -64,7 +64,6 @@ impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
     fn get_facts(&self, self_pk: SPublicKey) -> Vec<InputFact> {
     
         let svs = self.board.get_statements();
-        println!("SVerifiers: {}", svs.len());
         let mut facts: Vec<InputFact> = svs.iter()
             .map(|sv| sv.verify(&self.board))
             .filter(|f| f.is_some())
