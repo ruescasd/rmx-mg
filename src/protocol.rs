@@ -10,6 +10,7 @@ use rand::rngs::OsRng;
 use ed25519_dalek::PublicKey as SPublicKey;
 use ed25519_dalek::{Verifier, Keypair};
 use crepe::crepe;
+use log::{info, warn};
 
 use crate::hashing::*;
 use crate::hashing;
@@ -44,67 +45,6 @@ type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesAll>, HashSet<Pk
     HashSet<PkSignedUpTo>, HashSet<MixSignedUpTo>, HashSet<MixOk>, HashSet<ContestMixedUpTo>,
     HashSet<ContestMixedOk>, HashSet<DecryptionsUpTo>, HashSet<DecryptionsAll>);
 
-
-pub struct Protocol<E, G, B> {
-    pub board: B,
-    phantom_e: PhantomData<E>,
-    phantom_g: PhantomData<G>
-}
-
-impl<E: Element, G: Group<E>, B: BulletinBoard<E, G>> Protocol<E, G, B> {
-
-    pub fn new(board: B) -> Protocol<E, G, B> {
-        Protocol {
-            board: board,
-            phantom_e: PhantomData,
-            phantom_g: PhantomData
-        }
-    }
-    
-    fn get_facts(&self, self_pk: SPublicKey) -> Vec<InputFact> {
-    
-        let svs = self.board.get_statements();
-        let mut facts: Vec<InputFact> = svs.iter()
-            .map(|sv| sv.verify(&self.board))
-            .filter(|f| f.is_some())
-            .map(|f| f.unwrap())
-            .collect();
-        
-        if let Some(cfg) = self.board.get_config_unsafe() {
-            let trustees = cfg.trustees.len();
-            
-            let self_pos = cfg.trustees.iter()
-                .position(|s| s.to_bytes() == self_pk.to_bytes())
-                .unwrap();
-            let hash = hashing::hash(&cfg);
-            let contests = cfg.contests;
-
-            let f = InputFact::config_present(
-                hash,
-                contests,
-                trustees as u32,
-                self_pos as u32
-            );
-            facts.push(f);
-        };
-
-        facts
-    }
-    
-    pub fn process_facts(&self, self_pk: SPublicKey) -> Facts {
-        let mut runtime = Crepe::new();
-        let input_facts = self.get_facts(self_pk);
-        load_facts(&input_facts, &mut runtime);
-        
-        let output = runtime.run();
-        let ret = Facts::new(input_facts, output);
-        
-        ret.print();
-
-        ret
-    }
-}
-
 #[derive(Debug)]
 pub struct SVerifier {
     pub statement: SignedStatement,
@@ -128,7 +68,7 @@ impl SVerifier {
         let statement_hash = hashing::hash(statement);
         let verified = pk.verify(&statement_hash, &self.statement.signature);
         let config_h = util::to_u8_64(&statement.hashes[0]);
-        // println!("* Verify returns: [{}] on [{:?}] from trustee [{}] for contest [{}]", verified.is_ok(), 
+        // info!("* Verify returns: [{}] on [{:?}] from trustee [{}] for contest [{}]", verified.is_ok(), 
         //    &self.statement.statement.stype, &self.trustee, &self.contest
         //);
         
@@ -283,9 +223,8 @@ impl fmt::Debug for InputFact {
 }
 
 fn load_facts(facts: &Vec<InputFact>, runtime: &mut Crepe) {
-    println!("======== Input facts [");
     facts.into_iter().map(|f| {
-        println!("* Input fact {:?}", f);
+        info!("* Input fact {:?}", f);
         match f {
             InputFact::ConfigPresent(x) => runtime.extend(&[*x]),
             InputFact::ConfigSignedBy(x) => runtime.extend(&[*x]),
@@ -297,7 +236,7 @@ fn load_facts(facts: &Vec<InputFact>, runtime: &mut Crepe) {
             InputFact::PlaintextsSignedBy(x) => runtime.extend(&[*x])
         }
     }).count();
-    println!("] \n");
+    info!("\n");
 }
 
 pub struct Facts {
@@ -375,35 +314,33 @@ impl Facts {
     }
 
     fn print(&self) {
-        println!("======== Output facts [");
         let next = &self.config_ok;
         for f in next {
-            println!("* ConfigOk {:?}", short(&f.0));
+            info!("* ConfigOk {:?}", short(&f.0));
         }
         let next = &self.pk_shares_ok;
         for f in next {
-            println!("* PkSharesAll {:?}", short(&f.0));
+            info!("* PkSharesAll {:?}", short(&f.0));
         }
         let next = &self.pk_ok;
         for f in next {
-            println!("* PkOk {:?}", short(&f.0));
+            info!("* PkOk {:?}", short(&f.0));
         }
         let next = &self.mixes_ok;
         for f in next {
-            println!("* MixOk contest=[{}] mix=[{:?}], ballots=[{:?}] for config {:?}", 
+            info!("* MixOk contest=[{}] mix=[{:?}], ballots=[{:?}] for config {:?}", 
             f.1, short(&f.2), short(&f.3), short(&f.0));
         }
         let next = &self.contest_up_to;
         for f in next {
-            println!("* ContestMixedUpTo contest=[{}] mix=[{:?}] trustee=[{}], for config {:?}", 
+            info!("* ContestMixedUpTo contest=[{}] mix=[{:?}] trustee=[{}], for config {:?}", 
             f.1, short(&f.2), f.3, short(&f.0));
         }
         let next = &self.all_actions; 
         for f in next {
-            println!("* Action {:?}", f);
+            info!("* Action {:?}", f);
         }
-            
-        println!("] \n");
+        info!("\n");
     }
 
     pub fn pk_shares_len(&self) -> usize {
@@ -652,166 +589,6 @@ fn array_set(mut input: Hashes, index: u32, value: Hash) -> Hashes {
     input
 }
 
-#[cfg(test)]
-mod tests {
-    
-    use std::fs;
-    use std::path::Path;
-    use ed25519_dalek::{Keypair};
-    use uuid::Uuid;
-    use rand::rngs::OsRng;
-    
-    use rug::Integer;
-
-    use crate::hashing;
-    use crate::artifact::Config;
-    use crate::keymaker::Keymaker;
-    use crate::rug_b::*;
-    use crate::memory_bb::*;
-    use crate::protocol::*;
-    use crate::action::*;
-    use crate::symmetric;
-    
-    use crate::localstore::*;
-    
-    #[test]
-    fn test_crepe_config() {
-        let mut csprng = OsRng;
-        let mut bb = MemoryBulletinBoard::<Integer, RugGroup>::new();
-        let local1 = "/tmp/local";
-        let local_path1 = Path::new(local1);
-        fs::remove_dir_all(local_path1).ok();
-        fs::create_dir(local_path1).ok();
-        let ls1: LocalStore<Integer, RugGroup> = LocalStore::new(local1.to_string());
-
-        let local2 = "/tmp/local2";
-        let local_path2 = Path::new(local2);
-        fs::remove_dir_all(local_path2).ok();
-        fs::create_dir(local_path2).ok();
-        let ls2: LocalStore<Integer, RugGroup> = LocalStore::new(local2.to_string());
-
-        let id = Uuid::new_v4();
-        let group = RugGroup::default();
-        let contests = 2;
-        let ballotbox_pk = Keypair::generate(&mut csprng).public; 
-        let trustees = 2;
-        let mut trustee_kps = Vec::with_capacity(trustees);
-        let mut trustee_pks = Vec::with_capacity(trustees);
-        let mut trustee_keymakers: Vec<Keymaker<Integer, RugGroup>> = Vec::with_capacity(trustees);
-        
-        for _ in 0..trustees {
-            let keypair = Keypair::generate(&mut csprng);
-            let km = Keymaker::gen(&group);
-            trustee_pks.push(keypair.public);
-            trustee_kps.push(keypair);
-            trustee_keymakers.push(km);
-        }
-        let self_pk = trustee_pks[0];
-        let other_pk = trustee_pks[1];
-        let cfg = Config {
-            id: id.as_bytes().clone(),
-            group: group,
-            contests: contests, 
-            ballotbox: ballotbox_pk, 
-            trustees: trustee_pks,
-            phantom_e: PhantomData
-        };
-        
-        let cfg_b = bincode::serialize(&cfg).unwrap();
-        let tmp_file = util::write_tmp(cfg_b).unwrap();
-        bb.add_config(&ConfigPath(tmp_file.path().to_path_buf()));
-        
-        let mut prot = Protocol::new(bb);
-        let actions = prot.process_facts(self_pk).check_config;
-
-        let cfg_h = hashing::hash(&cfg);
-        let expected = Act::CheckConfig(cfg_h);
-            
-        assert!(actions[0] == expected);
-        
-        let ss = SignedStatement::config(&cfg_h, &trustee_kps[0]);
-        let stmt_path = ls1.set_config_stmt(&expected, &ss);
-
-        prot.board.add_config_stmt(&stmt_path, 0);
-        
-        let actions = prot.process_facts(self_pk).all_actions;
-        assert!(actions.len() == 0);
-
-        let ss = SignedStatement::config(&cfg_h, &trustee_kps[1]);
-        let stmt_path = ls2.set_config_stmt(&expected, &ss);
-
-        prot.board.add_config_stmt(&stmt_path, 1);
-        let actions = prot.process_facts(self_pk).post_share;
-
-        assert!(actions.len() as u32 == contests);
-
-        let km1 = &trustee_keymakers[0];
-        let km2 = &trustee_keymakers[1];
-        
-        let (pk1, proof1) = km1.share();
-        let (pk2, proof2) = km2.share();
-        let sym1 = symmetric::gen_key();
-        let sym2 = symmetric::gen_key();
-        let esk1 = km1.get_encrypted_sk(sym1);
-        let esk2 = km2.get_encrypted_sk(sym2);
-        
-        let share1 = Keyshare {
-            share: pk1,
-            proof: proof1,
-            encrypted_sk: esk1
-        };
-        let share2 = Keyshare {
-            share: pk2,
-            proof: proof2,
-            encrypted_sk: esk2
-        };
-
-        let share1_h = hashing::hash(&share1);
-        let share2_h = hashing::hash(&share2);
-        let act = Act::PostShare(cfg_h, 0);
-        let ss1 = SignedStatement::keyshare(&cfg_h, &share1_h, 0, &trustee_kps[0]);
-        let ss2 = SignedStatement::keyshare(&cfg_h, &share2_h, 0, &trustee_kps[1]);
-        let share1_path = ls1.set_share(&act, share1, &ss1);
-        let share2_path = ls2.set_share(&act, share2, &ss2);
-
-        prot.board.add_share(&share1_path, 0, 0);
-        prot.board.add_share(&share2_path, 0, 1);
-
-        let output = prot.process_facts(self_pk);
-
-        assert!(output.pk_shares_ok.len() == 1);
-        assert!(output.combine_shares.len() == 1);
-        assert!(output.post_share.len() == 1);
-
-        let share1 = prot.board.get_share(0, 0, share1_h).unwrap();
-        let share2 = prot.board.get_share(0, 1, share2_h).unwrap();
-        let gr = &cfg.group.clone();
-        assert!(Keymaker::verify_share(gr, &share1.share, &share1.proof));
-        assert!(Keymaker::verify_share(gr, &share2.share, &share2.proof));
-        
-        let pk = Keymaker::combine_pks(gr, vec![share1.share, share2.share]);
-        let pk_h = hashing::hash(&pk);
-        let ss1 = SignedStatement::public_key(&cfg_h, &pk_h, 0, &trustee_kps[0]);
-        let act = output.combine_shares[0];
-        let pk_path = ls1.set_pk(&act, pk, &ss1);
-        prot.board.set_pk(&pk_path, 0);
-
-        let output = prot.process_facts(self_pk);
-        assert!(output.combine_shares.len() == 0);
-        assert!(output.check_pk.len() == 0);
-
-        let output = prot.process_facts(other_pk);
-        assert!(output.check_pk.len() == 1);
-        let act = output.check_pk[0];
-
-        let ss2 = SignedStatement::public_key(&cfg_h, &pk_h, 0, &trustee_kps[1]);
-        let pk_stmt_path = ls2.set_pk_stmt(&act, &ss2);
-        prot.board.set_pk_stmt(&pk_stmt_path, 0, 1);
-
-        let _output = prot.process_facts(self_pk);
-    }
-}
-
 pub struct Trustee<E, G> {
     pub keypair: Keypair,
     pub localstore: LocalStore<E, G>,
@@ -847,14 +624,15 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
         for action in actions {
             match action {
                 Act::CheckConfig(cfg) => {
-                    println!("I Should check the config now!");
+                    info!(">> Action: checking config..");
                     // FIXME validate the config somehow
                     let ss = SignedStatement::config(&cfg, &self.keypair);
                     let stmt_path = self.localstore.set_config_stmt(&action, &ss);
                     board.add_config_stmt(&stmt_path, self_index.unwrap());
+                    info!(">> OK");
                 }
                 Act::PostShare(cfg_h, cnt) => {
-                    println!("I Should post my share now! (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    info!(">> Action: Computing shares (contest=[{}], self=[{}])..", cnt, self_index.unwrap());
                     let cfg = board.get_config(cfg_h).unwrap();
                     let share = self.share(&cfg.group);
                     let share_h = hashing::hash(&share);
@@ -862,9 +640,10 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                     let share_path = self.localstore.set_share(&action, share, &ss);
                     
                     board.add_share(&share_path, cnt, self_index.unwrap());
+                    info!(">> OK");
                 }
                 Act::CombineShares(cfg_h, cnt, hs) => {
-                    println!("I Should combine shares now! (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    info!(">> Action: Combining shares (contest=[{}], self=[{}])..", cnt, self_index.unwrap());
                     let cfg = board.get_config(cfg_h).unwrap();
                     let hashes = util::clear_zeroes(&hs);
                     assert!(hashes.len() as u32 == trustees.unwrap());
@@ -874,9 +653,10 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                     
                     let pk_path = self.localstore.set_pk(&action, pk, &ss);
                     board.set_pk(&pk_path, cnt);
+                    info!(">> OK");
                 }
                 Act::CheckPk(cfg_h, cnt, pk_h, hs) => {
-                    println!("I Should check pk now! (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    info!(">> Action: Verifying pk (contest=[{}], self=[{}])..", cnt, self_index.unwrap());
                     let cfg = board.get_config(cfg_h).unwrap();
                     let hashes = util::clear_zeroes(&hs);
                     let pk = self.get_pk(board, hashes, &cfg.group, cnt).unwrap();
@@ -886,10 +666,11 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                     
                     let pk_stmt_path = self.localstore.set_pk_stmt(&action, &ss);
                     board.set_pk_stmt(&pk_stmt_path, cnt, self_index.unwrap());
+                    info!(">> OK");
                 }
                 Act::Mix(cfg_h, cnt, ballots_h, pk_h) => {
                     let self_t = self_index.unwrap();
-                    println!("I Should mix now! (contest=[{}], self=[{}])", cnt, self_t);
+                    info!(">> Computing mix (contest=[{}], self=[{}])..", cnt, self_t);
                     let cfg = board.get_config(cfg_h).unwrap();
                     
                     let ciphertexts = self.get_mix_src(board, cnt, self_t, ballots_h);
@@ -910,14 +691,15 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                         proof: proof
                     };
                     let mix_h = hashing::hash(&mix);
-                    println!("Mix generated ballots {:?} from {:?}", short(&mix_h), short(&ballots_h));
+                    info!(">> Action: Mix generated ballots {:?} from {:?}", short(&mix_h), short(&ballots_h));
                     let ss = SignedStatement::mix(&cfg_h, &mix_h, &ballots_h, cnt, &self.keypair, None);
                     let mix_path = self.localstore.set_mix(&action, mix, &ss);
                     board.add_mix(&mix_path, cnt, self_index.unwrap());
+                    info!(">> OK");
                 }
                 Act::CheckMix(cfg_h, cnt, trustee, mix_h, ballots_h, pk_h) => {
                     let cfg = board.get_config(cfg_h).unwrap();
-                    println!("I should check mix now! (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    info!(">> Action:: Verifying mix (contest=[{}], self=[{}])..", cnt, self_index.unwrap());
                     let mix = board.get_mix(cnt, trustee, mix_h).unwrap();
                     let ciphertexts = self.get_mix_src(board, cnt, trustee, ballots_h);
                     let pk = board.get_pk(cnt, pk_h).unwrap();
@@ -930,15 +712,16 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                         hasher: exp_hasher
                     };
                     let proof = mix.proof;
-                    println!("Verifying shuffle {:?} with source {:?}", short(&mix_h), short(&ballots_h));
+                    info!(">> Action: Verifying shuffle {:?} with source {:?}..", short(&mix_h), short(&ballots_h));
                     assert!(shuffler.check_proof(&proof, &ciphertexts, &mix.mixed_ballots));
                     let ss = SignedStatement::mix(&cfg_h, &mix_h, &ballots_h, cnt, &self.keypair, Some(trustee));
                     let mix_path = self.localstore.set_mix_stmt(&action, &ss);
                     board.add_mix_stmt(&mix_path, cnt, self_index.unwrap(), trustee);
+                    info!(">> OK");
 
                 }
                 Act::PartialDecrypt(cfg_h, cnt, mix_h, share_h) => {
-                    println!("I should partial decrypt (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    info!(">> Action: Computing partial decryptions (contest=[{}], self=[{}])..", cnt, self_index.unwrap());
                     let cfg = board.get_config(cfg_h).unwrap();
                     let mix = board.get_mix(cnt, (cfg.trustees.len() - 1) as u32, mix_h).unwrap();
                     let share = board.get_share(cnt, self_index.unwrap(), share_h).unwrap();
@@ -946,7 +729,6 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                     let sk: PrivateKey<E, G> = PrivateKey::from_encrypted(self.symmetric, encrypted_sk, &cfg.group);
                     let keymaker = Keymaker::from_sk(sk, &cfg.group);
 
-                    println!("Computing partial decryptions.. (contest=[{}], self=[{}])", cnt, self_index.unwrap());
                     let (decs, proofs) = keymaker.decryption_factor_many(&mix.mixed_ballots);
                     let pd = PartialDecryption {
                         pd_ballots: decs,
@@ -956,10 +738,11 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                     let ss = SignedStatement::pdecryptions(&cfg_h, cnt, &pd_h, &self.keypair);
                     let pd_path = self.localstore.set_pdecryptions(&action, pd, &ss);
                     board.add_decryption(&pd_path, cnt, self_index.unwrap());
+                    info!(">> OK");
                 }
                 Act::CombineDecryptions(cfg_h, cnt, decryption_hs, mix_h, share_hs) => {
                     let cfg = board.get_config(cfg_h).unwrap();
-                    println!("I should combine decryptions (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    info!(">> Action: Combining decryptions (contest=[{}], self=[{}])..", cnt, self_index.unwrap());
                     let d_hs = util::clear_zeroes(&decryption_hs);
                     let s_hs = util::clear_zeroes(&share_hs);
                     let pls = self.get_plaintexts(board, cnt, d_hs, mix_h, s_hs, &cfg).unwrap();
@@ -970,10 +753,11 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                     let ss = SignedStatement::plaintexts(&cfg_h, cnt, &p_h, &self.keypair);
                     let p_path = self.localstore.set_plaintexts(&action, plaintexts, &ss);
                     board.set_plaintexts(&p_path, cnt);
+                    info!(">> OK");
                 }
                 Act::CheckPlaintexts(cfg_h, cnt, _h1, _hs) => {
                     let cfg = board.get_config(cfg_h).unwrap();
-                    println!("I check plaintexts (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    info!(">> Action: TODO: check plaintexts (contest=[{}], self=[{}])", cnt, self_index.unwrap());
                 }
             }
         }
@@ -1045,7 +829,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
         let mut shares = Vec::with_capacity(hs.len());
         for (i, h) in hs.iter().enumerate() {
             let next = board.get_share(cnt, i as u32, *h).unwrap();
-            println!("*** Verifying share proof!");
+            info!("*** Verifying share proof!");
             let ok = Keymaker::verify_share(group, &next.share, &next.proof);
             if ok {
                 shares.push(next.share);
@@ -1064,16 +848,16 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
     }
 }
 
-pub struct Protocol2 <E, G, B> {
+pub struct Protocol <E, G, B> {
     trustee: Trustee<E, G>,
     phantom_b: PhantomData<B>
 }
 
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned,
-    B: BulletinBoard<E, G>> Protocol2<E, G, B> {
+    B: BulletinBoard<E, G>> Protocol<E, G, B> {
 
-    pub fn new(trustee: Trustee<E, G>) -> Protocol2<E, G, B> {
-        Protocol2 {
+    pub fn new(trustee: Trustee<E, G>) -> Protocol<E, G, B> {
+        Protocol {
             trustee,
             phantom_b: PhantomData
         }
@@ -1084,7 +868,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned,
         let self_pk = self.trustee.keypair.public;
         let now = std::time::Instant::now();
         let svs = board.get_statements();
-        println!("SVerifiers: {}", svs.len());
+        info!("SVerifiers: {}", svs.len());
         let mut facts: Vec<InputFact> = svs.iter()
             .map(|sv| sv.verify(board))
             .filter(|f| f.is_some())
@@ -1108,7 +892,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned,
             );
             facts.push(f);
         };
-        println!("Input facts derived in [{}ms]", now.elapsed().as_millis());
+        info!("Input facts derived in [{}ms]", now.elapsed().as_millis());
 
         facts
     }
@@ -1120,15 +904,13 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned,
         
         let now = std::time::Instant::now();
         let output = runtime.run();
-        println!("Output facts derived in [{}ms]", now.elapsed().as_millis());
+        info!("Output facts derived in [{}ms]", now.elapsed().as_millis());
         
         Facts::new(input_facts, output)
     }
 
     pub fn step(&self, board: &mut B) -> u32 {
-        println!("====================================== Step ======================================");
         let output = self.process_facts(&board);
-
         output.print();
 
         self.trustee.run(output, board)

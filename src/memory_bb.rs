@@ -73,8 +73,7 @@ impl MBasicBulletinBoard {
     }
 }
 
-pub struct MemoryBulletinBoard<E: Element + DeserializeOwned, 
-    G: Group<E> + DeserializeOwned> {
+pub struct MemoryBulletinBoard<E, G> {
     
     basic: MBasicBulletinBoard,
     phantom_e: PhantomData<E>,
@@ -209,7 +208,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
         
         let sts = self.get_stmts();
         let mut ret = Vec::new();
-        println!("Statements {:?}", sts);
+        // println!("Statements {:?}", sts);
         
         for s in sts.iter() {
             let s_bytes = self.basic.get_unsafe(s).unwrap().to_vec();
