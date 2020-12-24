@@ -61,12 +61,13 @@ struct DemoLogSink {
     pub buffer: String,
     target: String
 }
-struct Demo<E, G> {
+struct Demo<E: Element, G> {
     pub cb_sink: cursive::CbSink,
     trustees: Vec<Protocol<E, G, MemoryBulletinBoard<E, G>>>,
     bb_keypair: Keypair,
     config: rmx::artifact::Config<E, G>,
-    board: MemoryBulletinBoard<E, G>
+    board: MemoryBulletinBoard<E, G>,
+    all_plaintexts: Vec<Vec<E::Plaintext>>
 }
 impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Demo<E, G> {
     fn new(sink: cursive::CbSink, group: &G, trustees: u32, contests: u32) -> Demo<E, G> {
@@ -106,7 +107,8 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Demo<E, G> {
             trustees: prots,
             bb_keypair: bb_keypair,
             config: cfg,
-            board: bb
+            board: bb,
+            all_plaintexts: vec![]
         }
     }
     fn add_ballots(&mut self) {
@@ -116,7 +118,8 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Demo<E, G> {
                 let pk: PublicKey<E, G> = bincode::deserialize(pk_b.unwrap()).unwrap();
                 
                 let (plaintexts, ciphertexts) = util::random_encrypt_ballots(100, &pk);
-                // all_plaintexts.push(plaintexts);
+                self.all_plaintexts.push(plaintexts);
+                
                 let ballots = Ballots { ciphertexts };
                 let ballots_b = bincode::serialize(&ballots).unwrap();
                 let ballots_h = hashing::hash(&ballots);
@@ -133,6 +136,26 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Demo<E, G> {
             else {
                 info!("Cannot add ballots for contest=[{}], no pk yet", i);
             }
+        }
+    }
+    fn check_plaintexts(&self) {
+        for i in 0..self.config.contests {
+            if let Some(decrypted_b) = self.board.get_unsafe(MemoryBulletinBoard::<E, G>::plaintexts(i, 0)) {
+                let decrypted: Plaintexts<E> = bincode::deserialize(decrypted_b).unwrap();
+                let decoded: Vec<E::Plaintext> = decrypted.plaintexts.iter().map(|p| {
+                    self.config.group.decode(&p)
+                }).collect();
+                let p1: HashSet<&E::Plaintext> = HashSet::from_iter(self.all_plaintexts[i as usize].iter().clone());
+                let p2: HashSet<&E::Plaintext> = HashSet::from_iter(decoded.iter().clone());
+                
+                info!("Comparing plaintexts contest=[{}]...", i);
+                assert!(p1 == p2);
+                info!("Ok");
+            }
+            else {
+                info!("Cannot check plaintexts for contest=[{}], no decryptions yet", i);
+            }
+            
         }
     }
     fn step(&mut self, t: usize) {
@@ -232,10 +255,11 @@ fn demo_tui() {
         ]
     ).unwrap();
     
-    let demo_arc = Arc::new(Mutex::new(
+    let demo_arc_run = Arc::new(Mutex::new(
         demo
     ));
-    let demo_arc2 = Arc::clone(&demo_arc);
+    let demo_arc_ballots = Arc::clone(&demo_arc_run);
+    let demo_arc_verify = Arc::clone(&demo_arc_run);
     
     let theme = custom_theme_from_cursive(&siv);
     siv.set_theme(theme);
@@ -256,7 +280,7 @@ fn demo_tui() {
         );
     }
     layout = layout.child(Panel::new(
-            TextView::new("[q - Quit] [n - Protocol step] [b - Add ballots]")
+            TextView::new("[q - Quit] [n - Protocol step] [b - Add ballots] [c - Check plaintexts]")
         )
         .title("Help")
         .title_position(HAlign::Left)
@@ -268,14 +292,14 @@ fn demo_tui() {
         TextView::new("Facts").scrollable().with_name("facts"))
         .title("Facts")
         .title_position(HAlign::Left)
-        .fixed_width(100)
+        .fixed_width(105)
         .full_height()
     );
     // siv.add_fullscreen_layer(layout);
     siv.add_layer(h_layout);
     siv.add_global_callback('q', |s| s.quit());
     siv.add_global_callback('n', move |s| {
-        let guard = Arc::clone(&demo_arc);
+        let guard = Arc::clone(&demo_arc_run);
         if guard.try_lock().is_ok() {
             s.call_on_name(&n.to_string(), |view: &mut ScrollView<TextView>| {
                 view.get_inner_mut().set_content("");
@@ -283,17 +307,26 @@ fn demo_tui() {
             s.call_on_name(&"facts".to_string(), |view: &mut ScrollView<TextView>| {
                 view.get_inner_mut().set_content("");
             });
-            step_t(Arc::clone(&demo_arc), n);
+            step_t(Arc::clone(&demo_arc_run), n);
             n = (n + 1) % trustees;    
         }
     });
     siv.add_global_callback('b', move |s| {
-        let guard = Arc::clone(&demo_arc2);
+        let guard = Arc::clone(&demo_arc_ballots);
         if guard.try_lock().is_ok() {
             s.call_on_name(&n.to_string(), |view: &mut ScrollView<TextView>| {
                 view.get_inner_mut().set_content("");
             });
-            ballots_t(Arc::clone(&demo_arc2));
+            ballots_t(Arc::clone(&demo_arc_ballots));
+        }
+    });
+    siv.add_global_callback('c', move |s| {
+        let guard = Arc::clone(&demo_arc_verify);
+        if guard.try_lock().is_ok() {
+            s.call_on_name(&n.to_string(), |view: &mut ScrollView<TextView>| {
+                view.get_inner_mut().set_content("");
+            });
+            check_t(Arc::clone(&demo_arc_verify));
         }
     });
     
@@ -312,14 +345,18 @@ fn ballots_t<E: 'static + Element + DeserializeOwned, G: 'static + Group<E> + De
     });
 }
 
+fn check_t<E: 'static + Element + DeserializeOwned, G: 'static + Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
+    std::thread::spawn(move || {
+        check(Arc::clone(&demo_arc))
+    });
+}
+
 fn step<E: 'static + Element + DeserializeOwned, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>, t: u32) {
     let mut demo = demo_arc.lock().unwrap();
     info!("set_panel=[facts]");
     let facts = demo.process_facts(t as usize);
     info!("set_panel=[{}]", t);
     demo.run(facts, t as usize);
-    // info!("set_panel=[{}]", t);
-    // demo.step(t as usize);
 }
 
 fn ballots<E: 'static + Element + DeserializeOwned, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
@@ -328,6 +365,11 @@ fn ballots<E: 'static + Element + DeserializeOwned, G: Group<E> + DeserializeOwn
     demo.add_ballots();
 }
 
+fn check<E: 'static + Element + DeserializeOwned, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
+    let mut demo = demo_arc.lock().unwrap();
+    
+    demo.check_plaintexts();
+}
 
 fn custom_theme_from_cursive(siv: &Cursive) -> Theme {
     // We'll return the current theme with a small modification.

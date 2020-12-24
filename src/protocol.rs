@@ -629,6 +629,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
         };
         
         info!(">> Trustee::run: found {} actions", ret);
+        let now = std::time::Instant::now();
         for action in actions {
             match action {
                 Act::CheckConfig(cfg) => {
@@ -769,7 +770,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                 }
             }
         }
-        info!(">> Trustee::run: OK");
+        info!(">> Trustee::run finished in [{}ms]", now.elapsed().as_millis());
         ret as u32
     }
     
@@ -912,13 +913,14 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned,
         
         let now = std::time::Instant::now();
         let output = runtime.run();
+        let done = now.elapsed().as_millis();
         let actions = output.0.len();
         
         let ret = Facts::new(input_facts, output);
     
         ret.log();
         info!("");
-        info!("Output facts ({} actions) derived in [{}ms]", actions, now.elapsed().as_millis());
+        info!("Output facts ({} actions) derived in [{}ms]", actions, done);
         
         ret
     }
