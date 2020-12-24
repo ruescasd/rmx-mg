@@ -43,7 +43,8 @@ pub type Hashes = [Hash; 10];
 type OutputF = (HashSet<Do>, HashSet<ConfigOk>, HashSet<PkSharesAll>, HashSet<PkOk>, 
     HashSet<PkSharesUpTo>, HashSet<ConfigSignedUpTo>, HashSet<Contest>,
     HashSet<PkSignedUpTo>, HashSet<MixSignedUpTo>, HashSet<MixOk>, HashSet<ContestMixedUpTo>,
-    HashSet<ContestMixedOk>, HashSet<DecryptionsUpTo>, HashSet<DecryptionsAll>);
+    HashSet<ContestMixedOk>, HashSet<DecryptionsUpTo>, HashSet<DecryptionsAll>,
+    HashSet<PlaintextsSignedUpTo>, HashSet<PlaintextsOk>);
 
 #[derive(Debug)]
 pub struct SVerifier {
@@ -263,7 +264,9 @@ pub struct Facts {
     pk_shares_ok: HashSet<PkSharesAll>,
     pk_ok: HashSet<PkOk>,
     mixes_ok: HashSet<MixOk>,
-    contest_up_to: HashSet<ContestMixedUpTo>
+    contest_mixed_ok: HashSet<ContestMixedOk>,
+    decryptions_all: HashSet<DecryptionsAll>,
+    plaintexts_ok: HashSet<PlaintextsOk>
 }
 
 impl Facts {
@@ -299,7 +302,9 @@ impl Facts {
         let pk_shares_ok = f.2;
         let pk_ok = f.3;
         let mixes_ok = f.9;
-        let contest_up_to = f.10;
+        let contest_mixed_ok = f.11;
+        let decryptions_all = f.13;
+        let plaintexts_ok = f.15;
 
         Facts{
             input_facts,
@@ -317,7 +322,9 @@ impl Facts {
             pk_shares_ok,
             pk_ok,
             mixes_ok,
-            contest_up_to
+            contest_mixed_ok,
+            decryptions_all,
+            plaintexts_ok
         }
     }
 
@@ -339,10 +346,20 @@ impl Facts {
             info!("OFact: MixOk cn=[{}] mix=[{:?}], ballots=[{:?}] cfg {:?}", 
             f.1, short(&f.2), short(&f.3), short(&f.0));
         }
-        let next = &self.contest_up_to;
+        let next = &self.contest_mixed_ok;
         for f in next {
-            info!("OFact: ContestMixedUpTo cn=[{}] mix=[{:?}] tr=[{}], cfg {:?}", 
-            f.1, short(&f.2), f.3, short(&f.0));
+            info!("OFact: ContestMixedOk cn=[{}] mix=[{:?}] cfg {:?}", 
+            f.1, short(&f.2), short(&f.0));
+        }
+        let next = &self.decryptions_all;
+        for f in next {
+            info!("OFact: DecryptionsAll cn=[{}] cfg {:?}", 
+            f.1, short(&f.0));
+        }
+        let next = &self.plaintexts_ok;
+        for f in next {
+            info!("OFact: PlaintextsOk cn=[{}] cfg {:?}", 
+            f.1, short(&f.0));
         }
         let next = &self.all_actions; 
         for f in next {
@@ -421,6 +438,12 @@ crepe! {
     // 12
     @output
     struct DecryptionsAll(ConfigHash, ContestIndex, Hashes);
+    // 13
+    @output
+    struct PlaintextsSignedUpTo(ConfigHash, ContestIndex, PlaintextsHash, TrusteeIndex);
+    // 14
+    @output
+    struct PlaintextsOk(ConfigHash, ContestIndex, PlaintextsHash);
     
     Do(Act::CheckConfig(config)) <- 
         ConfigPresent(config, _, _, self_t),
@@ -499,6 +522,27 @@ crepe! {
         ContestMixedOk(config, contest, mix_hash),
         PkSharesAll(config, contest, shares),
         !PlaintextsSignedBy(config, contest, _, 0);
+
+    Do(Act::CheckPlaintexts(config, contest, plaintext_hash, decryptions, mix_hash, shares)) <- 
+        DecryptionsAll(config, contest, decryptions),
+        ConfigPresent(config, _, _, self_t),
+        ConfigOk(config),
+        ContestMixedOk(config, contest, mix_hash),
+        PkSharesAll(config, contest, shares),
+        PlaintextsSignedBy(config, contest, plaintext_hash, 0),
+        !PlaintextsSignedBy(config, contest, plaintext_hash, self_t);
+
+    PlaintextsSignedUpTo(config, contest, plaintext_hash, 0) <-
+        PlaintextsSignedBy(config, contest, plaintext_hash, 0);
+
+    PlaintextsSignedUpTo(config, contest, plaintext_hash, trustee + 1) <-
+        PlaintextsSignedUpTo(config, contest, plaintext_hash, trustee),   
+        PlaintextsSignedBy(config, contest, plaintext_hash, trustee + 1);
+
+    PlaintextsOk(config, contest, plaintext_hash) <-
+        ConfigPresent(config, _, total_t, _),
+        ConfigOk(config),
+        PlaintextsSignedUpTo(config, contest, plaintext_hash, total_t - 1);
 
     DecryptionsUpTo(config, contest, 0, first) <-
         DecryptionSignedBy(config, contest, decryption, 0),
@@ -602,7 +646,7 @@ pub struct Trustee<E, G> {
     pub symmetric: GenericArray<u8, U32>
 }
 
-impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G> {
+impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned> Trustee<E, G> {
     
     pub fn new(local_store: String) -> Trustee<E, G> {
         let mut csprng = OsRng;
@@ -700,7 +744,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                         proof: proof
                     };
                     let mix_h = hashing::hash(&mix);
-                    info!(">> Action: Mix generated ballots {:?} from {:?}", short(&mix_h), short(&ballots_h));
+                    info!(">> Action: Mix generated ciphertexts {:?} from {:?}", short(&mix_h), short(&ballots_h));
                     let ss = SignedStatement::mix(&cfg_h, &mix_h, &ballots_h, cnt, &self.keypair, None);
                     let mix_path = self.localstore.set_mix(&action, mix, &ss);
                     board.add_mix(&mix_path, cnt, self_index.unwrap());
@@ -764,9 +808,19 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                     board.set_plaintexts(&p_path, cnt);
                     info!(">> OK");
                 }
-                Act::CheckPlaintexts(cfg_h, cnt, _h1, _hs) => {
+                Act::CheckPlaintexts(cfg_h, cnt, plaintexts_h, decryption_hs, mix_h, share_hs) => {
                     let cfg = board.get_config(cfg_h).unwrap();
-                    info!(">> Action: TODO: check plaintexts (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    info!(">> Action: Checking plaintexts (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    let s_hs = util::clear_zeroes(&share_hs);
+                    let d_hs = util::clear_zeroes(&decryption_hs);
+                    let pls = self.get_plaintexts(board, cnt, d_hs, mix_h, s_hs, &cfg).unwrap();
+                    let pls_board = board.get_plaintexts(cnt, plaintexts_h).unwrap();
+                    assert!(pls == pls_board.plaintexts);
+            
+                    let ss = SignedStatement::plaintexts(&cfg_h, cnt, &plaintexts_h, &self.keypair);
+                    let p_path = self.localstore.set_plaintexts_stmt(&action, &ss);
+                    board.set_plaintexts_stmt(&p_path, cnt, self_index.unwrap());
+                    info!(">> OK");
                 }
             }
         }
@@ -862,7 +916,7 @@ pub struct Protocol <E, G, B> {
     phantom_b: PhantomData<B>
 }
 
-impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned,
+impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned,
     B: BulletinBoard<E, G>> Protocol<E, G, B> {
 
     pub fn new(trustee: Trustee<E, G>) -> Protocol<E, G, B> {

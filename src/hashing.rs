@@ -512,12 +512,14 @@ impl HashBytes for Act {
                 v.extendl(&concat_bytes_iter(shares));
                 v
             }
-            Act::CheckPlaintexts(h, i, m, ds) => {
+            Act::CheckPlaintexts(h, i, p, ds, m, shares) => {
                 let mut v = vec![9u8];
                 v.extendl(&h.to_vec());
                 v.extendl(&i.to_le_bytes().to_vec());
-                v.extendl(&m.to_vec());
+                v.extendl(&p.to_vec());
                 v.extendl(&concat_bytes_iter(ds));
+                v.extendl(&m.to_vec());
+                v.extendl(&concat_bytes_iter(shares));
                 v
             }
         }

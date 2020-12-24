@@ -18,7 +18,7 @@ pub enum Act {
     CheckMix(ConfigHash, ContestIndex, TrusteeIndex, MixHash, BallotsHash, PkHash),
     PartialDecrypt(ConfigHash, ContestIndex, BallotsHash, ShareHash),
     CombineDecryptions(ConfigHash, ContestIndex, Hashes, MixHash, Hashes),
-    CheckPlaintexts(ConfigHash, ContestIndex, MixHash, Hashes)
+    CheckPlaintexts(ConfigHash, ContestIndex, PlaintextsHash, Hashes, MixHash, Hashes)
 }
 
 impl Act {
@@ -39,8 +39,8 @@ impl fmt::Debug for Act {
             Act::Mix(cfg, cnt, _bh, _pk_h) => write!(f, "Mix cn=[{}] cfg: {:?}", cnt, short(cfg)),
             Act::CheckMix(cfg, cnt, t, _mh, _bh, _pk_h) => write!(f, "CheckMix cn=[{}], posted by tr=[{}] cfg: {:?}", cnt, t, short(cfg)),
             Act::PartialDecrypt(cfg, cnt, _h1, _share_h) => write!(f, "PartialDecrypt cn=[{}] cfg: {:?}", cnt, short(cfg)),
-            Act::CombineDecryptions(cfg, cnt, _hs, mix_h, share_h) => write!(f, "CombineDecryptions cn=[{}] cfg: {:?}", cnt, short(cfg)),
-            Act::CheckPlaintexts(cfg, cnt, _h1, _hs) => write!(f, "CheckPlaintexts cn=[{}] cfg: {:?}", cnt, short(cfg))
+            Act::CombineDecryptions(cfg, cnt, _hs, mix_h, share_hs) => write!(f, "CombineDecryptions cn=[{}] cfg: {:?}", cnt, short(cfg)),
+            Act::CheckPlaintexts(cfg, cnt, p_h, d_hs, mix_h, share_hs) => write!(f, "CheckPlaintexts cn=[{}] cfg: {:?}", cnt, short(cfg))
         }
     }
 }

@@ -53,7 +53,7 @@ impl MBasicBulletinBoard {
     fn put(&mut self, name: &str, data: &Path) {
         let bytes = util::read_file_bytes(data).unwrap();
         if self.data.contains_key(name) {
-            panic!("Attempted to overwrite bulletin board value for {}", name);
+            panic!("Attempted to overwrite bulletin board value for key '{}'", name);
         }
         self.data.insert(name.to_string(), bytes);
     }

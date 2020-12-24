@@ -69,7 +69,7 @@ struct Demo<E: Element, G> {
     board: MemoryBulletinBoard<E, G>,
     all_plaintexts: Vec<Vec<E::Plaintext>>
 }
-impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Demo<E, G> {
+impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned> Demo<E, G> {
     fn new(sink: cursive::CbSink, group: &G, trustees: u32, contests: u32) -> Demo<E, G> {
         let local1 = "/tmp/local";
         let local2 = "/tmp/local2";
@@ -130,8 +130,9 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Demo<E, G> {
                 
                 let f1 = util::write_tmp(ballots_b).unwrap();
                 let f2 = util::write_tmp(ss_b).unwrap();
-                info!("Adding {} ballots", ballots.ciphertexts.len());
+                info!(">> Adding {} ballots..", ballots.ciphertexts.len());
                 self.board.add_ballots(&BallotsPath(f1.path().to_path_buf(), f2.path().to_path_buf()), i);
+                info!(">> OK");
             }
             else {
                 info!("Cannot add ballots for contest=[{}], no pk yet", i);
@@ -148,9 +149,9 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Demo<E, G> {
                 let p1: HashSet<&E::Plaintext> = HashSet::from_iter(self.all_plaintexts[i as usize].iter().clone());
                 let p2: HashSet<&E::Plaintext> = HashSet::from_iter(decoded.iter().clone());
                 
-                info!("Comparing plaintexts contest=[{}]...", i);
+                info!(">> Checking plaintexts contest=[{}]...", i);
                 assert!(p1 == p2);
-                info!("Ok");
+                info!(">> OK");
             }
             else {
                 info!("Cannot check plaintexts for contest=[{}], no decryptions yet", i);
@@ -244,7 +245,7 @@ fn demo_tui() {
     let mut n: u32 = 0;
     let mut siv = cursive::default();
     let group = RugGroup::default();
-    let trustees: u32 = 3;
+    let trustees: u32 = 2;
     let contests = 2;
     let demo = Demo::new(siv.cb_sink().clone(), &group, trustees, contests);
     CombinedLogger::init(
@@ -263,6 +264,7 @@ fn demo_tui() {
     
     let theme = custom_theme_from_cursive(&siv);
     siv.set_theme(theme);
+    
     let text = "Ready";
     let mut h_layout = LinearLayout::horizontal();
     let mut layout = LinearLayout::vertical();
@@ -333,25 +335,25 @@ fn demo_tui() {
     siv.run();
 }
 
-fn step_t<E: 'static + Element + DeserializeOwned, G: 'static + Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>, t: u32) {
+fn step_t<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: 'static + Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>, t: u32) {
     std::thread::spawn(move || {
         step(Arc::clone(&demo_arc), t)
     });
 }
 
-fn ballots_t<E: 'static + Element + DeserializeOwned, G: 'static + Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
+fn ballots_t<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: 'static + Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
     std::thread::spawn(move || {
         ballots(Arc::clone(&demo_arc))
     });
 }
 
-fn check_t<E: 'static + Element + DeserializeOwned, G: 'static + Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
+fn check_t<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: 'static + Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
     std::thread::spawn(move || {
         check(Arc::clone(&demo_arc))
     });
 }
 
-fn step<E: 'static + Element + DeserializeOwned, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>, t: u32) {
+fn step<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>, t: u32) {
     let mut demo = demo_arc.lock().unwrap();
     info!("set_panel=[facts]");
     let facts = demo.process_facts(t as usize);
@@ -359,20 +361,19 @@ fn step<E: 'static + Element + DeserializeOwned, G: Group<E> + DeserializeOwned>
     demo.run(facts, t as usize);
 }
 
-fn ballots<E: 'static + Element + DeserializeOwned, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
+fn ballots<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
     let mut demo = demo_arc.lock().unwrap();
     
     demo.add_ballots();
 }
 
-fn check<E: 'static + Element + DeserializeOwned, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
+fn check<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
     let mut demo = demo_arc.lock().unwrap();
     
     demo.check_plaintexts();
 }
 
 fn custom_theme_from_cursive(siv: &Cursive) -> Theme {
-    // We'll return the current theme with a small modification.
     let mut theme = siv.current_theme().clone();
 
     theme.palette[PaletteColor::Background] = Color::TerminalDefault;
@@ -404,7 +405,7 @@ fn demo_ristretto() {
     demo(group);
 }
 
-fn demo<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>(group: G) {
+fn demo<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(group: G) {
     
     let local1 = "/tmp/local";
     let local2 = "/tmp/local2";
@@ -476,7 +477,7 @@ fn demo<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>(group: G)
         
         let f1 = util::write_tmp(ballots_b).unwrap();
         let f2 = util::write_tmp(ss_b).unwrap();
-        println!("Adding {} ballots", ballots.ciphertexts.len());
+        println!(">> Adding {} ballots", ballots.ciphertexts.len());
         bb.add_ballots(&BallotsPath(f1.path().to_path_buf(), f2.path().to_path_buf()), i);
     }
     println!("===============================================");
@@ -513,7 +514,7 @@ fn demo<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned>(group: G)
         let p1: HashSet<&E::Plaintext> = HashSet::from_iter(all_plaintexts[i as usize].iter().clone());
         let p2: HashSet<&E::Plaintext> = HashSet::from_iter(decoded.iter().clone());
         
-        print!("Comparing plaintexts contest=[{}]...", i);
+        print!("Checking plaintexts contest=[{}]...", i);
         assert!(p1 == p2);
         println!("Ok");
     }
