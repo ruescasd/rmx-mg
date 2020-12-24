@@ -201,25 +201,25 @@ impl fmt::Debug for InputFact {
                 "ConfigPresent: [contests={} trustees={} self={}] {:?}", 
                 x.1, x.2, x.3, short(&x.0)),
             InputFact::ConfigSignedBy(x) => write!(f, 
-                "ConfigSignedBy: [{}] for config: {:?}", 
+                "ConfigSignedBy: [{}] cfg: {:?}", 
                 x.1, short(&x.0)),
             InputFact::PkShareSignedBy(x) => write!(f, 
-                "PkShareSignedBy [contest={} trustee={}] for share: {:?}, for config: {:?}", 
+                "PkShareSignedBy [cn={} tr={}] share: {:?}, cfg: {:?}", 
                 x.1, x.3, short(&x.2), short(&x.0)),
             InputFact::PkSignedBy(x) => write!(f, 
-                "PkSignedBy [contest={} trustee={}] for pk: {:?}, for config: {:?}", 
+                "PkSignedBy [cn={} tr={}] for pk: {:?}, cfg: {:?}", 
                 x.1, x.3, short(&x.2), short(&x.0)),
             
             InputFact::BallotsSigned(x) => write!(f, 
-                "BallotsSigned [contest={}] [ballots={:?}] {:?}", x.1, short(&x.2), short(&x.0)),
+                "BallotsSigned [cn={}] [ballots={:?}] {:?}", x.1, short(&x.2), short(&x.0)),
             InputFact::MixSignedBy(x) => write!(f, 
-                "MixSignedBy [contest={}] to=[{:?}] from=[{:?}], [mixer={}, signer={}] for config {:?}", 
-                x.1, short(&x.2), short(&x.3), x.4, x.5, short(&x.0)),
+                "MixSignedBy [cn={}] to={:?} from={:?}, [mxr={}, signer={}]", 
+                x.1, short(&x.2), short(&x.3), x.4, x.5),
             InputFact::DecryptionSignedBy(x) => write!(f, 
-                "DecryptionSignedBy [contest={}] [signer={}] {:?}", 
+                "DecryptionSignedBy [cn={}] [signer={}] {:?}", 
                 x.1, x.3, short(&x.0)),
             InputFact::PlaintextsSignedBy(x) => write!(f, 
-                "PlaintextsSignedBy [contest={}] {:?}", 
+                "PlaintextsSignedBy [cn={}] {:?}", 
                 x.1, short(&x.0))
         }
     }
@@ -231,7 +231,8 @@ fn load_facts(facts: &Vec<InputFact>, runtime: &mut Crepe) {
         a.to_string().partial_cmp(&b.to_string()).unwrap()
     });
     sorted.into_iter().map(|f| {
-        info!("* Input fact {:?}", f);
+    // facts.into_iter().map(|f| {
+        info!("IFact {:?}", f);
         match f {
             InputFact::ConfigPresent(x) => runtime.extend(&[x]),
             InputFact::ConfigSignedBy(x) => runtime.extend(&[x]),
@@ -320,34 +321,33 @@ impl Facts {
         }
     }
 
-    fn print(&self) {
+    fn log(&self) {
         let next = &self.config_ok;
         for f in next {
-            info!("* ConfigOk {:?}", short(&f.0));
+            info!("OFact: ConfigOk {:?}", short(&f.0));
         }
         let next = &self.pk_shares_ok;
         for f in next {
-            info!("* PkSharesAll {:?}", short(&f.0));
+            info!("OFact: PkSharesAll {:?}", short(&f.0));
         }
         let next = &self.pk_ok;
         for f in next {
-            info!("* PkOk {:?}", short(&f.0));
+            info!("OFact: PkOk {:?}", short(&f.0));
         }
         let next = &self.mixes_ok;
         for f in next {
-            info!("* MixOk contest=[{}] mix=[{:?}], ballots=[{:?}] for config {:?}", 
+            info!("OFact: MixOk cn=[{}] mix=[{:?}], ballots=[{:?}] cfg {:?}", 
             f.1, short(&f.2), short(&f.3), short(&f.0));
         }
         let next = &self.contest_up_to;
         for f in next {
-            info!("* ContestMixedUpTo contest=[{}] mix=[{:?}] trustee=[{}], for config {:?}", 
+            info!("OFact: ContestMixedUpTo cn=[{}] mix=[{:?}] tr=[{}], cfg {:?}", 
             f.1, short(&f.2), f.3, short(&f.0));
         }
         let next = &self.all_actions; 
         for f in next {
-            info!("* Action {:?}", f);
+            info!("OFact: Action {:?}", f);
         }
-        info!("\n");
     }
 
     pub fn pk_shares_len(&self) -> usize {
@@ -628,6 +628,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
             (None, None)
         };
         
+        info!(">> Trustee::run: found {} actions", ret);
         for action in actions {
             match action {
                 Act::CheckConfig(cfg) => {
@@ -768,7 +769,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
                 }
             }
         }
-
+        info!(">> Trustee::run: OK");
         ret as u32
     }
     
@@ -836,7 +837,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> Trustee<E, G
         let mut shares = Vec::with_capacity(hs.len());
         for (i, h) in hs.iter().enumerate() {
             let next = board.get_share(cnt, i as u32, *h).unwrap();
-            info!("*** Verifying share proof!");
+            info!("* Verifying share proof..");
             let ok = Keymaker::verify_share(group, &next.share, &next.proof);
             if ok {
                 shares.push(next.share);
@@ -900,7 +901,7 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned,
             facts.push(f);
         };
         info!("Input facts derived in [{}ms]", now.elapsed().as_millis());
-
+        info!("");
         facts
     }
     
@@ -911,14 +912,33 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned,
         
         let now = std::time::Instant::now();
         let output = runtime.run();
-        info!("Output facts derived in [{}ms]", now.elapsed().as_millis());
+        let actions = output.0.len();
         
-        Facts::new(input_facts, output)
+        let ret = Facts::new(input_facts, output);
+    
+        ret.log();
+        info!("");
+        info!("Output facts ({} actions) derived in [{}ms]", actions, now.elapsed().as_millis());
+        
+        ret
+    }
+
+    pub fn run(&self, facts: Facts, board: &mut B) -> u32 {
+        self.trustee.run(facts, board)
     }
 
     pub fn step(&self, board: &mut B) -> u32 {
         let output = self.process_facts(&board);
-        // output.print();
+        /* let facts = &output.input_facts;
+        let mut sorted = facts.to_vec();
+        sorted.sort_by(|a, b| {
+            a.to_string().partial_cmp(&b.to_string()).unwrap()
+        });
+        info!("set_panel=[{}]", "facts");
+        sorted.into_iter().map(|f| {
+            info!("* Input fact {:?}", f);
+        }).count();
+        info!("\n");*/
 
         self.trustee.run(output, board)
     }

@@ -157,11 +157,11 @@ pub fn random_encrypt_ballots<E: Element, G: Group<E>>(n: usize, pk: &PublicKey<
 
 
 pub(crate) fn short(input: &[u8; 64]) -> Vec<u8> {
-    input[0..5].to_vec()
+    input[0..3].to_vec()
 }
 pub(crate) fn shortm(input: &[[u8; 64]; 10]) -> Vec<Vec<u8>> {
     input.iter().cloned().filter(|&a| a != [0u8; 64])
-        .map(|a| a[0..5].to_vec())        
+        .map(|a| a[0..3].to_vec())        
         .collect()
 }
 

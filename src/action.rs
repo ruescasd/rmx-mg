@@ -33,14 +33,14 @@ impl fmt::Debug for Act {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Act::CheckConfig(cfg) => write!(f, "CheckConfig {:?}", short(cfg)),
-            Act::PostShare(cfg, cnt) => write!(f, "PostShare contest=[{}] for config: {:?}", cnt, short(cfg)),
-            Act::CombineShares(_cfg, cnt, hs) => write!(f, "CombineShares contest=[{}] shares: {:?}", cnt, shortm(hs)),
-            Act::CheckPk(_cfg, cnt, h1, hs) => write!(f, "CheckPk contest=[{}], pk {:?} shares: {:?}", cnt, short(h1), shortm(hs)),
-            Act::Mix(cfg, cnt, _bh, _pk_h) => write!(f, "Mix contest=[{}] for config: {:?}", cnt, short(cfg)),
-            Act::CheckMix(cfg, cnt, t, _mh, _bh, _pk_h) => write!(f, "CheckMix contest=[{}], posted by trustee=[{}] for config: {:?}", cnt, t, short(cfg)),
-            Act::PartialDecrypt(cfg, cnt, _h1, _share_h) => write!(f, "PartialDecrypt contest=[{}] for config: {:?}", cnt, short(cfg)),
-            Act::CombineDecryptions(cfg, cnt, _hs, mix_h, share_h) => write!(f, "CombineDecryptions contest=[{}] for config: {:?}", cnt, short(cfg)),
-            Act::CheckPlaintexts(cfg, cnt, _h1, _hs) => write!(f, "CheckPlaintexts contest=[{}] for config: {:?}", cnt, short(cfg))
+            Act::PostShare(cfg, cnt) => write!(f, "PostShare cn=[{}] cfg: {:?}", cnt, short(cfg)),
+            Act::CombineShares(_cfg, cnt, hs) => write!(f, "CombineShares cn=[{}] shares: {:?}", cnt, shortm(hs)),
+            Act::CheckPk(_cfg, cnt, h1, hs) => write!(f, "CheckPk cn=[{}], pk {:?} shares: {:?}", cnt, short(h1), shortm(hs)),
+            Act::Mix(cfg, cnt, _bh, _pk_h) => write!(f, "Mix cn=[{}] cfg: {:?}", cnt, short(cfg)),
+            Act::CheckMix(cfg, cnt, t, _mh, _bh, _pk_h) => write!(f, "CheckMix cn=[{}], posted by tr=[{}] cfg: {:?}", cnt, t, short(cfg)),
+            Act::PartialDecrypt(cfg, cnt, _h1, _share_h) => write!(f, "PartialDecrypt cn=[{}] cfg: {:?}", cnt, short(cfg)),
+            Act::CombineDecryptions(cfg, cnt, _hs, mix_h, share_h) => write!(f, "CombineDecryptions cn=[{}] cfg: {:?}", cnt, short(cfg)),
+            Act::CheckPlaintexts(cfg, cnt, _h1, _hs) => write!(f, "CheckPlaintexts cn=[{}] cfg: {:?}", cnt, short(cfg))
         }
     }
 }
