@@ -3,30 +3,22 @@ use std::collections::HashSet;
 use std::marker::PhantomData;
 use std::convert::TryInto;
 use std::fmt::Debug;
-use generic_array::{typenum::U32, GenericArray};
 
 use serde::de::DeserializeOwned;
-use rand::rngs::OsRng;
 use ed25519_dalek::PublicKey as SPublicKey;
-use ed25519_dalek::{Verifier, Keypair};
+use ed25519_dalek::Verifier;
 use crepe::crepe;
-use log::{info, warn};
+use log::info;
 
-use crate::hashing::*;
 use crate::hashing;
-use crate::artifact::*;
+use crate::hashing::*;
 use crate::statement::*;
-use crate::elgamal::{PublicKey, Ciphertext, PrivateKey};
 use crate::bb::*;
 use crate::util;
 use crate::arithm::Element;
 use crate::group::Group;
 use crate::action::Act;
 use crate::util::short;
-use crate::shuffler::*;
-use crate::keymaker::Keymaker;
-use crate::localstore::LocalStore;
-use crate::symmetric;
 use crate::trustee::Trustee;
 
 pub type TrusteeTotal = u32;

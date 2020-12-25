@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::fs;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use rand::rngs::OsRng;
 use ed25519_dalek::{Keypair, PublicKey as SPublicKey};
@@ -31,34 +32,13 @@ use cursive::views::{LinearLayout, TextView, Panel, ScrollView};
 use cursive::theme::{Color, PaletteColor, Theme};
 use cursive::view::ScrollStrategy;
 use cursive::Cursive;
+use cursive::utils::markup::StyledString;
+use cursive::theme::BaseColor;
 
-
+use regex::Regex;
 use simplelog::*;
 use log::info;
 
-pub fn gen_config<E: Element, G: Group<E>>(group: &G, contests: u32, trustee_pks: Vec<SPublicKey>,
-    ballotbox_pk: SPublicKey) -> rmx::artifact::Config<E, G> {
-
-    let id = Uuid::new_v4();
-
-    let cfg = rmx::artifact::Config {
-        id: id.as_bytes().clone(),
-        group: group.clone(),
-        contests: contests, 
-        ballotbox: ballotbox_pk, 
-        trustees: trustee_pks,
-        phantom_e: PhantomData
-    };
-
-    cfg
-}
-
-use std::sync::{Arc, Mutex};
-struct DemoLogSink {
-    pub cb_sink: cursive::CbSink,
-    pub buffer: String,
-    target: String
-}
 struct Demo<E: Element, G> {
     pub cb_sink: cursive::CbSink,
     trustees: Vec<Protocol<E, G, MemoryBulletinBoard<E, G>>>,
@@ -112,10 +92,12 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
         }
     }
     fn add_ballots(&mut self) {
+        info!("");
         for i in 0..self.config.contests {
             let pk_b = self.board.get_unsafe(MemoryBulletinBoard::<E, G>::public_key(i, 0));
             let ballots_b = self.board.get_unsafe(MemoryBulletinBoard::<E, G>::ballots(i));
             if pk_b.is_some() && ballots_b.is_none() {
+                info!(">> Adding {} ballots..", self.ballots);
                 let pk: PublicKey<E, G> = bincode::deserialize(pk_b.unwrap()).unwrap();
                 
                 let (plaintexts, ciphertexts) = util::random_encrypt_ballots(self.ballots as usize, &pk);
@@ -131,7 +113,7 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
                 
                 let f1 = util::write_tmp(ballots_b).unwrap();
                 let f2 = util::write_tmp(ss_b).unwrap();
-                info!(">> Adding {} ballots..", ballots.ciphertexts.len());
+                
                 self.board.add_ballots(&BallotsPath(f1.path().to_path_buf(), f2.path().to_path_buf()), i);
                 info!(">> OK");
             }
@@ -159,10 +141,6 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
             }
             
         }
-    }
-    fn step(&mut self, t: usize) {
-        let trustee = &self.trustees[t];
-        trustee.step(&mut self.board);
     }
     fn process_facts(&mut self, t: usize) -> Facts {
         let trustee = &self.trustees[t];
@@ -194,68 +172,21 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
             });
         })).unwrap();
     }
-}
-
-use cursive::utils::markup::StyledString;
-use cursive::theme::BaseColor;
-use regex::Regex;
-impl std::io::Write for DemoLogSink {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let re = Regex::new("set_panel=\\[([a-z0-9]+)\\]").unwrap();
-        
-        let string = String::from(std::str::from_utf8(&buf).unwrap());
-        self.buffer.push_str(&string);
-        if self.buffer.contains("\n") {
-            let split: Vec<&str> = self.buffer.split("\n").collect();
-            let items = split.len();
-            let head = &split[0..items - 1];
-            
-            for next in head {
-                if let Some(captures) = re.captures(next) {
-                    let capture = captures.get(1).unwrap().as_str();
-                    let target = self.target.clone();
-                    self.cb_sink.send(Box::new(
-                        move |s: &mut cursive::Cursive| {
-                            s.call_on_name(&target, |view: &mut ScrollView<TextView>| {
-                            let current = view.get_inner_mut().get_content();
-                            let t = String::from(current.source());
-                            drop(current);
-                            view.get_inner_mut().set_content(t);
-                        });
-                    }))
-                    .unwrap();
-                    self.target = capture.to_string();
-                }
-                else {
-                    self.send_line(next.to_string());
-                }                
-            }
-            self.buffer = split[items - 1].to_string();
-        }
-
-        Ok(buf.len())
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-impl DemoLogSink {
-    fn send_line(&self, line: String) {
-        let line = format!("{}\n", line);
-        let target = self.target.clone();
+    fn done(&self, trustee: u32) {
         self.cb_sink.send(Box::new( 
             move |s: &mut cursive::Cursive| {
 
-            s.call_on_name(&target, |view: &mut ScrollView<TextView>| {
-                let styled = StyledString::styled(line, Color::Light(BaseColor::Yellow));
-                view.get_inner_mut().append(styled);
-                view.scroll_to_bottom();
+            s.call_on_name(&trustee.to_string(), |view: &mut ScrollView<TextView>| {
+                let current = view.get_inner_mut().get_content();
+                let t = String::from(current.source());
+                drop(current);
+                view.get_inner_mut().set_content(StyledString::styled(t, Color::Light(BaseColor::Green)));
             });
-        }))
-        .unwrap();
+        })).unwrap();
+        self.status(String::from("Ready"));
     }
 }
+
 
 type DemoArc<E, G> = Arc<Mutex<Demo<E, G>>>;
 use std::fs::File;
@@ -282,12 +213,19 @@ fn demo_tui() {
     ));
     let demo_arc_ballots = Arc::clone(&demo_arc_run);
     let demo_arc_verify = Arc::clone(&demo_arc_run);
+    let demo_arc_artifacts = Arc::clone(&demo_arc_run);
     
     let theme = custom_theme_from_cursive(&siv);
     siv.set_theme(theme);
     
+    let build = if cfg!(debug_assertions) {
+        "debug"
+    } else {
+        "release"
+    };
 
-    let init_text = format!("Group: {}\nTrustees: {}\nContests: {}\nBallots: {}", util::type_name_of(&group), trustees, contests, ballots);
+    let init_text = format!("Build: {}\nGroup: {}\nTrustees: {}\nContests: {}\nBallots: {}", 
+        build, util::type_name_of(&group), trustees, contests, ballots);
     
     let mut h_layout = LinearLayout::horizontal();
     let mut layout = LinearLayout::vertical();
@@ -306,10 +244,12 @@ fn demo_tui() {
             .full_height()
         );
     }
+
+    
     layout = layout.child(
         LinearLayout::horizontal()
             .child(Panel::new(
-                TextView::new("[q - Quit] [n - Step] [b - Add ballots] [c - Check plaintexts]")
+                TextView::new("[q Quit] [s Step] [b Add ballots] [c Check plaintexts] [i info]")
             )
             .title("Commands")
             .title_position(HAlign::Left)
@@ -324,7 +264,7 @@ fn demo_tui() {
     );
     h_layout.add_child(layout);
     h_layout.add_child(Panel::new(
-        TextView::new(init_text)
+        TextView::new(init_text.clone())
             .scrollable()
             .scroll_strategy(ScrollStrategy::StickToBottom)
             .with_name("facts"))
@@ -336,7 +276,7 @@ fn demo_tui() {
     // siv.add_fullscreen_layer(h_layout);
     siv.add_layer(h_layout);
     siv.add_global_callback('q', |s| s.quit());
-    siv.add_global_callback('n', move |s| {
+    siv.add_global_callback('s', move |s| {
         let guard = Arc::clone(&demo_arc_run);
         if guard.try_lock().is_ok() {
             s.call_on_name(&n.to_string(), |view: &mut ScrollView<TextView>| {
@@ -355,7 +295,7 @@ fn demo_tui() {
             s.call_on_name(&n.to_string(), |view: &mut ScrollView<TextView>| {
                 view.get_inner_mut().set_content("");
             });
-            ballots_t(Arc::clone(&demo_arc_ballots));
+            ballots_t(Arc::clone(&demo_arc_ballots), n);
         }
     });
     siv.add_global_callback('c', move |s| {
@@ -364,8 +304,22 @@ fn demo_tui() {
             s.call_on_name(&n.to_string(), |view: &mut ScrollView<TextView>| {
                 view.get_inner_mut().set_content("");
             });
-            check_t(Arc::clone(&demo_arc_verify));
+            check_t(Arc::clone(&demo_arc_verify), n);
         }
+    });
+    siv.add_global_callback('i', move |s| {
+        let text = init_text.clone();
+        let guard = Arc::clone(&demo_arc_artifacts);
+        let demo = guard.lock().unwrap();
+        let mut artifacts = demo.board.list();
+        artifacts.sort();
+        let artifacts = artifacts.join("\n");
+        
+        s.call_on_name("facts", |view: &mut ScrollView<TextView>| {
+            view.get_inner_mut().set_content(text);
+            view.get_inner_mut().append("\n\nArtifacts:\n");
+            view.get_inner_mut().append(artifacts);
+        });
     });
     
     siv.run();
@@ -377,15 +331,15 @@ fn step_t<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: 'sta
     });
 }
 
-fn ballots_t<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: 'static + Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
+fn ballots_t<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: 'static + Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>, t: u32) {
     std::thread::spawn(move || {
-        ballots(Arc::clone(&demo_arc))
+        ballots(Arc::clone(&demo_arc), t)
     });
 }
 
-fn check_t<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: 'static + Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
+fn check_t<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: 'static + Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>, t: u32) {
     std::thread::spawn(move || {
-        check(Arc::clone(&demo_arc))
+        check(Arc::clone(&demo_arc), t)
     });
 }
 
@@ -396,32 +350,24 @@ fn step<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<
     let facts = demo.process_facts(t as usize);
     info!("set_panel=[{}]", t);
     demo.run(facts, t as usize);
-    demo.status(String::from("Ready"));
+    demo.done(t);
 }
 
-fn ballots<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
+fn ballots<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>, t: u32) {
     let mut demo = demo_arc.lock().unwrap();
     demo.status(String::from("Working..."));
     demo.add_ballots();
-    demo.status(String::from("Ready"));
+    demo.done(t);
 }
 
-fn check<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
+fn check<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>, t: u32) {
     let demo = demo_arc.lock().unwrap();
     demo.status(String::from("Working..."));
     demo.check_plaintexts();
-    demo.status(String::from("Ready"));
+    demo.done(t);
 }
 
-fn custom_theme_from_cursive(siv: &Cursive) -> Theme {
-    let mut theme = siv.current_theme().clone();
 
-    theme.palette[PaletteColor::Background] = Color::TerminalDefault;
-    theme.palette[PaletteColor::Primary] = Color::Rgb(200, 200, 200);
-    theme.palette[PaletteColor::View] = Color::TerminalDefault;
-
-    theme
-}
 
 #[test]
 fn demo_rug() {
@@ -558,4 +504,94 @@ fn demo<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deser
         assert!(p1 == p2);
         println!("Ok");
     }
+}
+
+struct DemoLogSink {
+    pub cb_sink: cursive::CbSink,
+    pub buffer: String,
+    target: String
+}
+impl std::io::Write for DemoLogSink {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let re = Regex::new("set_panel=\\[([a-z0-9]+)\\]").unwrap();
+        
+        let string = String::from(std::str::from_utf8(&buf).unwrap());
+        self.buffer.push_str(&string);
+        if self.buffer.contains("\n") {
+            let split: Vec<&str> = self.buffer.split("\n").collect();
+            let items = split.len();
+            let head = &split[0..items - 1];
+            
+            for next in head {
+                if let Some(captures) = re.captures(next) {
+                    let capture = captures.get(1).unwrap().as_str();
+                    let target = self.target.clone();
+                    self.cb_sink.send(Box::new(
+                        move |s: &mut cursive::Cursive| {
+                            s.call_on_name(&target, |view: &mut ScrollView<TextView>| {
+                            let current = view.get_inner_mut().get_content();
+                            let t = String::from(current.source());
+                            drop(current);
+                            view.get_inner_mut().set_content(t);
+                        });
+                    }))
+                    .unwrap();
+                    self.target = capture.to_string();
+                }
+                else {
+                    self.send_line(next.to_string());
+                }                
+            }
+            self.buffer = split[items - 1].to_string();
+        }
+
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl DemoLogSink {
+    fn send_line(&self, line: String) {
+        let line = format!("{}\n", line);
+        let target = self.target.clone();
+        self.cb_sink.send(Box::new( 
+            move |s: &mut cursive::Cursive| {
+
+            s.call_on_name(&target, |view: &mut ScrollView<TextView>| {
+                let styled = StyledString::styled(line, Color::Light(BaseColor::Yellow));
+                view.get_inner_mut().append(styled);
+                view.scroll_to_bottom();
+            });
+        }))
+        .unwrap();
+    }
+}
+
+fn gen_config<E: Element, G: Group<E>>(group: &G, contests: u32, trustee_pks: Vec<SPublicKey>,
+    ballotbox_pk: SPublicKey) -> rmx::artifact::Config<E, G> {
+
+    let id = Uuid::new_v4();
+
+    let cfg = rmx::artifact::Config {
+        id: id.as_bytes().clone(),
+        group: group.clone(),
+        contests: contests, 
+        ballotbox: ballotbox_pk, 
+        trustees: trustee_pks,
+        phantom_e: PhantomData
+    };
+
+    cfg
+}
+
+fn custom_theme_from_cursive(siv: &Cursive) -> Theme {
+    let mut theme = siv.current_theme().clone();
+
+    theme.palette[PaletteColor::Background] = Color::TerminalDefault;
+    theme.palette[PaletteColor::Primary] = Color::Rgb(170, 170, 170);
+    theme.palette[PaletteColor::View] = Color::TerminalDefault;
+
+    theme
 }

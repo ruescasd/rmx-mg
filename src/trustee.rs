@@ -1,19 +1,13 @@
-use std::fmt;
-use std::collections::HashSet;
-use std::marker::PhantomData;
-use std::convert::TryInto;
-use std::fmt::Debug;
+
 use generic_array::{typenum::U32, GenericArray};
 
 use serde::de::DeserializeOwned;
 use rand::rngs::OsRng;
-use ed25519_dalek::PublicKey as SPublicKey;
-use ed25519_dalek::{Verifier, Keypair};
-use crepe::crepe;
-use log::{info, warn};
+use ed25519_dalek::Keypair;
+use log::info;
 
-use crate::hashing::*;
 use crate::hashing;
+use crate::hashing::*;
 use crate::artifact::*;
 use crate::statement::*;
 use crate::elgamal::{PublicKey, Ciphertext, PrivateKey};
@@ -55,14 +49,6 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
         let trustees = facts.get_trustee_count();
         let actions = facts.all_actions;
         let ret = actions.len();
-        
-        /* let (self_index, trustees) =
-        if let InputFact::ConfigPresent(ConfigPresent(_, _, trustees, self_t)) = facts.input_facts[facts.input_facts.len() - 1] {
-            (Some(self_t), Some(trustees))
-        }
-        else {
-            (None, None)
-        };*/
         
         info!(">> Trustee::run: found {} actions", ret);
         let now = std::time::Instant::now();
@@ -116,6 +102,7 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
                 Act::Mix(cfg_h, cnt, ballots_h, pk_h) => {
                     let self_t = self_index.unwrap();
                     info!(">> Computing mix (contest=[{}], self=[{}])..", cnt, self_t);
+                    let now_ = std::time::Instant::now();
                     let cfg = board.get_config(cfg_h).unwrap();
                     
                     let ciphertexts = self.get_mix_src(board, cnt, self_t, ballots_h);
@@ -131,6 +118,7 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
                     let (e_primes, rs, perm) = shuffler.gen_shuffle(&ciphertexts);
                     let proof = shuffler.gen_proof(&ciphertexts, &e_primes, &rs, &perm);
                     // assert!(shuffler.check_proof(&proof, &ciphertexts, &e_primes));
+                    let rate = ciphertexts.len() as f32 / now_.elapsed().as_millis() as f32;
                     let mix = Mix {
                         mixed_ballots: e_primes,
                         proof: proof
@@ -140,11 +128,13 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
                     let ss = SignedStatement::mix(&cfg_h, &mix_h, &ballots_h, cnt, &self.keypair, None);
                     let mix_path = self.localstore.set_mix(&action, mix, &ss);
                     board.add_mix(&mix_path, cnt, self_index.unwrap());
-                    info!(">> OK");
+                    
+                    info!(">> OK ({:.1} ciphertexts/s)", 1000.0 * rate);
                 }
                 Act::CheckMix(cfg_h, cnt, trustee, mix_h, ballots_h, pk_h) => {
                     let cfg = board.get_config(cfg_h).unwrap();
                     info!(">> Action:: Verifying mix (contest=[{}], self=[{}])..", cnt, self_index.unwrap());
+                    let now_ = std::time::Instant::now();
                     let mix = board.get_mix(cnt, trustee, mix_h).unwrap();
                     let ciphertexts = self.get_mix_src(board, cnt, trustee, ballots_h);
                     let pk = board.get_pk(cnt, pk_h).unwrap();
@@ -157,16 +147,18 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
                         hasher: exp_hasher
                     };
                     let proof = mix.proof;
-                    info!(">> Action: Verifying shuffle {:?} with source {:?}..", short(&mix_h), short(&ballots_h));
+                    info!("Verifying shuffle {:?} with source {:?}..", short(&mix_h), short(&ballots_h));
                     assert!(shuffler.check_proof(&proof, &ciphertexts, &mix.mixed_ballots));
+                    let rate = ciphertexts.len() as f32 / now_.elapsed().as_millis() as f32;
                     let ss = SignedStatement::mix(&cfg_h, &mix_h, &ballots_h, cnt, &self.keypair, Some(trustee));
                     let mix_path = self.localstore.set_mix_stmt(&action, &ss);
                     board.add_mix_stmt(&mix_path, cnt, self_index.unwrap(), trustee);
-                    info!(">> OK");
-
+                    
+                    info!(">> OK ({:.1} ciphertexts/s)", 1000.0 * rate);
                 }
                 Act::PartialDecrypt(cfg_h, cnt, mix_h, share_h) => {
                     info!(">> Action: Computing partial decryptions (contest=[{}], self=[{}])..", cnt, self_index.unwrap());
+                    let now_ = std::time::Instant::now();
                     let cfg = board.get_config(cfg_h).unwrap();
                     let mix = board.get_mix(cnt, (cfg.trustees.len() - 1) as u32, mix_h).unwrap();
                     let share = board.get_share(cnt, self_index.unwrap(), share_h).unwrap();
@@ -175,6 +167,7 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
                     let keymaker = Keymaker::from_sk(sk, &cfg.group);
 
                     let (decs, proofs) = keymaker.decryption_factor_many(&mix.mixed_ballots);
+                    let rate = mix.mixed_ballots.len() as f32 / now_.elapsed().as_millis() as f32;
                     let pd = PartialDecryption {
                         pd_ballots: decs,
                         proofs: proofs
@@ -183,14 +176,17 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
                     let ss = SignedStatement::pdecryptions(&cfg_h, cnt, &pd_h, &self.keypair);
                     let pd_path = self.localstore.set_pdecryptions(&action, pd, &ss);
                     board.add_decryption(&pd_path, cnt, self_index.unwrap());
-                    info!(">> OK");
+                    
+                    info!(">> OK ({:.1} ciphertexts/s)", 1000.0 * rate);
                 }
                 Act::CombineDecryptions(cfg_h, cnt, decryption_hs, mix_h, share_hs) => {
                     let cfg = board.get_config(cfg_h).unwrap();
                     info!(">> Action: Combining decryptions (contest=[{}], self=[{}])..", cnt, self_index.unwrap());
+                    let now_ = std::time::Instant::now();
                     let d_hs = util::clear_zeroes(&decryption_hs);
                     let s_hs = util::clear_zeroes(&share_hs);
                     let pls = self.get_plaintexts(board, cnt, d_hs, mix_h, s_hs, &cfg).unwrap();
+                    let rate = pls.len() as f32 / now_.elapsed().as_millis() as f32;
                     let plaintexts = Plaintexts {
                         plaintexts: pls
                     };
@@ -198,24 +194,28 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
                     let ss = SignedStatement::plaintexts(&cfg_h, cnt, &p_h, &self.keypair);
                     let p_path = self.localstore.set_plaintexts(&action, plaintexts, &ss);
                     board.set_plaintexts(&p_path, cnt);
-                    info!(">> OK");
+                    
+                    info!(">> OK ({:.1} ciphertexts/s)", 1000.0 * rate);
                 }
                 Act::CheckPlaintexts(cfg_h, cnt, plaintexts_h, decryption_hs, mix_h, share_hs) => {
                     let cfg = board.get_config(cfg_h).unwrap();
                     info!(">> Action: Checking plaintexts (contest=[{}], self=[{}])", cnt, self_index.unwrap());
+                    let now_ = std::time::Instant::now();
                     let s_hs = util::clear_zeroes(&share_hs);
                     let d_hs = util::clear_zeroes(&decryption_hs);
                     let pls = self.get_plaintexts(board, cnt, d_hs, mix_h, s_hs, &cfg).unwrap();
+                    let rate = pls.len() as f32 / now_.elapsed().as_millis() as f32;
                     let pls_board = board.get_plaintexts(cnt, plaintexts_h).unwrap();
                     assert!(pls == pls_board.plaintexts);
             
                     let ss = SignedStatement::plaintexts(&cfg_h, cnt, &plaintexts_h, &self.keypair);
                     let p_path = self.localstore.set_plaintexts_stmt(&action, &ss);
                     board.set_plaintexts_stmt(&p_path, cnt, self_index.unwrap());
-                    info!(">> OK");
+                    info!(">> OK ({:.1} ciphertexts/s)", 1000.0 * rate);
                 }
             }
         }
+         
         info!(">> Trustee::run finished in [{}ms]", now.elapsed().as_millis());
         ret as u32
     }
@@ -258,6 +258,7 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
         for (i, h) in hs.iter().enumerate() {
             let next_d = board.get_decryption(cnt, i as u32, *h).unwrap();
             let next_s = board.get_share(cnt, i as u32, share_hs[i]).unwrap();
+            info!("Verifying decryption share..");
             let ok = Keymaker::verify_decryption_factors(&cfg.group, &next_s.share.value, &ciphertexts,
                 &next_d.pd_ballots, &next_d.proofs);
             assert!(ok);
@@ -284,7 +285,7 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
         let mut shares = Vec::with_capacity(hs.len());
         for (i, h) in hs.iter().enumerate() {
             let next = board.get_share(cnt, i as u32, *h).unwrap();
-            info!("* Verifying share proof..");
+            info!("Verifying share proof..");
             let ok = Keymaker::verify_share(group, &next.share, &next.proof);
             if ok {
                 shares.push(next.share);
