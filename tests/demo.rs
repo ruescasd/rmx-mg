@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::fs;
+use std::fs::File;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -38,6 +39,8 @@ use cursive::theme::BaseColor;
 use regex::Regex;
 use simplelog::*;
 use log::info;
+
+type DemoArc<E, G> = Arc<Mutex<Demo<E, G>>>;
 
 struct Demo<E: Element, G> {
     pub cb_sink: cursive::CbSink,
@@ -91,8 +94,8 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
             ballots: ballots
         }
     }
+    
     fn add_ballots(&mut self) {
-        info!("");
         for i in 0..self.config.contests {
             let pk_b = self.board.get_unsafe(MemoryBulletinBoard::<E, G>::public_key(i, 0));
             let ballots_b = self.board.get_unsafe(MemoryBulletinBoard::<E, G>::ballots(i));
@@ -188,14 +191,12 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
 }
 
 
-type DemoArc<E, G> = Arc<Mutex<Demo<E, G>>>;
-use std::fs::File;
 #[test]
 fn demo_tui() {
     let mut n: u32 = 0;
     let mut siv = cursive::default();
-    let group = RugGroup::default();
-    // let group = RistrettoGroup;
+    // let group = RugGroup::default();
+    let group = RistrettoGroup;
     let trustees: u32 = 2;
     let contests = 3;
     let ballots = 1000;
@@ -244,7 +245,6 @@ fn demo_tui() {
             .full_height()
         );
     }
-
     
     layout = layout.child(
         LinearLayout::horizontal()
@@ -286,7 +286,7 @@ fn demo_tui() {
                 view.get_inner_mut().set_content("");
             });
             step_t(Arc::clone(&demo_arc_run), n);
-            n = (n + 1) % trustees;    
+            n = (n + 1) % trustees;
         }
     });
     siv.add_global_callback('b', move |s| {
@@ -295,7 +295,7 @@ fn demo_tui() {
             s.call_on_name(&n.to_string(), |view: &mut ScrollView<TextView>| {
                 view.get_inner_mut().set_content("");
             });
-            ballots_t(Arc::clone(&demo_arc_ballots), n);
+            ballots_t(Arc::clone(&demo_arc_ballots), 0);
         }
     });
     siv.add_global_callback('c', move |s| {
@@ -304,7 +304,7 @@ fn demo_tui() {
             s.call_on_name(&n.to_string(), |view: &mut ScrollView<TextView>| {
                 view.get_inner_mut().set_content("");
             });
-            check_t(Arc::clone(&demo_arc_verify), n);
+            check_t(Arc::clone(&demo_arc_verify), 0);
         }
     });
     siv.add_global_callback('i', move |s| {
@@ -356,6 +356,7 @@ fn step<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<
 fn ballots<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>, t: u32) {
     let mut demo = demo_arc.lock().unwrap();
     demo.status(String::from("Working..."));
+    info!("set_panel=[{}]", t);
     demo.add_ballots();
     demo.done(t);
 }
@@ -363,10 +364,10 @@ fn ballots<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Gro
 fn check<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>, t: u32) {
     let demo = demo_arc.lock().unwrap();
     demo.status(String::from("Working..."));
+    info!("set_panel=[{}]", t);
     demo.check_plaintexts();
     demo.done(t);
 }
-
 
 
 #[test]

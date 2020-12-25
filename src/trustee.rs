@@ -50,7 +50,7 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
         let actions = facts.all_actions;
         let ret = actions.len();
         
-        info!(">> Trustee::run: found {} actions", ret);
+        info!(">>>> Trustee::run: found {} actions", ret);
         let now = std::time::Instant::now();
         for action in actions {
             match action {
@@ -216,7 +216,7 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
             }
         }
          
-        info!(">> Trustee::run finished in [{}ms]", now.elapsed().as_millis());
+        info!(">>>> Trustee::run finished in [{}ms]", now.elapsed().as_millis());
         ret as u32
     }
     
