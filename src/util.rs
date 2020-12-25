@@ -169,3 +169,7 @@ pub(crate) fn clear_zeroes(input: &[[u8; 64]; 10]) -> Vec<[u8; 64]> {
     input.iter().cloned().filter(|&a| a != [0u8; 64])  
         .collect()
 }
+
+pub fn type_name_of<T>(_: &T) -> String {
+    std::any::type_name::<T>().to_string()
+}

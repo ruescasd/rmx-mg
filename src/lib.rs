@@ -18,3 +18,4 @@ mod symmetric;
 pub mod localstore;
 pub mod action;
 pub mod memory_bb;
+pub mod trustee;

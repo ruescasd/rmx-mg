@@ -23,6 +23,7 @@ use rmx::memory_bb::*;
 use rmx::protocol::*;
 use rmx::util;
 use rmx::localstore::*;
+use rmx::trustee::Trustee;
 
 use cursive::align::HAlign;
 use cursive::traits::*;
@@ -212,6 +213,17 @@ impl std::io::Write for DemoLogSink {
             for next in head {
                 if let Some(captures) = re.captures(next) {
                     let capture = captures.get(1).unwrap().as_str();
+                    let target = self.target.clone();
+                    self.cb_sink.send(Box::new(
+                        move |s: &mut cursive::Cursive| {
+                            s.call_on_name(&target, |view: &mut ScrollView<TextView>| {
+                            let current = view.get_inner_mut().get_content();
+                            let t = String::from(current.source());
+                            drop(current);
+                            view.get_inner_mut().set_content(t);
+                        });
+                    }))
+                    .unwrap();
                     self.target = capture.to_string();
                 }
                 else {
@@ -236,12 +248,7 @@ impl DemoLogSink {
             move |s: &mut cursive::Cursive| {
 
             s.call_on_name(&target, |view: &mut ScrollView<TextView>| {
-                
-                let styled = StyledString::styled(line, Color::Light(BaseColor::Blue));
-                let current = view.get_inner_mut().get_content();
-                let t = String::from(current.source());
-                drop(current);
-                view.get_inner_mut().set_content(t);
+                let styled = StyledString::styled(line, Color::Light(BaseColor::Yellow));
                 view.get_inner_mut().append(styled);
                 view.scroll_to_bottom();
             });
@@ -254,7 +261,6 @@ type DemoArc<E, G> = Arc<Mutex<Demo<E, G>>>;
 use std::fs::File;
 #[test]
 fn demo_tui() {
-    
     let mut n: u32 = 0;
     let mut siv = cursive::default();
     let group = RugGroup::default();
@@ -280,7 +286,8 @@ fn demo_tui() {
     let theme = custom_theme_from_cursive(&siv);
     siv.set_theme(theme);
     
-    let init_text = format!("Backend: \n{:?}\n\nTrustees: {}\nContests: {}\nBallots: {}", group, trustees, contests, ballots);
+
+    let init_text = format!("Group: {}\nTrustees: {}\nContests: {}\nBallots: {}", util::type_name_of(&group), trustees, contests, ballots);
     
     let mut h_layout = LinearLayout::horizontal();
     let mut layout = LinearLayout::vertical();
@@ -302,7 +309,7 @@ fn demo_tui() {
     layout = layout.child(
         LinearLayout::horizontal()
             .child(Panel::new(
-                TextView::new("[q - Quit] [n - Protocol step] [b - Add ballots] [c - Check plaintexts]")
+                TextView::new("[q - Quit] [n - Step] [b - Add ballots] [c - Check plaintexts]")
             )
             .title("Commands")
             .title_position(HAlign::Left)
@@ -323,11 +330,10 @@ fn demo_tui() {
             .with_name("facts"))
         .title("Facts")
         .title_position(HAlign::Left)
-        .fixed_width(105)
-        // .full_width()
+        .fixed_width(90)
         .full_height()
     );
-    // siv.add_fullscreen_layer(layout);
+    // siv.add_fullscreen_layer(h_layout);
     siv.add_layer(h_layout);
     siv.add_global_callback('q', |s| s.quit());
     siv.add_global_callback('n', move |s| {
