@@ -3,14 +3,11 @@ use std::collections::HashSet;
 use std::iter::FromIterator;
 use std::fs;
 use std::path::Path;
-use std::{thread, time};
 
 use rand::rngs::OsRng;
 use ed25519_dalek::{Keypair, PublicKey as SPublicKey};
-use curve25519_dalek::ristretto::RistrettoPoint;
 use uuid::Uuid;
 use serde::de::DeserializeOwned;
-use rug::Integer;
 
 use rmx::statement::SignedStatement;
 use rmx::artifact::*;
@@ -29,14 +26,14 @@ use rmx::localstore::*;
 
 use cursive::align::HAlign;
 use cursive::traits::*;
-use cursive::views::{Dialog, DummyView, LinearLayout, TextView, Panel, ScrollView, NamedView};
+use cursive::views::{LinearLayout, TextView, Panel, ScrollView};
 use cursive::theme::{Color, PaletteColor, Theme};
-use cursive::view::{ScrollStrategy,Selector};
+use cursive::view::ScrollStrategy;
 use cursive::Cursive;
 
 
 use simplelog::*;
-use log::{info, warn};
+use log::info;
 
 pub fn gen_config<E: Element, G: Group<E>>(group: &G, contests: u32, trustee_pks: Vec<SPublicKey>,
     ballotbox_pk: SPublicKey) -> rmx::artifact::Config<E, G> {
@@ -404,7 +401,7 @@ fn ballots<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Gro
 }
 
 fn check<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
-    let mut demo = demo_arc.lock().unwrap();
+    let demo = demo_arc.lock().unwrap();
     demo.status(String::from("Working..."));
     demo.check_plaintexts();
     demo.status(String::from("Ready"));

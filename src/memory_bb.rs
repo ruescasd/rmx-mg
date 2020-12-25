@@ -74,6 +74,9 @@ impl MBasicBulletinBoard {
             None
         }
     }
+    fn clear(&mut self) {
+        self.data.clear();
+    }
 }
 
 pub struct MemoryBulletinBoard<E, G> {
@@ -91,6 +94,9 @@ impl<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned> MemoryBullet
             phantom_e: PhantomData,
             phantom_g: PhantomData
         }
+    }
+    pub fn clear(&mut self) {
+        self.basic.clear();
     }
     fn put(&mut self, name: &str, data: &Path) {
         self.basic.put(name, data);
