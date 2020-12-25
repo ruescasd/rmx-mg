@@ -67,10 +67,11 @@ struct Demo<E: Element, G> {
     bb_keypair: Keypair,
     config: rmx::artifact::Config<E, G>,
     board: MemoryBulletinBoard<E, G>,
-    all_plaintexts: Vec<Vec<E::Plaintext>>
+    all_plaintexts: Vec<Vec<E::Plaintext>>,
+    ballots: u32
 }
 impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned> Demo<E, G> {
-    fn new(sink: cursive::CbSink, group: &G, trustees: u32, contests: u32) -> Demo<E, G> {
+    fn new(sink: cursive::CbSink, group: &G, trustees: u32, contests: u32, ballots: u32) -> Demo<E, G> {
         let local1 = "/tmp/local";
         let local2 = "/tmp/local2";
         let local_path = Path::new(&local1);
@@ -108,16 +109,18 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
             bb_keypair: bb_keypair,
             config: cfg,
             board: bb,
-            all_plaintexts: vec![]
+            all_plaintexts: vec![],
+            ballots: ballots
         }
     }
     fn add_ballots(&mut self) {
         for i in 0..self.config.contests {
             let pk_b = self.board.get_unsafe(MemoryBulletinBoard::<E, G>::public_key(i, 0));
-            if pk_b.is_some() {
+            let ballots_b = self.board.get_unsafe(MemoryBulletinBoard::<E, G>::ballots(i));
+            if pk_b.is_some() && ballots_b.is_none() {
                 let pk: PublicKey<E, G> = bincode::deserialize(pk_b.unwrap()).unwrap();
                 
-                let (plaintexts, ciphertexts) = util::random_encrypt_ballots(100, &pk);
+                let (plaintexts, ciphertexts) = util::random_encrypt_ballots(self.ballots as usize, &pk);
                 self.all_plaintexts.push(plaintexts);
                 
                 let ballots = Ballots { ciphertexts };
@@ -135,7 +138,7 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
                 info!(">> OK");
             }
             else {
-                info!("Cannot add ballots for contest=[{}], no pk yet", i);
+                info!("Cannot add ballots for contest=[{}] at this time (no pk yet?)", i);
             }
         }
     }
@@ -191,7 +194,7 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
                 };
                 view.set_content(styled);
             });
-        }));
+        })).unwrap();
     }
 }
 
@@ -224,7 +227,6 @@ impl std::io::Write for DemoLogSink {
         Ok(buf.len())
     }
     fn flush(&mut self) -> std::io::Result<()> {
-        self.cb_sink.send(Box::new(cursive::Cursive::noop));
         Ok(())
     }
 }
@@ -244,7 +246,6 @@ impl DemoLogSink {
                 drop(current);
                 view.get_inner_mut().set_content(t);
                 view.get_inner_mut().append(styled);
-                // view.get_inner_mut().append(line);
                 view.scroll_to_bottom();
             });
         }))
@@ -260,9 +261,11 @@ fn demo_tui() {
     let mut n: u32 = 0;
     let mut siv = cursive::default();
     let group = RugGroup::default();
+    // let group = RistrettoGroup;
     let trustees: u32 = 2;
-    let contests = 2;
-    let demo = Demo::new(siv.cb_sink().clone(), &group, trustees, contests);
+    let contests = 3;
+    let ballots = 1000;
+    let demo = Demo::new(siv.cb_sink().clone(), &group, trustees, contests, ballots);
     CombinedLogger::init(
         vec![
             // TermLogger::new(LevelFilter::Info, simplelog::Config::default(), TerminalMode::Mixed),
@@ -280,15 +283,18 @@ fn demo_tui() {
     let theme = custom_theme_from_cursive(&siv);
     siv.set_theme(theme);
     
-    let text = "";
+    let init_text = format!("Backend: \n{:?}\n\nTrustees: {}\nContests: {}\nBallots: {}", group, trustees, contests, ballots);
+    
     let mut h_layout = LinearLayout::horizontal();
     let mut layout = LinearLayout::vertical();
     for i in 0..trustees {
         let title = format!("Trustee {}", i);
-        
+        let text = "";    
         layout = layout.child(Panel::new(
             TextView::new(text)
-                .scrollable().scroll_strategy(ScrollStrategy::StickToBottom).with_name(&i.to_string())
+                .scrollable()
+                .scroll_strategy(ScrollStrategy::StickToBottom)
+                .with_name(&i.to_string())
             )
             .title(title)
             .title_position(HAlign::Left)
@@ -301,21 +307,27 @@ fn demo_tui() {
             .child(Panel::new(
                 TextView::new("[q - Quit] [n - Protocol step] [b - Add ballots] [c - Check plaintexts]")
             )
-            .title("Help")
+            .title("Commands")
             .title_position(HAlign::Left)
             .fixed_height(3)
             .full_width())
             .child(Panel::new(
-                TextView::new(StyledString::styled("Ready", Color::Light(BaseColor::Green))).h_align(HAlign::Left).with_name("status")
+                TextView::new(StyledString::styled("Ready", Color::Light(BaseColor::Green)))
+                .h_align(HAlign::Left)
+                .with_name("status")
             )
             .fixed_width(12))
     );
     h_layout.add_child(layout);
     h_layout.add_child(Panel::new(
-        TextView::new("Facts").scrollable().with_name("facts"))
+        TextView::new(init_text)
+            .scrollable()
+            .scroll_strategy(ScrollStrategy::StickToBottom)
+            .with_name("facts"))
         .title("Facts")
         .title_position(HAlign::Left)
         .fixed_width(105)
+        // .full_width()
         .full_height()
     );
     // siv.add_fullscreen_layer(layout);
@@ -382,7 +394,6 @@ fn step<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<
     info!("set_panel=[{}]", t);
     demo.run(facts, t as usize);
     demo.status(String::from("Ready"));
-    
 }
 
 fn ballots<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
@@ -394,7 +405,7 @@ fn ballots<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Gro
 
 fn check<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
     let mut demo = demo_arc.lock().unwrap();
-    
+    demo.status(String::from("Working..."));
     demo.check_plaintexts();
     demo.status(String::from("Ready"));
 }

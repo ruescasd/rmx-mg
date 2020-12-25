@@ -18,8 +18,8 @@ fn shuffle_rug(n: usize) -> bool {
     let mut es: Vec<Ciphertext<Integer>> = Vec::with_capacity(n);
 
     for _ in 0..n {
-        let plaintext: Integer = group.encode(group.rnd_exp());
-        let c = pk.encrypt(plaintext);
+        let plaintext: Integer = group.encode(&group.rnd_exp());
+        let c = pk.encrypt(&plaintext);
         es.push(c);
     }
     let seed = vec![];
@@ -31,6 +31,9 @@ fn shuffle_rug(n: usize) -> bool {
     };
     let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
     let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
+    // simulate computing the generators again
+    let seed = vec![];
+    let hs = generators(es.len() + 1, &group, 0, seed);
     let ok = shuffler.check_proof(&proof, &es, &e_primes);
 
     assert_eq!(ok, true);
@@ -48,11 +51,11 @@ fn shuffle_ristretto(n: usize) -> bool {
 
     for _ in 0..n {
         let plaintext = group.rnd();
-        let c = pk.encrypt(plaintext);
+        let c = pk.encrypt(&plaintext);
         es.push(c);
     }
     let seed = vec![];
-    let hs = generators(es.len() + 1, 0, &group);
+    let hs = generators(es.len() + 1, &group, 0, seed);
     let shuffler = Shuffler {
         pk: &pk,
         generators: &hs,
@@ -60,6 +63,9 @@ fn shuffle_ristretto(n: usize) -> bool {
     };
     let (e_primes, rs, perm) = shuffler.gen_shuffle(&es);
     let proof = shuffler.gen_proof(&es, &e_primes, &rs, &perm);
+    // simulate computing the generators again
+    let seed = vec![];
+    let hs = generators(es.len() + 1, &group, 0, seed);
     let ok = shuffler.check_proof(&proof, &es, &e_primes);
 
     assert!(ok == true);

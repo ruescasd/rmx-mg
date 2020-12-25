@@ -66,7 +66,7 @@ impl Exponent for Scalar {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct RistrettoGroup;
 
 impl RistrettoGroup {

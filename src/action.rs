@@ -21,14 +21,6 @@ pub enum Act {
     CheckPlaintexts(ConfigHash, ContestIndex, PlaintextsHash, Hashes, MixHash, Hashes)
 }
 
-impl Act {
-    pub fn run<E: Element + DeserializeOwned, G: Group<E> + DeserializeOwned, 
-        B: BulletinBoard<E, G>> (&self, facts: Facts, board: &mut B) {
-
-        
-    }
-}
-
 impl fmt::Debug for Act {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
