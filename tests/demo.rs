@@ -178,6 +178,21 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
             target: String::from("0")
         }
     }
+    fn status(&self, status: String) {
+        self.cb_sink.send(Box::new( 
+            move |s: &mut cursive::Cursive| {
+
+            s.call_on_name("status", |view: &mut TextView| {
+                let styled = if status == "Ready".to_string() {
+                    StyledString::styled(status, Color::Light(BaseColor::Green))
+                }
+                else {
+                    StyledString::styled(status, Color::Light(BaseColor::Yellow))
+                };
+                view.set_content(styled);
+            });
+        }));
+    }
 }
 
 use cursive::utils::markup::StyledString;
@@ -265,7 +280,7 @@ fn demo_tui() {
     let theme = custom_theme_from_cursive(&siv);
     siv.set_theme(theme);
     
-    let text = "Ready";
+    let text = "";
     let mut h_layout = LinearLayout::horizontal();
     let mut layout = LinearLayout::vertical();
     for i in 0..trustees {
@@ -273,7 +288,7 @@ fn demo_tui() {
         
         layout = layout.child(Panel::new(
             TextView::new(text)
-            .scrollable().scroll_strategy(ScrollStrategy::StickToBottom).with_name(&i.to_string())
+                .scrollable().scroll_strategy(ScrollStrategy::StickToBottom).with_name(&i.to_string())
             )
             .title(title)
             .title_position(HAlign::Left)
@@ -281,13 +296,19 @@ fn demo_tui() {
             .full_height()
         );
     }
-    layout = layout.child(Panel::new(
-            TextView::new("[q - Quit] [n - Protocol step] [b - Add ballots] [c - Check plaintexts]")
-        )
-        .title("Help")
-        .title_position(HAlign::Left)
-        .fixed_height(3)
-        .full_width()
+    layout = layout.child(
+        LinearLayout::horizontal()
+            .child(Panel::new(
+                TextView::new("[q - Quit] [n - Protocol step] [b - Add ballots] [c - Check plaintexts]")
+            )
+            .title("Help")
+            .title_position(HAlign::Left)
+            .fixed_height(3)
+            .full_width())
+            .child(Panel::new(
+                TextView::new(StyledString::styled("Ready", Color::Light(BaseColor::Green))).h_align(HAlign::Left).with_name("status")
+            )
+            .fixed_width(12))
     );
     h_layout.add_child(layout);
     h_layout.add_child(Panel::new(
@@ -355,22 +376,27 @@ fn check_t<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: 'st
 
 fn step<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>, t: u32) {
     let mut demo = demo_arc.lock().unwrap();
+    demo.status(String::from("Working..."));
     info!("set_panel=[facts]");
     let facts = demo.process_facts(t as usize);
     info!("set_panel=[{}]", t);
     demo.run(facts, t as usize);
+    demo.status(String::from("Ready"));
+    
 }
 
 fn ballots<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
     let mut demo = demo_arc.lock().unwrap();
-    
+    demo.status(String::from("Working..."));
     demo.add_ballots();
+    demo.status(String::from("Ready"));
 }
 
 fn check<E: 'static + Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + DeserializeOwned>(demo_arc: DemoArc<E, G>) {
     let mut demo = demo_arc.lock().unwrap();
     
     demo.check_plaintexts();
+    demo.status(String::from("Ready"));
 }
 
 fn custom_theme_from_cursive(siv: &Cursive) -> Theme {
