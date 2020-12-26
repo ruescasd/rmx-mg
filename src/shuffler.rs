@@ -115,7 +115,10 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
         let gmod = &group.modulus();
         let xmod = &group.exp_modulus();
     
+//        let now = std::time::Instant::now();
         let (cs, rs) = self.gen_commitments(&perm, h_generators, &group);
+//        println!("Commitments {}", now.elapsed().as_millis());
+        
         let us = hashing::shuffle_proof_us(&es, &e_primes, &cs, self.hasher, N);
         
         let mut u_primes: Vec<&E::Exp> = Vec::with_capacity(N);
@@ -123,8 +126,11 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
             u_primes.push(&us[i]);
         }
         
+//        let now = std::time::Instant::now();
         let (c_hats, r_hats) = self.gen_commitment_chain(h_initial, &u_primes, &group);
+//        println!("CommitmentChain {}", now.elapsed().as_millis());
         
+        // 0
         let mut vs = vec![E::Exp::mul_identity();N];
         for i in (0..N - 1).rev() {
             vs[i] = u_primes[i+1].mul(&vs[i+1]).modulo(xmod);
@@ -135,6 +141,7 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
         let mut r_tilde: E::Exp = E::Exp::add_identity();
         let mut r_prime: E::Exp = E::Exp::add_identity();
         
+        // 0
         for i in 0..N {
             r_bar = r_bar.add(&rs[i]);
             r_hat = r_hat.add(&r_hats[i].mul(&vs[i]));
@@ -157,7 +164,8 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
         let mut t3_temp = E::mul_identity();
         let mut t4_1_temp = E::mul_identity();
         let mut t4_2_temp = E::mul_identity();
-            
+        
+//        let now = std::time::Instant::now();
         let values: Vec<(E, E, E)> = (0..N).into_par_iter().map(|i| {
             (
             h_generators[i].mod_pow(&omega_primes[i], gmod),
@@ -165,7 +173,9 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
             e_primes[i].b.mod_pow(&omega_primes[i], gmod)
             )
         }).collect();
-        
+//        println!("values loop {}", now.elapsed().as_millis());
+
+        // ~0
         for i in 0..N {
             t3_temp = t3_temp.mul(&values[i].0)
                 .modulo(gmod);
@@ -182,6 +192,7 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
         let t4_2 = (group.generator().mod_pow(&omegas[3].neg(), gmod)).mul(&t4_2_temp)
             .modulo(gmod);
     
+//        let now = std::time::Instant::now();
         let t_hats = (0..c_hats.len()).into_par_iter().map(|i| {
             let previous_c = if i == 0 {
                 h_initial 
@@ -195,7 +206,8 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
             
             next
         }).collect();
-     
+//        println!("t-hats loop {}", now.elapsed().as_millis());
+
         let y = YChallengeInput {
             es: es,
             e_primes: e_primes,
@@ -213,6 +225,7 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
             t_hats
         };
     
+        // ~0
         let c: E::Exp = hashing::shuffle_proof_challenge(&y, &t, self.hasher);
      
         let s1 = omegas[0].add(&c.mul(&r_bar)).modulo(xmod);
@@ -223,6 +236,7 @@ impl<'a, E: Element, G: Group<E>> Shuffler<'a, E, G> {
         let mut s_hats: Vec<E::Exp> = Vec::with_capacity(N);
         let mut s_primes: Vec<E::Exp> = Vec::with_capacity(N);
         
+        // 0
         for i in 0..N {
             s_hats.push(omega_hats[i].add(&c.mul(&r_hats[i])).modulo(xmod));
             s_primes.push(omega_primes[i].add(&c.mul(&u_primes[i])).modulo(xmod));

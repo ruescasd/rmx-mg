@@ -198,16 +198,16 @@ impl fmt::Debug for InputFact {
                 "ConfigSignedBy: [{}] cfg: {:?}", 
                 x.1, short(&x.0)),
             InputFact::PkShareSignedBy(x) => write!(f, 
-                "PkShareSignedBy [cn={} tr={}] share: {:?}, cfg: {:?}", 
-                x.1, x.3, short(&x.2), short(&x.0)),
+                "PkShareSignedBy [cn={} tr={}] share: {:?}", 
+                x.1, x.3, short(&x.2)),
             InputFact::PkSignedBy(x) => write!(f, 
-                "PkSignedBy [cn={} tr={}] for pk: {:?}, cfg: {:?}", 
-                x.1, x.3, short(&x.2), short(&x.0)),
+                "PkSignedBy [cn={} tr={}] for pk: {:?}", 
+                x.1, x.3, short(&x.2)),
             
             InputFact::BallotsSigned(x) => write!(f, 
-                "BallotsSigned [cn={}] [ballots={:?}] {:?}", x.1, short(&x.2), short(&x.0)),
+                "BallotsSigned [cn={}] [ballots={:?}]", x.1, short(&x.2)),
             InputFact::MixSignedBy(x) => write!(f, 
-                "MixSignedBy [cn={}] to={:?} from={:?}, [mxr={}, signer={}]", 
+                "MixSignedBy [cn={}] {:?} <- {:?}, [mxr={}, signer={}]", 
                 x.1, short(&x.2), short(&x.3), x.4, x.5),
             InputFact::DecryptionSignedBy(x) => write!(f, 
                 "DecryptionSignedBy [cn={}] [signer={}] {:?}", 
@@ -336,12 +336,12 @@ impl Facts {
         }
         let next = &self.mixes_ok;
         for f in next {
-            info!("OFact: MixOk cn=[{}] mix=[{:?}], ballots=[{:?}] cfg {:?}", 
+            info!("OFact: MixOk cn=[{}] {:?} <- {:?} cfg {:?}", 
             f.1, short(&f.2), short(&f.3), short(&f.0));
         }
         let next = &self.contest_mixed_ok;
         for f in next {
-            info!("OFact: ContestMixedOk cn=[{}] mix=[{:?}] cfg {:?}", 
+            info!("OFact: ContestMixedOk cn=[{}] mix={:?} cfg {:?}", 
             f.1, short(&f.2), short(&f.0));
         }
         let next = &self.decryptions_all;

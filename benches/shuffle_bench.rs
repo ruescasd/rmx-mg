@@ -80,12 +80,12 @@ fn criterion_benchmark(c: &mut Criterion) {
         .sample_size(10)
         .measurement_time(Duration::from_secs(60))
         .sampling_mode(SamplingMode::Flat);
-    for size in [100].iter() {
+    /* for size in [100,300,500].iter() {
         group.bench_with_input(BenchmarkId::new("shuffle_rug", size), size, |b, &size| {
             b.iter(|| shuffle_rug(size));
         });
-    }
-    for size in [1000].iter() {
+    }*/
+    for size in [1000, 3000, 5000].iter() {
         group.bench_with_input(BenchmarkId::new("shuffle_ristretto", size), size, |b, &size| {
             b.iter(|| shuffle_ristretto(size));
         });

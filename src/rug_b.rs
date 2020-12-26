@@ -19,10 +19,11 @@ impl Element for Integer {
     type Plaintext = Integer;
 
     fn mul(&self, other: &Self) -> Self {
-        self.clone() * other.clone()
+        Integer::from(self * other)
     }
     fn div(&self, other: &Self, modulus: &Self) -> Self {
-        self.clone() * (other.clone().invert(modulus).unwrap())
+        let second = other.clone().invert(modulus).unwrap();
+        self * second
     }
     fn mod_pow(&self, other: &Self::Exp, modulus: &Self) -> Self {
         let ret = self.clone().pow_mod(&other, modulus);

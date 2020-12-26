@@ -25,7 +25,7 @@ impl fmt::Debug for Act {
             Act::CombineShares(_cfg, cnt, hs) => write!(f, "CombineShares cn=[{}] shares: {:?}", cnt, shortm(hs)),
             Act::CheckPk(_cfg, cnt, h1, hs) => write!(f, "CheckPk cn=[{}], pk {:?} shares: {:?}", cnt, short(h1), shortm(hs)),
             Act::Mix(cfg, cnt, _bh, _pk_h) => write!(f, "Mix cn=[{}] cfg: {:?}", cnt, short(cfg)),
-            Act::CheckMix(cfg, cnt, t, _mh, _bh, _pk_h) => write!(f, "CheckMix cn=[{}], posted by tr=[{}] cfg: {:?}", cnt, t, short(cfg)),
+            Act::CheckMix(_cfg, cnt, t, mh, _bh, _pk_h) => write!(f, "CheckMix cn=[{}] mix={:?} posted by tr=[{}]", cnt, short(mh), t),
             Act::PartialDecrypt(cfg, cnt, _h1, _share_h) => write!(f, "PartialDecrypt cn=[{}] cfg: {:?}", cnt, short(cfg)),
             Act::CombineDecryptions(cfg, cnt, _hs, _mix_h, _share_hs) => write!(f, "CombineDecryptions cn=[{}] cfg: {:?}", cnt, short(cfg)),
             Act::CheckPlaintexts(cfg, cnt, _p_h, _d_hs, _mix_h, _share_hs) => write!(f, "CheckPlaintexts cn=[{}] cfg: {:?}", cnt, short(cfg))

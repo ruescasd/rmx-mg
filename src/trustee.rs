@@ -102,7 +102,7 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
                 Act::Mix(cfg_h, cnt, ballots_h, pk_h) => {
                     let self_t = self_index.unwrap();
                     info!(">> Computing mix (contest=[{}], self=[{}])..", cnt, self_t);
-                    let now_ = std::time::Instant::now();
+                    
                     let cfg = board.get_config(cfg_h).unwrap();
                     
                     let ciphertexts = self.get_mix_src(board, cnt, self_t, ballots_h);
@@ -116,6 +116,7 @@ impl<E: Element + DeserializeOwned + std::cmp::PartialEq, G: Group<E> + Deserial
                         hasher: exp_hasher
                     };
                     let (e_primes, rs, perm) = shuffler.gen_shuffle(&ciphertexts);
+                    let now_ = std::time::Instant::now();
                     let proof = shuffler.gen_proof(&ciphertexts, &e_primes, &rs, &perm);
                     // assert!(shuffler.check_proof(&proof, &ciphertexts, &e_primes));
                     let rate = ciphertexts.len() as f32 / now_.elapsed().as_millis() as f32;

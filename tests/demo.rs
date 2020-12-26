@@ -199,7 +199,7 @@ fn demo_tui() {
     let group = RistrettoGroup;
     let trustees: u32 = 2;
     let contests = 3;
-    let ballots = 1000;
+    let ballots = 10000;
     let demo = Demo::new(siv.cb_sink().clone(), &group, trustees, contests, ballots);
     CombinedLogger::init(
         vec![
@@ -249,7 +249,7 @@ fn demo_tui() {
     layout = layout.child(
         LinearLayout::horizontal()
             .child(Panel::new(
-                TextView::new("[q Quit] [s Step] [b Add ballots] [c Check plaintexts] [i info]")
+                TextView::new("[s Step] [b Add ballots] [c Check plaintexts] [i info] [q Quit]")
             )
             .title("Commands")
             .title_position(HAlign::Left)

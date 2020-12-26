@@ -97,22 +97,23 @@ pub fn shuffle_proof_us<E: Element>(es: &Vec<Ciphertext<E>>, e_primes: &Vec<Ciph
     let mut prefix_vector = concat_bytes(es);
     prefix_vector.extend(concat_bytes(e_primes));
     prefix_vector.extend(concat_bytes(cs));
-    // let prefix = prefix_vector.as_slice();
+    
+    // optimization: instead of calculating u = H(prefix || i), 
+    // we do u = H(H(prefix) | i)
+    // that way we avoid allocating prefix-size bytes n times
+    let mut hasher = Sha512::new();
+    hasher.update(prefix_vector);
+    let prefix_hash = hasher.finalize().to_vec();
     let mut ret = Vec::with_capacity(n);
-
+    
     for i in 0..n {
-        /* let next_bytes: Vec<u8> = [
-            prefix, 
-            i.to_le_bytes().to_vec().as_slice()
-        ].concat();*/
-
-        let mut next = prefix_vector.clone();
+        let mut next = prefix_hash.clone();
         next.extendl(&i.to_le_bytes().to_vec());
         
         let u: E::Exp = exp_hasher.hash_to(&next);
         ret.push(u);
     }
-    
+
     ret
 }
 
