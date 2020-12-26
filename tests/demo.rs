@@ -197,7 +197,7 @@ fn demo_tui() {
     let mut siv = cursive::default();
     // let group = RugGroup::default();
     let group = RistrettoGroup;
-    let trustees: u32 = 2;
+    let trustees: u32 = 3;
     let contests = 3;
     let ballots = 10000;
     let demo = Demo::new(siv.cb_sink().clone(), &group, trustees, contests, ballots);
